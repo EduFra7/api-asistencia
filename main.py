@@ -29,6 +29,19 @@ def debug():
         return {"database_url": "***@" + partes[1]}
     return {"database_url": url}
 
+@app.post("/{ruta:path}")
+async def capturar_todo(ruta: str, request: Request):
+    try:
+        body = await request.body()
+        print(f"RUTA: /{ruta}")
+        print(f"BODY: {body}")
+        headers = dict(request.headers)
+        print(f"HEADERS: {headers}")
+        return JSONResponse(status_code=200, content={"resultado": "ok"})
+    except Exception as e:
+        print(f"ERROR: {str(e)}")
+        return JSONResponse(status_code=200, content={"resultado": "ok"})
+
 @app.post("/push/asistencia")
 async def recibir_evento(request: Request):
     try:
