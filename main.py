@@ -11,11 +11,23 @@ load_dotenv()
 app = FastAPI()
 
 def conectar_bd():
-    return psycopg2.connect(os.getenv("DATABASE_URL"))
+    url = os.getenv("DATABASE_URL")
+    if not url:
+        raise Exception("DATABASE_URL no encontrada en las variables de entorno")
+    return psycopg2.connect(url)
 
 @app.get("/")
 def inicio():
     return {"estado": "API funcionando correctamente"}
+
+@app.get("/debug")
+def debug():
+    url = os.getenv("DATABASE_URL", "NO ENCONTRADA")
+    # Ocultar la contraseña pero mostrar el resto
+    if "@" in url:
+        partes = url.split("@")
+        return {"database_url": "***@" + partes[1]}
+    return {"database_url": url}
 
 @app.post("/push/asistencia")
 async def recibir_evento(request: Request):
