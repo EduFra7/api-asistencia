@@ -115,3 +115,32 @@ def debug():
     if "@" in url:
         return {"database_url": "***@" + url.split("@")[1]}
     return {"database_url": url}
+
+
+from fastapi import FastAPI, Request
+from fastapi.responses import PlainTextResponse
+# (ya los tienes importados arriba, solo asegúrate de no duplicar)
+
+# ── X. CAPTURA GENÉRICA PARA EL M1 / MINERVA ─────────────────────────────────
+@app.api_route("/{full_path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+async def minerva_catch_all(full_path: str, request: Request):
+    method = request.method
+    headers = dict(request.headers)
+    query   = dict(request.query_params)
+    body    = await request.body()
+
+    print("\n================= NUEVA PETICIÓN M1 =================")
+    print(f"Metodo: {method}")
+    print(f"Path: /{full_path}")
+    print(f"Query: {query}")
+    print(f"Headers: {headers}")
+    print(f"Body (raw): {body}")
+    try:
+        texto = body.decode("utf-8")
+        print(f"Body (texto): {texto}")
+    except Exception:
+        print("Body no es texto UTF-8 legible.")
+    print("=====================================================\n")
+
+    # Siempre responder 200 para que el M1 no se queje
+    return PlainTextResponse(content="OK")
