@@ -8,6 +8,7 @@ import psycopg2.extras
 import bcrypt
 import jwt
 import os
+import re
 
 load_dotenv()
 app = FastAPI()
@@ -105,43 +106,106 @@ async def login(request: Request):
 def mi_perfil(usuario = Depends(verificar_token)):
     return usuario
 
-# ── CREAR EMPRESA + ADMIN (solo superadmin) ───────────────────────────────────
-# NOTA: En el próximo paso modificaremos esta función para que además cree el esquema
+# ── CREAR EMPRESA + ADMIN + ESQUEMA (Motor de Aprovisionamiento) ──────────────
 @app.post("/empresas")
 async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
+    # Solo el SuperAdmin puede crear nuevas empresas
     if usuario["rol"] != "superadmin":
         raise HTTPException(status_code=403, detail="Sin permisos")
+    
     try:
         data = await request.json()
         nombre         = data.get("nombre")
         admin_nombre   = data.get("admin_nombre")
         admin_email    = data.get("admin_email")
         admin_password = data.get("admin_password")
-        # Generamos un nombre de esquema basado en el nombre de la empresa sin espacios
-        schema_name    = f"empresa_{nombre.lower().replace(' ', '_')}" 
 
-        password_hash = bcrypt.hashpw(
-            admin_password.encode(), bcrypt.gensalt()
-        ).decode()
+        # 1. Limpiar el nombre para crear un esquema SQL seguro (solo letras, números y guiones bajos)
+        schema_limpio = re.sub(r'[^a-z0-9_]', '', nombre.lower().replace(' ', '_'))
+        schema_name   = f"empresa_{schema_limpio}" 
+
+        # Hashear la contraseña del nuevo admin
+        password_hash = bcrypt.hashpw(admin_password.encode(), bcrypt.gensalt()).decode()
 
         conn = conectar_bd("public")
+        # Usamos autocommit para poder ejecutar CREATE SCHEMA sin problemas de transacciones
+        conn.autocommit = True 
         cur  = conn.cursor()
-        # Aquí agregué schema_name a la inserción
+
+        # 2. Registrar la empresa en la tabla global
         cur.execute(
             "INSERT INTO empresas (nombre, schema_name) VALUES (%s, %s) RETURNING id",
             (nombre, schema_name)
         )
         empresa_id = cur.fetchone()[0]
+
+        # 3. Crear el usuario Admin en la tabla global
         cur.execute("""
             INSERT INTO usuarios (empresa_id, nombre, email, password_hash, rol)
             VALUES (%s, %s, %s, %s, 'admin')
         """, (empresa_id, admin_nombre, admin_email, password_hash))
-        conn.commit()
+
+        # 4. LA MAGIA: Crear el esquema y sus tablas privadas
+        # Usamos psycopg2.sql para evitar inyecciones SQL en nombres de esquemas
+        from psycopg2 import sql
+        
+        script_sql = sql.SQL("""
+            CREATE SCHEMA {schema};
+
+            CREATE TABLE {schema}.empleados (
+                id SERIAL PRIMARY KEY,
+                nombre VARCHAR(150) NOT NULL,
+                documento VARCHAR(50) UNIQUE,
+                rfid VARCHAR(50) UNIQUE,
+                huella_template TEXT,
+                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE {schema}.horarios (
+                id SERIAL PRIMARY KEY,
+                nombre VARCHAR(50) NOT NULL,
+                hora_entrada TIME NOT NULL,
+                hora_salida TIME NOT NULL,
+                tolerancia_minutos INT DEFAULT 0
+            );
+
+            CREATE TABLE {schema}.eventos_brutos (
+                id SERIAL PRIMARY KEY,
+                device_no VARCHAR(50),
+                item VARCHAR(50),
+                verify_mode VARCHAR(20),
+                action VARCHAR(20),
+                fecha_hora TIMESTAMP,
+                raw_data JSONB,
+                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE {schema}.asistencia (
+                id SERIAL PRIMARY KEY,
+                empleado_id INT REFERENCES {schema}.empleados(id),
+                fecha DATE,
+                hora_marcaje TIMESTAMP,
+                tipo VARCHAR(20), 
+                estado VARCHAR(20), 
+                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """).format(schema=sql.Identifier(schema_name))
+
+        cur.execute(script_sql)
+
         cur.close()
         conn.close()
-        return {"mensaje": "Empresa y admin creados", "empresa_id": empresa_id, "schema_name": schema_name}
+
+        return {
+            "mensaje": "Empresa aprovisionada correctamente", 
+            "empresa_id": empresa_id, 
+            "schema_name": schema_name
+        }
+
+    except psycopg2.errors.DuplicateSchema:
+        raise HTTPException(status_code=400, detail="Ya existe una empresa con un nombre similar")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
 # ── VER EMPRESAS (solo superadmin) ────────────────────────────────────────────
 @app.get("/empresas")
