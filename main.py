@@ -1,13 +1,26 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.responses import PlainTextResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import datetime, timedelta
 import psycopg2
 import psycopg2.extras
+import bcrypt
+import jwt
 import os
 
 load_dotenv()
 app = FastAPI()
+
+# Permitir conexiones desde el navegador y el instalador
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+SECRET_KEY = os.getenv("SECRET_KEY", "clave_secreta_cambiar_en_produccion")
 
 def conectar_bd():
     url = os.getenv("DATABASE_URL")
@@ -15,132 +28,154 @@ def conectar_bd():
         raise Exception("DATABASE_URL no encontrada")
     return psycopg2.connect(url)
 
-# ── 1. INICIALIZACIÓN — el lector llega aquí primero ──────────────────────────
+def verificar_token(request: Request):
+    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    if not token:
+        raise HTTPException(status_code=401, detail="Token requerido")
+    try:
+        datos = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        return datos
+    except:
+        raise HTTPException(status_code=401, detail="Token inválido")
+
+# ── LOGIN ─────────────────────────────────────────────────────────────────────
+@app.post("/auth/login")
+async def login(request: Request):
+    try:
+        data     = await request.json()
+        email    = data.get("email", "").strip().lower()
+        password = data.get("password", "")
+
+        conn = conectar_bd()
+        cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("""
+            SELECT u.*, e.nombre as empresa_nombre
+            FROM usuarios u
+            JOIN empresas e ON e.id = u.empresa_id
+            WHERE u.email = %s AND u.activo = TRUE
+        """, (email,))
+        usuario = cur.fetchone()
+        cur.close()
+        conn.close()
+
+        if not usuario:
+            raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+
+        if not bcrypt.checkpw(password.encode(), usuario["password_hash"].encode()):
+            raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+
+        token = jwt.encode({
+            "id":             usuario["id"],
+            "email":          usuario["email"],
+            "rol":            usuario["rol"],
+            "empresa_id":     usuario["empresa_id"],
+            "empresa_nombre": usuario["empresa_nombre"],
+            "exp":            datetime.utcnow() + timedelta(hours=8)
+        }, SECRET_KEY, algorithm="HS256")
+
+        return {
+            "token":          token,
+            "nombre":         usuario["nombre"],
+            "rol":            usuario["rol"],
+            "empresa_nombre": usuario["empresa_nombre"]
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ── RUTA PROTEGIDA DE PRUEBA ───────────────────────────────────────────────────
+@app.get("/auth/me")
+def mi_perfil(usuario = Depends(verificar_token)):
+    return usuario
+
+# ── CREAR EMPRESA + ADMIN (solo superadmin) ───────────────────────────────────
+@app.post("/empresas")
+async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
+    if usuario["rol"] != "superadmin":
+        raise HTTPException(status_code=403, detail="Sin permisos")
+    try:
+        data = await request.json()
+        nombre         = data.get("nombre")
+        admin_nombre   = data.get("admin_nombre")
+        admin_email    = data.get("admin_email")
+        admin_password = data.get("admin_password")
+
+        password_hash = bcrypt.hashpw(
+            admin_password.encode(), bcrypt.gensalt()
+        ).decode()
+
+        conn = conectar_bd()
+        cur  = conn.cursor()
+        cur.execute(
+            "INSERT INTO empresas (nombre) VALUES (%s) RETURNING id",
+            (nombre,)
+        )
+        empresa_id = cur.fetchone()[0]
+        cur.execute("""
+            INSERT INTO usuarios (empresa_id, nombre, email, password_hash, rol)
+            VALUES (%s, %s, %s, %s, 'admin')
+        """, (empresa_id, admin_nombre, admin_email, password_hash))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return {"mensaje": "Empresa y admin creados", "empresa_id": empresa_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ── VER EMPRESAS (solo superadmin) ────────────────────────────────────────────
+@app.get("/empresas")
+def ver_empresas(usuario = Depends(verificar_token)):
+    if usuario["rol"] != "superadmin":
+        raise HTTPException(status_code=403, detail="Sin permisos")
+    conn = conectar_bd()
+    cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT * FROM empresas ORDER BY creado_en DESC")
+    empresas = cur.fetchall()
+    cur.close()
+    conn.close()
+    return list(empresas)
+
+# ── ICLOCK (lector biométrico) ────────────────────────────────────────────────
 @app.get("/iclock/cdata")
 async def iclock_init(request: Request):
     sn = request.query_params.get("SN", "")
-    print(f"Lector conectado. SN={sn}")
-    # Respuesta que el lector espera para empezar a enviar datos
-    respuesta = (
+    print(f"✅ Lector conectado SN={sn}")
+    return PlainTextResponse(
         f"GET OPTION FROM: {sn}\n"
-        "ATTLOGStamp=None\n"
-        "OPERLOGStamp=9999\n"
-        "ATTPHOTOStamp=None\n"
-        "ErrorDelay=30\n"
-        "Delay=10\n"
-        "TransTimes=00:00;14:05\n"
-        "TransInterval=1\n"
-        "TransFlag=TransData AttLog\n"
-        "Realtime=1\n"
-        "Encrypt=None\n"
+        "ATTLOGStamp=None\nOPERLOGStamp=9999\n"
+        "Realtime=1\nEncrypt=None\n"
     )
-    return PlainTextResponse(content=respuesta)
 
-# ── 2. HEARTBEAT — el lector avisa que sigue vivo ─────────────────────────────
 @app.post("/iclock/cdata")
 async def iclock_data(request: Request):
     table = request.query_params.get("table", "")
     sn    = request.query_params.get("SN", "")
     body  = await request.body()
     texto = body.decode("utf-8", errors="ignore")
-    print(f"POST /iclock/cdata tabla={table} SN={sn}")
-    print(f"BODY: {texto}")
-
     if table == "ATTLOG":
-        # Cada línea es un evento: PIN TIME STATUS VERIFY
         for linea in texto.strip().splitlines():
             partes = linea.strip().split("\t")
             if len(partes) >= 2:
                 try:
-                    pin        = partes[0]
-                    fecha_hora = partes[1]
-                    status     = partes[2] if len(partes) > 2 else "0"
-                    verify     = partes[3] if len(partes) > 3 else "0"
-
-                    # Convertir status a texto legible
-                    acciones = {"0":"Clock in","1":"Clock out","2":"Out",
-                                "3":"Return","4":"OT in","5":"OT out"}
-                    action = acciones.get(status, status)
-
-                    modos = {"0":"Password","1":"Fingerprint","2":"Card","15":"Face"}
-                    verify_mode = modos.get(verify, verify)
-
                     conn = conectar_bd()
                     cur  = conn.cursor()
                     cur.execute("""
                         INSERT INTO eventos_brutos
                             (device_no, item, verify_mode, action, fecha_hora, raw_data)
                         VALUES (%s, %s, %s, %s, %s, %s)
-                        RETURNING id
-                    """, (sn, pin, verify_mode, action, fecha_hora,
-                          psycopg2.extras.Json({"raw": linea, "sn": sn})))
-                    nuevo_id = cur.fetchone()[0]
+                    """, (sn, partes[0], partes[3] if len(partes)>3 else "1",
+                          partes[2] if len(partes)>2 else "0",
+                          partes[1], psycopg2.extras.Json({"raw": linea})))
                     conn.commit()
                     cur.close()
                     conn.close()
-                    print(f"Evento guardado id={nuevo_id} pin={pin} accion={action}")
                 except Exception as e:
-                    print(f"Error guardando evento: {e}")
+                    print(f"❌ {e}")
+    return PlainTextResponse("OK")
 
-    return PlainTextResponse(content="OK")
-
-# ── 3. VER EVENTOS ────────────────────────────────────────────────────────────
-@app.get("/eventos")
-def ver_eventos():
-    try:
-        conn = conectar_bd()
-        cur  = conn.cursor()
-        cur.execute("""
-            SELECT id, device_no, item, verify_mode, action, fecha_hora, creado_en
-            FROM eventos_brutos
-            ORDER BY creado_en DESC LIMIT 20
-        """)
-        filas = cur.fetchall()
-        cur.close()
-        conn.close()
-        return [{"id": f[0], "device_no": f[1], "item": f[2],
-                 "verify_mode": f[3], "action": f[4],
-                 "fecha_hora": str(f[5]), "creado_en": str(f[6])} for f in filas]
-    except Exception as e:
-        return {"error": str(e)}
-
-# ── 4. DIAGNÓSTICO ────────────────────────────────────────────────────────────
+# ── DIAGNÓSTICO ────────────────────────────────────────────────────────────────
 @app.get("/")
 def inicio():
-    return {"estado": "API funcionando correctamente"}
-
-@app.get("/debug")
-def debug():
-    url = os.getenv("DATABASE_URL", "NO ENCONTRADA")
-    if "@" in url:
-        return {"database_url": "***@" + url.split("@")[1]}
-    return {"database_url": url}
-
-
-from fastapi import FastAPI, Request
-from fastapi.responses import PlainTextResponse
-# (ya los tienes importados arriba, solo asegúrate de no duplicar)
-
-# ── X. CAPTURA GENÉRICA PARA EL M1 / MINERVA ─────────────────────────────────
-@app.api_route("/{full_path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
-async def minerva_catch_all(full_path: str, request: Request):
-    method = request.method
-    headers = dict(request.headers)
-    query   = dict(request.query_params)
-    body    = await request.body()
-
-    print("\n================= NUEVA PETICIÓN M1 =================")
-    print(f"Metodo: {method}")
-    print(f"Path: /{full_path}")
-    print(f"Query: {query}")
-    print(f"Headers: {headers}")
-    print(f"Body (raw): {body}")
-    try:
-        texto = body.decode("utf-8")
-        print(f"Body (texto): {texto}")
-    except Exception:
-        print("Body no es texto UTF-8 legible.")
-    print("=====================================================\n")
-
-    # Siempre responder 200 para que el M1 no se queje
-    return PlainTextResponse(content="OK")
+    return {"estado": "API funcionando", "version": "2.0"}
