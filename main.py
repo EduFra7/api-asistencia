@@ -137,6 +137,28 @@ def ver_empresas(usuario = Depends(verificar_token)):
     conn.close()
     return list(empresas)
 
+# ── CREAR SUPERADMIN (solo superadmin) ────────────────────────────────────────────
+@app.get("/setup/superadmin")
+def crear_superadmin():
+    try:
+        password_hash = bcrypt.hashpw(
+            "admin123".encode(), bcrypt.gensalt()
+        ).decode()
+        conn = conectar_bd()
+        cur  = conn.cursor()
+        cur.execute("""
+            INSERT INTO usuarios (empresa_id, nombre, email, password_hash, rol)
+            VALUES (1, 'Super Admin', 'admin@sistema.com', %s, 'superadmin')
+            ON CONFLICT (email) DO UPDATE SET password_hash = %s
+        """, (password_hash, password_hash))
+        conn.commit()
+        cur.close()
+        conn.close()
+        return {"mensaje": "Superadmin creado. Email: admin@sistema.com / Pass: admin123"}
+    except Exception as e:
+        return {"error": str(e)}
+# jaja no se que paso
+
 # ── ICLOCK (lector biométrico) ────────────────────────────────────────────────
 @app.get("/iclock/cdata")
 async def iclock_init(request: Request):
