@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SuperAdmin - C.A Lector</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 font-sans flex h-screen overflow-hidden">
+
+    <aside class="w-64 bg-slate-900 text-white flex flex-col">
+        <div class="p-6 border-b border-slate-800">
+            <h2 class="text-2xl font-bold text-blue-400"><i class="fas fa-fingerprint mr-2"></i>C.A Lector</h2>
+            <p class="text-xs text-slate-400 mt-1">Panel de SuperAdmin</p>
+        </div>
+        <nav class="flex-1 p-4 space-y-2">
+            <a href="#" class="flex items-center p-3 bg-blue-600 rounded-lg text-white transition-colors">
+                <i class="fas fa-building w-6"></i> Clientes (Empresas)
+            </a>
+            </nav>
+        <div class="p-4 border-t border-slate-800">
+            <button onclick="cerrarSesion()" class="flex items-center w-full p-3 text-red-400 hover:bg-slate-800 rounded-lg transition-colors">
+                <i class="fas fa-sign-out-alt w-6"></i> Cerrar Sesión
+            </button>
+        </div>
+    </aside>
+
+    <main class="flex-1 flex flex-col h-screen overflow-y-auto">
+        <header class="bg-white shadow-sm p-4 flex justify-between items-center">
+            <h1 class="text-xl font-semibold text-gray-800">Gestión de Clientes</h1>
+            <div class="flex items-center space-x-3">
+                <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium" id="userNameDisplay">
+                    Cargando...
+                </div>
+            </div>
+        </header>
+
+        <div class="p-8">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                
+                <div class="lg:col-span-1">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                        <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Registrar Nuevo Cliente</h3>
+                        <form id="crearEmpresaForm" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Nombre de la Empresa</label>
+                                <input type="text" id="empresa_nombre" required class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Nombre del Administrador</label>
+                                <input type="text" id="admin_nombre" required class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Email del Administrador</label>
+                                <input type="email" id="admin_email" required class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Contraseña Temporal</label>
+                                <input type="password" id="admin_password" required class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm">
+                            </div>
+                            
+                            <div id="formMsg" class="hidden text-sm p-2 rounded"></div>
+
+                            <button type="submit" id="submitBtn" class="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 transition font-medium text-sm">
+                                Crear y Aprovisionar BD
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-2">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                        <div class="p-6 border-b border-gray-200 flex justify-between items-center">
+                            <h3 class="text-lg font-bold text-gray-800">Clientes Activos</h3>
+                            <button onclick="cargarEmpresas()" class="text-blue-600 hover:text-blue-800"><i class="fas fa-sync-alt"></i></button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead>
+                                    <tr class="bg-gray-50 text-gray-600 text-sm border-b">
+                                        <th class="p-4 font-semibold">ID</th>
+                                        <th class="p-4 font-semibold">Empresa</th>
+                                        <th class="p-4 font-semibold">Esquema BD</th>
+                                        <th class="p-4 font-semibold">Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tablaEmpresas" class="text-sm divide-y divide-gray-100">
+                                    <tr>
+                                        <td colspan="4" class="p-4 text-center text-gray-500">Cargando clientes...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // LA URL DE TU API EN RAILWAY
+        const API_URL = "https://asistencia-api.up.railway.app"; 
+        
+        // Verificación de seguridad básica
+        const token = localStorage.getItem('token');
+        const userDataStr = localStorage.getItem('userData');
+
+        if (!token || !userDataStr) {
+            window.location.href = '/index.html'; // Si no hay token, al login
+        }
+
+        const userData = JSON.parse(userDataStr);
+        if (userData.rol !== 'superadmin') {
+            alert("Acceso denegado. Solo SuperAdmin.");
+            window.location.href = '/index.html';
+        }
+
+        // Mostrar nombre del usuario en el header
+        document.getElementById('userNameDisplay').textContent = `👋 Hola, ${userData.nombre}`;
+
+        // ── FUNCIÓN PARA CERRAR SESIÓN ──
+        function cerrarSesion() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('userData');
+            window.location.href = 'index.html';
+        }
+
+        // ── FUNCIÓN PARA CARGAR LA LISTA DE EMPRESAS ──
+        async function cargarEmpresas() {
+            const tbody = document.getElementById('tablaEmpresas');
+            tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-500">Actualizando...</td></tr>';
+            
+            try {
+                const response = await fetch(`${API_URL}/empresas`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (!response.ok) throw new Error("Error al obtener datos");
+                const empresas = await response.json();
+                
+                tbody.innerHTML = ''; // Limpiar tabla
+                
+                if (empresas.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-500">No hay clientes registrados aún.</td></tr>';
+                    return;
+                }
+
+                empresas.forEach(emp => {
+                    const tr = document.createElement('tr');
+                    tr.className = "hover:bg-gray-50 transition-colors";
+                    tr.innerHTML = `
+                        <td class="p-4 text-gray-500 font-mono text-xs">#${emp.id}</td>
+                        <td class="p-4 font-medium text-gray-800"><i class="fas fa-building text-gray-400 mr-2"></i>${emp.nombre}</td>
+                        <td class="p-4 text-blue-600 font-mono text-xs">${emp.schema_name || 'N/A'}</td>
+                        <td class="p-4">
+                            <span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-semibold">Activo</span>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch (error) {
+                tbody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-red-500">Error de conexión con la API</td></tr>`;
+            }
+        }
+
+        // ── FUNCIÓN PARA CREAR UNA NUEVA EMPRESA ──
+        document.getElementById('crearEmpresaForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const btn = document.getElementById('submitBtn');
+            const msg = document.getElementById('formMsg');
+            
+            // Recoger datos
+            const payload = {
+                nombre: document.getElementById('empresa_nombre').value,
+                admin_nombre: document.getElementById('admin_nombre').value,
+                admin_email: document.getElementById('admin_email').value,
+                admin_password: document.getElementById('admin_password').value
+            };
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Procesando BD...';
+            msg.className = 'hidden';
+
+            try {
+                const response = await fetch(`${API_URL}/empresas`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) throw new Error(data.detail || "Error desconocido");
+
+                // Éxito
+                msg.textContent = "¡Empresa y Base de Datos creadas con éxito!";
+                msg.className = 'text-sm p-3 rounded bg-green-50 text-green-700 border border-green-200 mt-3';
+                document.getElementById('crearEmpresaForm').reset();
+                
+                // Recargar la tabla
+                cargarEmpresas();
+
+            } catch (error) {
+                // Error
+                msg.textContent = error.message;
+                msg.className = 'text-sm p-3 rounded bg-red-50 text-red-700 border border-red-200 mt-3';
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Crear y Aprovisionar BD';
+            }
+        });
+
+        // Cargar las empresas apenas se abre la página
+        cargarEmpresas();
+    </script>
+</body>
+</html>

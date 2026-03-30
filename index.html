@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>C.A. Lector - Iniciar Sesión</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #f3f4f6;
+            background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center font-sans text-gray-800">
+
+    <div class="max-w-md w-full bg-white rounded-xl shadow-lg p-8 border border-gray-100">
+        <div class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-blue-600 mb-2">C.A. Lector</h1>
+            <p class="text-gray-500 text-sm">Sistema de Control de Asistencia</p>
+        </div>
+
+        <form id="loginForm" class="space-y-6">
+            <div>
+                <label for="email" class="block text-sm font-medium text-gray-700">Correo Electrónico</label>
+                <input type="email" id="email" name="email" required 
+                    class="mt-1 block w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    placeholder="admin@empresa.com">
+            </div>
+
+            <div>
+                <label for="password" class="block text-sm font-medium text-gray-700">Contraseña</label>
+                <input type="password" id="password" name="password" required 
+                    class="mt-1 block w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    placeholder="••••••••">
+            </div>
+
+            <div id="errorMessage" class="hidden bg-red-50 text-red-600 text-sm p-3 rounded-lg border border-red-200">
+            </div>
+
+            <button type="submit" id="submitBtn"
+                class="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
+                Ingresar al Sistema
+            </button>
+        </form>
+    </div>
+
+    <script>
+        // Configura aquí la URL de tu API en Railway
+        const API_URL = "https://asistencia-api.up.railway.app";
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const btn = document.getElementById('submitBtn');
+            const errorDiv = document.getElementById('errorMessage');
+
+            // Estado de carga
+            btn.textContent = "Verificando...";
+            btn.disabled = true;
+            errorDiv.classList.add('hidden');
+
+            try {
+                const response = await fetch(`${API_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.detail || "Error al iniciar sesión");
+                }
+
+                // Guardar el token en el almacenamiento local del navegador
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('userData', JSON.stringify({
+                    nombre: data.nombre,
+                    rol: data.rol,
+                    empresa: data.empresa_nombre
+                }));
+
+                // Redirigir según el rol
+                if (data.rol === 'superadmin') {
+                    window.location.href = 'dashboard_superadmin.html'; // Cambiar por tu ruta real
+                } else {
+                    window.location.href = 'dashboard_cliente.html'; // Cambiar por tu ruta real
+                }
+
+            } catch (error) {
+                errorDiv.textContent = error.message;
+                errorDiv.classList.remove('hidden');
+            } finally {
+                btn.textContent = "Ingresar al Sistema";
+                btn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
