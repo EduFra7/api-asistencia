@@ -1,19 +1,31 @@
+# ==============================================================================
+# 1. IMPORTACIÓN DE LIBRERÍAS (Las herramientas que usamos)
+# ==============================================================================
 from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.responses import PlainTextResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
-import psycopg2
-import psycopg2.extras
-import bcrypt
-import jwt
-import os
-import re
+import psycopg2          # Librería para hablar con PostgreSQL (Supabase)
+import psycopg2.extras   # Herramientas extra para PostgreSQL (como diccionarios)
+import bcrypt            # Librería para encriptar contraseñas
+import jwt               # Librería para generar "Tokens" de sesión
+import os                # Librería para leer variables del sistema operativo
+import re                # Librería para buscar y limpiar textos (Expresiones regulares)
 
-load_dotenv()
+# ==============================================================================
+# 2. CONFIGURACIÓN INICIAL DE LA APLICACIÓN
+# ==============================================================================
+# load_dotenv() busca un archivo llamado '.env' y carga sus variables secretas.
+load_dotenv() 
+
+# app = FastAPI() es la línea más importante. Crea el servidor web.
 app = FastAPI()
 
-# Permitir conexiones desde el navegador y el instalador
+# ── CORS (Cross-Origin Resource Sharing) ──
+# El CORS es un guardia de seguridad del navegador. Por defecto, un navegador no 
+# permite que una web (index.html) pida datos a una API que está en otra dirección.
+# Al poner allow_origins=["*"], le decimos a la API: "Acepta peticiones de cualquier página web".
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,73 +33,104 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Obtenemos la llave maestra para firmar tokens. Si no existe en el .env, usa una por defecto.
 SECRET_KEY = os.getenv("SECRET_KEY", "clave_secreta_cambiar_en_produccion")
 
-# ── CONEXIÓN DINÁMICA POR ESQUEMA ─────────────────────────────────────────────
+
+# ==============================================================================
+# 3. FUNCIONES CORE (Funciones que se reutilizan en todo el código)
+# ==============================================================================
+
+# ── CONEXIÓN DINÁMICA A LA BASE DE DATOS ──
 def conectar_bd(schema_name="public"):
     """
-    Se conecta a Supabase y le dice a PostgreSQL que use un esquema específico.
-    Si no se pasa ninguno, usa 'public' por defecto.
+    Esta función abre el puente entre Python y Supabase.
+    El parámetro 'schema_name' es crucial para el multitenant: le dice a la base de datos
+    a qué "carpeta" privada debe entrar antes de buscar tablas.
     """
     url = os.getenv("DATABASE_URL")
     if not url:
         raise Exception("DATABASE_URL no encontrada")
     
-    # Inyectamos el search_path en la conexión
+    # search_path es un comando de PostgreSQL que le indica qué esquema usar.
     return psycopg2.connect(url, options=f"-c search_path={schema_name}")
 
-# ── VERIFICACIÓN DE TOKEN ─────────────────────────────────────────────────────
+
+# ── VERIFICACIÓN DE IDENTIDAD (MIDDLEWARE DE SEGURIDAD) ──
 def verificar_token(request: Request):
+    """
+    Cada vez que un usuario intenta entrar a una ruta protegida (ej. crear empresa),
+    esta función intercepta la petición, busca el 'token' en la cabecera, 
+    y lo descifra para ver quién es.
+    """
+    # Extraemos el token que el frontend manda oculto en las cabeceras.
     token = request.headers.get("Authorization", "").replace("Bearer ", "")
     if not token:
         raise HTTPException(status_code=401, detail="Token requerido")
+    
     try:
+        # jwt.decode() intenta abrir el token con nuestra llave maestra.
+        # Si alguien alteró el token, la firma no coincidirá y fallará.
         datos = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-        return datos
+        return datos # Retorna el diccionario con los datos del usuario (id, rol, schema, etc.)
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expirado")
+        raise HTTPException(status_code=401, detail="Token expirado. Inicie sesión de nuevo.")
     except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Token inválido")
+        raise HTTPException(status_code=401, detail="Token inválido o manipulado.")
 
-# ── LOGIN ─────────────────────────────────────────────────────────────────────
+
+# ==============================================================================
+# 4. RUTAS O ENDPOINTS (Las "puertas" de tu servidor)
+# ==============================================================================
+
+# ── SISTEMA DE LOGIN ──
+# @app.post significa que esta ruta espera recibir datos (en este caso, email y password)
 @app.post("/auth/login")
 async def login(request: Request):
+    # 'async' permite que el servidor no se congele mientras espera datos.
     try:
-        data     = await request.json()
+        data     = await request.json() # Leemos los datos que mandó el navegador
         email    = data.get("email", "").strip().lower()
         password = data.get("password", "")
 
-        # Nos conectamos al esquema 'public' para el login global
+        # 1. Buscamos al usuario siempre en la tabla global ('public')
         conn = conectar_bd("public")
+        # RealDictCursor hace que los resultados salgan como diccionarios {"nombre": "Juan"}
+        # en lugar de simples tuplas ("Juan",)
         cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
-        # IMPORTANTE: Asumimos que la tabla empresas ahora tiene la columna 'schema_name'
+        # Hacemos un JOIN para traer tanto los datos del usuario como el esquema de su empresa
         cur.execute("""
             SELECT u.*, e.nombre as empresa_nombre, e.schema_name
             FROM usuarios u
             JOIN empresas e ON e.id = u.empresa_id
             WHERE u.email = %s AND u.activo = TRUE
         """, (email,))
-        usuario = cur.fetchone()
+        usuario = cur.fetchone() # Trae el primer resultado encontrado
         cur.close()
         conn.close()
 
+        # 2. Validaciones de seguridad
         if not usuario:
             raise HTTPException(status_code=401, detail="Credenciales incorrectas")
 
+        # bcrypt.checkpw() compara la contraseña que escribió el usuario con el hash raro de la BD.
         if not bcrypt.checkpw(password.encode(), usuario["password_hash"].encode()):
             raise HTTPException(status_code=401, detail="Credenciales incorrectas")
 
+        # 3. Creación del "Pasaporte" (Token JWT)
+        # Este token viaja al navegador y es la única prueba de que el usuario ya inició sesión.
         token = jwt.encode({
             "id":             usuario["id"],
             "email":          usuario["email"],
             "rol":            usuario["rol"],
             "empresa_id":     usuario["empresa_id"],
-            "schema_name":    usuario["schema_name"], # Agregado para multitenant
+            "schema_name":    usuario["schema_name"], # Esto es vital para saber a qué esquema enviarlo luego
             "empresa_nombre": usuario["empresa_nombre"],
-            "exp":            datetime.utcnow() + timedelta(hours=8)
+            "exp":            datetime.utcnow() + timedelta(hours=8) # El token caduca en 8 horas
         }, SECRET_KEY, algorithm="HS256")
 
+        # Devolvemos el token y los datos básicos para que el frontend arme la interfaz
         return {
             "token":          token,
             "nombre":         usuario["nombre"],
@@ -101,17 +144,21 @@ async def login(request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# ── RUTA PROTEGIDA DE PRUEBA ──────────────────────────────────────────────────
+
+# ── RUTA DE PRUEBA DE IDENTIDAD ──
+# Observa el 'Depends(verificar_token)'. Esto fuerza a que la función verificar_token()
+# se ejecute ANTES de entrar a esta ruta. Si el token falla, nunca llega aquí.
 @app.get("/auth/me")
 def mi_perfil(usuario = Depends(verificar_token)):
-    return usuario
+    return usuario # Devuelve lo que la función verificar_token descifró
 
-# ── CREAR EMPRESA + ADMIN + ESQUEMA (Motor de Aprovisionamiento) ──────────────
+
+# ── MOTOR DE APROVISIONAMIENTO (CREAR EMPRESAS NUEVAS) ──
 @app.post("/empresas")
 async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
-    # Solo el SuperAdmin puede crear nuevas empresas
+    # 1. Filtro de seguridad: ¿Es el dueño del sistema?
     if usuario["rol"] != "superadmin":
-        raise HTTPException(status_code=403, detail="Sin permisos")
+        raise HTTPException(status_code=403, detail="Sin permisos. Solo SuperAdmin.")
     
     try:
         data = await request.json()
@@ -120,35 +167,36 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
         admin_email    = data.get("admin_email")
         admin_password = data.get("admin_password")
 
-        # 1. Limpiar el nombre para crear un esquema SQL seguro (solo letras, números y guiones bajos)
+        # 2. Preparar un nombre seguro para el esquema en PostgreSQL (sin espacios ni símbolos)
         schema_limpio = re.sub(r'[^a-z0-9_]', '', nombre.lower().replace(' ', '_'))
         schema_name   = f"empresa_{schema_limpio}" 
 
-        # Hashear la contraseña del nuevo admin
+        # Encriptamos la contraseña del cliente antes de guardarla
         password_hash = bcrypt.hashpw(admin_password.encode(), bcrypt.gensalt()).decode()
 
         conn = conectar_bd("public")
-        # Usamos autocommit para poder ejecutar CREATE SCHEMA sin problemas de transacciones
+        # autocommit=True es necesario porque PostgreSQL no deja crear esquemas dentro de una "transacción" normal.
         conn.autocommit = True 
         cur  = conn.cursor()
 
-        # 2. Registrar la empresa en la tabla global
+        # 3. Guardar en el directorio maestro de empresas
         cur.execute(
             "INSERT INTO empresas (nombre, schema_name) VALUES (%s, %s) RETURNING id",
             (nombre, schema_name)
         )
-        empresa_id = cur.fetchone()[0]
+        empresa_id = cur.fetchone()[0] # Obtenemos el ID que se le asignó
 
-        # 3. Crear el usuario Admin en la tabla global
+        # 4. Crear al Administrador principal de este nuevo cliente
         cur.execute("""
             INSERT INTO usuarios (empresa_id, nombre, email, password_hash, rol)
             VALUES (%s, %s, %s, %s, 'admin')
         """, (empresa_id, admin_nombre, admin_email, password_hash))
 
-        # 4. LA MAGIA: Crear el esquema y sus tablas privadas
-        # Usamos psycopg2.sql para evitar inyecciones SQL en nombres de esquemas
+        # 5. CREACIÓN FÍSICA DE LA BASE DE DATOS PRIVADA (Multitenant)
         from psycopg2 import sql
         
+        # Usamos sql.SQL().format() para inyectar el nombre del esquema de forma segura
+        # y evitar que un hacker inyecte comandos maliciosos en el nombre de la empresa.
         script_sql = sql.SQL("""
             CREATE SCHEMA {schema};
 
@@ -191,7 +239,7 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
             );
         """).format(schema=sql.Identifier(schema_name))
 
-        cur.execute(script_sql)
+        cur.execute(script_sql) # Ejecutamos el gran bloque SQL
 
         cur.close()
         conn.close()
@@ -207,11 +255,13 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
-# ── VER EMPRESAS (solo superadmin) ────────────────────────────────────────────
+
+# ── LISTAR EMPRESAS ──
 @app.get("/empresas")
 def ver_empresas(usuario = Depends(verificar_token)):
     if usuario["rol"] != "superadmin":
         raise HTTPException(status_code=403, detail="Sin permisos")
+    
     conn = conectar_bd("public")
     cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("SELECT * FROM empresas ORDER BY creado_en DESC")
@@ -220,17 +270,17 @@ def ver_empresas(usuario = Depends(verificar_token)):
     conn.close()
     return list(empresas)
 
-# ── CREAR SUPERADMIN ──────────────────────────────────────────────────────────
+
+# ── SETUP INICIAL (CREAR TU CUENTA) ──
 @app.get("/setup/superadmin")
 def crear_superadmin():
+    """Esta ruta se usa solo una vez para crear al dueño del sistema."""
     try:
-        password_hash = bcrypt.hashpw(
-            "admin123".encode(), bcrypt.gensalt()
-        ).decode()
+        password_hash = bcrypt.hashpw("admin123".encode(), bcrypt.gensalt()).decode()
         conn = conectar_bd("public")
         cur  = conn.cursor()
         
-        # Aseguramos que exista una empresa "Sistema" en el esquema public
+        # ON CONFLICT DO NOTHING evita que el código se rompa si "Sistema" ya existe
         cur.execute("INSERT INTO empresas (id, nombre, schema_name) VALUES (1, 'Sistema', 'public') ON CONFLICT (id) DO NOTHING")
         
         cur.execute("""
@@ -238,36 +288,50 @@ def crear_superadmin():
             VALUES (1, 'Super Admin', 'admin@sistema.com', %s, 'superadmin')
             ON CONFLICT (email) DO UPDATE SET password_hash = %s
         """, (password_hash, password_hash))
-        conn.commit()
+        
+        conn.commit() # Guardar cambios en la base de datos
         cur.close()
         conn.close()
         return {"mensaje": "Superadmin creado. Email: admin@sistema.com / Pass: admin123"}
     except Exception as e:
         return {"error": str(e)}
 
-# ── ICLOCK (Lector biométrico ZKTeco - Pendiente de adaptar a esquemas) ───────
+
+# ==============================================================================
+# 5. RUTAS PARA COMUNICACIÓN CON HARDWARE (ZKTeco ADMS)
+# ==============================================================================
+
+# ── INICIALIZACIÓN DEL LECTOR ZKTECO ──
+# Cuando un lector ZK se conecta a internet, busca esta ruta constantemente (GET).
 @app.get("/iclock/cdata")
 async def iclock_init(request: Request):
-    sn = request.query_params.get("SN", "")
+    sn = request.query_params.get("SN", "") # Extrae el Número de Serie del lector
     print(f"✅ Lector conectado SN={sn}")
+    
+    # El lector espera instrucciones en texto plano, no en JSON.
     return PlainTextResponse(
         f"GET OPTION FROM: {sn}\n"
         "ATTLOGStamp=None\nOPERLOGStamp=9999\n"
         "Realtime=1\nEncrypt=None\n"
     )
 
+# ── RECEPCIÓN DE MARCAJES DEL LECTOR ──
+# Cuando alguien pone su huella, el lector envía los datos a esta ruta (POST).
 @app.post("/iclock/cdata")
 async def iclock_data(request: Request):
-    table = request.query_params.get("table", "")
+    table = request.query_params.get("table", "") # Nos dice qué tipo de dato envía (ej. ATTLOG = marcaje)
     sn    = request.query_params.get("SN", "")
     body  = await request.body()
     texto = body.decode("utf-8", errors="ignore")
+    
+    # TODO: En el futuro, tendremos que modificar esto para que busque a qué cliente (esquema) 
+    # pertenece este Número de Serie (SN) y guarde el evento en la carpeta correcta.
     if table == "ATTLOG":
         for linea in texto.strip().splitlines():
             partes = linea.strip().split("\t")
             if len(partes) >= 2:
                 try:
-                    conn = conectar_bd("public") # Por ahora lo dejamos apuntando a public
+                    conn = conectar_bd("public") # Temporalmente guarda todo en 'public'
                     cur  = conn.cursor()
                     cur.execute("""
                         INSERT INTO eventos_brutos
@@ -281,9 +345,11 @@ async def iclock_data(request: Request):
                     conn.close()
                 except Exception as e:
                     print(f"❌ {e}")
-    return PlainTextResponse("OK")
+                    
+    return PlainTextResponse("OK") # Siempre hay que decirle "OK" al lector o se asustará y reenviará el dato.
 
-# ── DIAGNÓSTICO ───────────────────────────────────────────────────────────────
+
+# ── RUTA DE ESTADO (Para saber si la API está viva) ──
 @app.get("/")
 def inicio():
     return {"estado": "API funcionando", "version": "2.0 (Multitenant Base)"}
