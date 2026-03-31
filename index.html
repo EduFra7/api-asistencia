@@ -26,7 +26,7 @@
                 <label for="email" class="block text-sm font-medium text-gray-700">Correo Electrónico</label>
                 <input type="email" id="email" name="email" required 
                     class="mt-1 block w-full px-4 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                    placeholder="admin@empresa.com">
+                    placeholder="admin@sistema.com">
             </div>
 
             <div>
@@ -47,18 +47,17 @@
     </div>
 
     <script>
-        // Configura aquí la URL de tu API en Railway
-        const API_URL = "https://asistencia-api.up.railway.app";
+        // Tu API en Railway
+        const API_URL = "https://asistencia-api.up.railway.app"; 
 
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
+            e.preventDefault(); // ¡Esta es la línea que evita que la URL cambie!
             
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
             const btn = document.getElementById('submitBtn');
             const errorDiv = document.getElementById('errorMessage');
 
-            // Estado de carga
             btn.textContent = "Verificando...";
             btn.disabled = true;
             errorDiv.classList.add('hidden');
@@ -76,7 +75,6 @@
                     throw new Error(data.detail || "Error al iniciar sesión");
                 }
 
-                // Guardar el token en el almacenamiento local del navegador
                 localStorage.setItem('token', data.token);
                 localStorage.setItem('userData', JSON.stringify({
                     nombre: data.nombre,
@@ -84,17 +82,11 @@
                     empresa: data.empresa_nombre
                 }));
 
-                // Redirigir según el rol
+                // Redirección arreglada para archivos locales (sin la barra '/')
                 if (data.rol === 'superadmin') {
-<<<<<<< HEAD
-                    window.location.href = 'dashboard_superadmin.html'; // Cambiar por tu ruta real
+                    window.location.href = 'dashboard_superadmin.html'; 
                 } else {
-                    window.location.href = 'dashboard_cliente.html'; // Cambiar por tu ruta real
-=======
-                    window.location.href = '/dashboard_superadmin.html'; // Cambiar por tu ruta real
-                } else {
-                    window.location.href = '/dashboard_cliente.html'; // Cambiar por tu ruta real
->>>>>>> 9bf15ed9375e189c155da2590d150211682c52a4
+                    window.location.href = 'dashboard_cliente.html'; 
                 }
 
             } catch (error) {
