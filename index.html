@@ -82,4 +82,46 @@
                 // "Oye Railway, aquí tienes este JSON con un email y un password. ¿Son correctos?"
                 const response = await fetch(`${API_URL}/auth/login`, {
                     method: 'POST', // POST porque estamos "enviando" datos privados
-                    headers: { 'Content-Type': 'application/
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                // Convertimos la respuesta de Python (que viene en texto) a un objeto JavaScript
+                const data = await response.json();
+
+                // Si Python nos mandó un código de error (ej. 401 Credenciales incorrectas)
+                if (!response.ok) {
+                    throw new Error(data.detail || "Error al iniciar sesión");
+                }
+
+                // 4. GUARDAR EL "PASAPORTE" EN LA CAJA FUERTE DEL NAVEGADOR (localStorage)
+                // localStorage es un espacio de memoria del navegador que no se borra al cerrar la pestaña.
+                // Guardamos el token de seguridad y un resumen de quién es el usuario.
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('userData', JSON.stringify({
+                    nombre: data.nombre,
+                    rol: data.rol,
+                    empresa: data.empresa_nombre
+                }));
+
+                // 5. REDIRECCIÓN INTELIGENTE
+                // Leemos el rol que nos devolvió Python y decidimos a qué pantalla enviarlo.
+                if (data.rol === 'superadmin') {
+                    window.location.href = 'dashboard_superadmin.html'; // Si eres tú, al panel maestro
+                } else {
+                    window.location.href = 'dashboard_cliente.html'; // Si es un cliente, a su panel privado
+                }
+
+            } catch (error) {
+                // Si la contraseña estuvo mal o Railway falló, mostramos la caja roja de error
+                errorDiv.textContent = error.message;
+                errorDiv.classList.remove('hidden');
+            } finally {
+                // Ya sea que haya funcionado o fallado, regresamos el botón a su estado normal
+                btn.textContent = "Ingresar al Sistema";
+                btn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
