@@ -4,9 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SuperAdmin - C.A Lector</title>
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
+
 <body class="bg-gray-100 font-sans flex h-screen overflow-hidden">
 
     <aside class="w-64 bg-slate-900 text-white flex flex-col">
@@ -14,11 +16,13 @@
             <h2 class="text-2xl font-bold text-blue-400"><i class="fas fa-fingerprint mr-2"></i>C.A Lector</h2>
             <p class="text-xs text-slate-400 mt-1">Panel de SuperAdmin</p>
         </div>
+        
         <nav class="flex-1 p-4 space-y-2">
             <a href="#" class="flex items-center p-3 bg-blue-600 rounded-lg text-white transition-colors">
                 <i class="fas fa-building w-6"></i> Clientes (Empresas)
             </a>
-            </nav>
+        </nav>
+        
         <div class="p-4 border-t border-slate-800">
             <button onclick="cerrarSesion()" class="flex items-center w-full p-3 text-red-400 hover:bg-slate-800 rounded-lg transition-colors">
                 <i class="fas fa-sign-out-alt w-6"></i> Cerrar Sesión
@@ -27,6 +31,7 @@
     </aside>
 
     <main class="flex-1 flex flex-col h-screen overflow-y-auto">
+        
         <header class="bg-white shadow-sm p-4 flex justify-between items-center">
             <h1 class="text-xl font-semibold text-gray-800">Gestión de Clientes</h1>
             <div class="flex items-center space-x-3">
@@ -42,6 +47,7 @@
                 <div class="lg:col-span-1">
                     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                         <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Registrar Nuevo Cliente</h3>
+                        
                         <form id="crearEmpresaForm" class="space-y-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Nombre de la Empresa</label>
@@ -100,56 +106,65 @@
     </main>
 
     <script>
-        // LA URL DE TU API EN RAILWAY
+        // Tu API en la nube
         const API_URL = "https://asistencia-api.up.railway.app"; 
         
-        // Verificación de seguridad básica
+        // ── A. SEGURIDAD DEL FRONTEND ──
+        // Leemos la memoria del navegador para ver si el usuario ya pasó por el Login
         const token = localStorage.getItem('token');
         const userDataStr = localStorage.getItem('userData');
 
+        // Si no hay token, significa que alguien intentó entrar escribiendo la URL directamente. ¡Lo expulsamos!
         if (!token || !userDataStr) {
-            window.location.href = '/index.html'; // Si no hay token, al login
+            window.location.href = 'index.html'; 
         }
 
+        // Si hay token, verificamos que realmente sea el SuperAdmin
         const userData = JSON.parse(userDataStr);
         if (userData.rol !== 'superadmin') {
             alert("Acceso denegado. Solo SuperAdmin.");
-            window.location.href = '/index.html';
-        }
-
-        // Mostrar nombre del usuario en el header
-        document.getElementById('userNameDisplay').textContent = `👋 Hola, ${userData.nombre}`;
-
-        // ── FUNCIÓN PARA CERRAR SESIÓN ──
-        function cerrarSesion() {
-            localStorage.removeItem('token');
-            localStorage.removeItem('userData');
             window.location.href = 'index.html';
         }
 
-        // ── FUNCIÓN PARA CARGAR LA LISTA DE EMPRESAS ──
+        // Saludo personalizado en el Header
+        document.getElementById('userNameDisplay').textContent = `👋 Hola, ${userData.nombre}`;
+
+        // ── B. CERRAR SESIÓN ──
+        function cerrarSesion() {
+            localStorage.removeItem('token');    // Borramos el pasaporte
+            localStorage.removeItem('userData'); // Borramos los datos
+            window.location.href = 'index.html'; // Lo mandamos al login
+        }
+
+        // ── C. OBTENER Y DIBUJAR LA TABLA ──
+        // Función asíncrona para pedir la lista de empresas a Railway
         async function cargarEmpresas() {
             const tbody = document.getElementById('tablaEmpresas');
             tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-500">Actualizando...</td></tr>';
             
             try {
                 const response = await fetch(`${API_URL}/empresas`, {
+                    // ¡CRÍTICO! Mandamos el Token en la cabecera. Si no lo mandamos, 
+                    // la función verificar_token() en Python (main.py) nos bloqueará.
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 
                 if (!response.ok) throw new Error("Error al obtener datos");
-                const empresas = await response.json();
+                const empresas = await response.json(); // Convertimos la respuesta en un arreglo de JavaScript
                 
-                tbody.innerHTML = ''; // Limpiar tabla
+                tbody.innerHTML = ''; // Limpiamos la tabla para no duplicar datos
                 
                 if (empresas.length === 0) {
                     tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-500">No hay clientes registrados aún.</td></tr>';
                     return;
                 }
 
+                // Ciclo ForEach: Por cada empresa en la base de datos, creamos una fila HTML y la pegamos.
                 empresas.forEach(emp => {
                     const tr = document.createElement('tr');
                     tr.className = "hover:bg-gray-50 transition-colors";
+                    
+                    // Usamos las "Template Literals" (las comillas invertidas ` `) para poder inyectar variables como ${emp.nombre}
                     tr.innerHTML = `
                         <td class="p-4 text-gray-500 font-mono text-xs">#${emp.id}</td>
                         <td class="p-4 font-medium text-gray-800"><i class="fas fa-building text-gray-400 mr-2"></i>${emp.nombre}</td>
@@ -158,21 +173,21 @@
                             <span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-semibold">Activo</span>
                         </td>
                     `;
-                    tbody.appendChild(tr);
+                    tbody.appendChild(tr); // Añadimos la fila recién creada a la tabla visual
                 });
             } catch (error) {
                 tbody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-red-500">Error de conexión con la API</td></tr>`;
             }
         }
 
-        // ── FUNCIÓN PARA CREAR UNA NUEVA EMPRESA ──
+        // ── D. CREAR UNA NUEVA EMPRESA ──
         document.getElementById('crearEmpresaForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
+            e.preventDefault(); // Evitamos recargar la página
             
             const btn = document.getElementById('submitBtn');
             const msg = document.getElementById('formMsg');
             
-            // Recoger datos
+            // Recogemos todos los valores del formulario en un objeto JSON
             const payload = {
                 nombre: document.getElementById('empresa_nombre').value,
                 admin_nombre: document.getElementById('admin_nombre').value,
@@ -180,16 +195,18 @@
                 admin_password: document.getElementById('admin_password').value
             };
 
+            // Efecto visual de carga
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Procesando BD...';
             msg.className = 'hidden';
 
             try {
+                // Hacemos el POST hacia la ruta '/empresas' en Python
                 const response = await fetch(`${API_URL}/empresas`, {
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
+                        'Authorization': `Bearer ${token}` // Demostramos que somos el SuperAdmin
                     },
                     body: JSON.stringify(payload)
                 });
@@ -198,25 +215,27 @@
 
                 if (!response.ok) throw new Error(data.detail || "Error desconocido");
 
-                // Éxito
+                // Si todo sale bien, pintamos mensaje verde
                 msg.textContent = "¡Empresa y Base de Datos creadas con éxito!";
                 msg.className = 'text-sm p-3 rounded bg-green-50 text-green-700 border border-green-200 mt-3';
-                document.getElementById('crearEmpresaForm').reset();
                 
-                // Recargar la tabla
-                cargarEmpresas();
+                document.getElementById('crearEmpresaForm').reset(); // Limpiamos los campos del formulario
+                
+                cargarEmpresas(); // ¡Magia! Volvemos a llamar a la función para que la tabla se actualice sola
 
             } catch (error) {
-                // Error
+                // Si falla, pintamos mensaje rojo
                 msg.textContent = error.message;
                 msg.className = 'text-sm p-3 rounded bg-red-50 text-red-700 border border-red-200 mt-3';
             } finally {
+                // Regresamos el botón a la normalidad
                 btn.disabled = false;
                 btn.innerHTML = 'Crear y Aprovisionar BD';
             }
         });
 
-        // Cargar las empresas apenas se abre la página
+        // ── E. INICIO AUTOMÁTICO ──
+        // Ejecutamos esta función apenas el navegador termina de leer el script
         cargarEmpresas();
     </script>
 </body>

@@ -4,9 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Panel de Control - Empresa</title>
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
+
 <body class="bg-gray-50 font-sans flex h-screen overflow-hidden text-gray-800">
 
     <aside class="w-64 bg-slate-900 text-white flex flex-col h-full shadow-xl z-20">
@@ -151,6 +153,7 @@
         <div id="overlayPanel" class="fixed inset-0 bg-gray-900 bg-opacity-50 z-30 hidden transition-opacity" onclick="togglePanelDerecho()"></div>
         
         <div id="panelDerecho" class="fixed inset-y-0 right-0 w-full md:w-96 bg-white shadow-2xl z-40 transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col">
+            
             <div class="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50">
                 <h3 class="text-lg font-bold text-gray-800">Registrar Nuevo Empleado</h3>
                 <button onclick="togglePanelDerecho()" class="text-gray-400 hover:text-red-500 transition-colors">
@@ -191,39 +194,44 @@
     </main>
 
     <script>
-        // Lógica de sesión
+        // ── A. SEGURIDAD DEL FRONTEND ──
         const userDataStr = localStorage.getItem('userData');
-        if (!userDataStr) window.location.href = 'index.html';
+        if (!userDataStr) window.location.href = 'index.html'; // Lo expulsa si no inició sesión
         
+        // Convertimos el texto guardado a objeto y pintamos el nombre en el menú
         const userData = JSON.parse(userDataStr);
         document.getElementById('empresaNameDisplay').textContent = userData.empresa;
         document.getElementById('rolDisplay').textContent = `Rol: ${userData.rol}`;
 
         function cerrarSesion() {
-            localStorage.clear();
+            localStorage.clear(); // Borra todo
             window.location.href = 'index.html';
         }
 
-        // Reloj en tiempo real
+        // ── B. EL RELOJ DINÁMICO ──
         function actualizarReloj() {
             const ahora = new Date();
+            // Formatea la fecha para que se vea bonita (ej. LUNES, 1 DE ABRIL DE 2024, 14:30:00)
             const opciones = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
             document.getElementById('relojTop').textContent = ahora.toLocaleDateString('es-ES', opciones).toUpperCase();
         }
+        // Le decimos a JavaScript que ejecute esta función cada 1000 milisegundos (1 segundo)
         setInterval(actualizarReloj, 1000);
-        actualizarReloj();
+        actualizarReloj(); // Ejecutamos la primera vez inmediatamente
 
-        // ── MAGIA DEL PANEL LATERAL DERECHO ──
+        // ── C. MAGIA DEL PANEL LATERAL DERECHO ──
         function togglePanelDerecho() {
             const panel = document.getElementById('panelDerecho');
             const overlay = document.getElementById('overlayPanel');
             
+            // Si el panel tiene la clase "translate-x-full" (que lo tira a la derecha fuera de la pantalla)
             if (panel.classList.contains('translate-x-full')) {
-                // Abrir panel
+                // Se la quitamos para que entre a la pantalla
                 panel.classList.remove('translate-x-full');
+                // Al fondo oscuro le quitamos el "hidden" para que aparezca
                 overlay.classList.remove('hidden');
             } else {
-                // Cerrar panel
+                // Si ya está abierto, hacemos lo opuesto para cerrarlo
                 panel.classList.add('translate-x-full');
                 overlay.classList.add('hidden');
             }

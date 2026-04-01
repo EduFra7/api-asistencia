@@ -4,10 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>C.A. Lector - Iniciar Sesión</title>
+    
     <script src="https://cdn.tailwindcss.com"></script>
+    
     <style>
         body {
             background-color: #f3f4f6;
+            /* Esto crea el patrón de puntitos sutiles en el fondo del login */
             background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
             background-size: 20px 20px;
         }
@@ -16,12 +19,14 @@
 <body class="min-h-screen flex items-center justify-center font-sans text-gray-800">
 
     <div class="max-w-md w-full bg-white rounded-xl shadow-lg p-8 border border-gray-100">
+        
         <div class="text-center mb-8">
             <h1 class="text-3xl font-bold text-blue-600 mb-2">C.A. Lector</h1>
             <p class="text-gray-500 text-sm">Sistema de Control de Asistencia</p>
         </div>
 
         <form id="loginForm" class="space-y-6">
+            
             <div>
                 <label for="email" class="block text-sm font-medium text-gray-700">Correo Electrónico</label>
                 <input type="email" id="email" name="email" required 
@@ -47,56 +52,34 @@
     </div>
 
     <script>
-        // Tu API en Railway
+        // Esta es la dirección de tu servidor Python en la nube. 
+        // A este lugar enviaremos los correos y contraseñas a tocar la puerta.
         const API_URL = "https://asistencia-api.up.railway.app"; 
 
+        // Interceptamos el momento exacto en el que el usuario hace clic en "Ingresar"
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
-            e.preventDefault(); // ¡Esta es la línea que evita que la URL cambie!
             
+            // e.preventDefault() es CRÍTICO: Evita que el navegador recargue la página entera 
+            // o ponga la contraseña en la barra de direcciones (el error que tuvimos ayer).
+            e.preventDefault(); 
+            
+            // 1. Extraemos lo que el usuario escribió en las cajas de texto
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
+            
+            // Capturamos los elementos visuales que vamos a modificar
             const btn = document.getElementById('submitBtn');
             const errorDiv = document.getElementById('errorMessage');
 
+            // 2. Experiencia de Usuario (UX): Cambiamos el texto del botón y lo desactivamos
+            // para que el usuario no le haga clic 20 veces mientras carga.
             btn.textContent = "Verificando...";
             btn.disabled = true;
-            errorDiv.classList.add('hidden');
+            errorDiv.classList.add('hidden'); // Ocultamos errores previos si los hubiera
 
             try {
+                // 3. LA LLAMADA A LA API (Fetch): 
+                // "Oye Railway, aquí tienes este JSON con un email y un password. ¿Son correctos?"
                 const response = await fetch(`${API_URL}/auth/login`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password })
-                });
-
-                const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(data.detail || "Error al iniciar sesión");
-                }
-
-                localStorage.setItem('token', data.token);
-                localStorage.setItem('userData', JSON.stringify({
-                    nombre: data.nombre,
-                    rol: data.rol,
-                    empresa: data.empresa_nombre
-                }));
-
-                // Redirección arreglada para archivos locales (sin la barra '/')
-                if (data.rol === 'superadmin') {
-                    window.location.href = 'dashboard_superadmin.html'; 
-                } else {
-                    window.location.href = 'dashboard_cliente.html'; 
-                }
-
-            } catch (error) {
-                errorDiv.textContent = error.message;
-                errorDiv.classList.remove('hidden');
-            } finally {
-                btn.textContent = "Ingresar al Sistema";
-                btn.disabled = false;
-            }
-        });
-    </script>
-</body>
-</html>
+                    method: 'POST', // POST porque estamos "enviando" datos privados
+                    headers: { 'Content-Type': 'application/
