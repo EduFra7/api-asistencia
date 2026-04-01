@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Planilla - C.A Lector</title>
+    <title>Panel de Control - Empresa</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -12,7 +12,6 @@
 <body class="bg-gray-50 font-sans flex h-screen overflow-hidden text-gray-800">
 
     <aside class="w-64 bg-slate-900 text-white flex flex-col h-full shadow-xl z-20">
-        
         <div class="p-6 border-b border-slate-800">
             <h2 class="text-xl font-bold text-blue-400 truncate" id="empresaNameDisplay">Cargando...</h2>
             <p class="text-xs text-slate-400 mt-1 uppercase tracking-wider" id="rolDisplay">Admin</p>
@@ -20,14 +19,34 @@
         
         <div class="flex-1 overflow-y-auto py-4">
             <nav class="space-y-1 px-3">
+                
                 <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-4 px-3">Control de Asistencia</div>
-                <a href="#" class="flex items-center px-3 py-2 text-slate-300 hover:bg-slate-800 rounded-lg transition-colors">
+                <a href="dashboard_cliente.html" class="flex items-center px-3 py-2 bg-blue-600 rounded-lg text-white transition-colors">
                     <i class="fas fa-chart-pie w-5 mr-2"></i> Dashboard
+                </a>
+                <a href="#" class="flex items-center px-3 py-2 text-slate-300 hover:bg-slate-800 rounded-lg transition-colors">
+                    <i class="fas fa-calendar-alt w-5 mr-2"></i> Calendario
+                </a>
+                <a href="#" class="flex items-center px-3 py-2 text-slate-300 hover:bg-slate-800 rounded-lg transition-colors">
+                    <i class="fas fa-file-alt w-5 mr-2"></i> Reporte del Día
                 </a>
 
                 <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6 px-3">Gestión de Planilla</div>
-                <a href="#" class="flex items-center px-3 py-2 bg-blue-600 rounded-lg text-white transition-colors shadow-sm">
+                <a href="planilla.html" class="flex items-center px-3 py-2 text-slate-300 hover:bg-slate-800 rounded-lg transition-colors">
                     <i class="fas fa-users w-5 mr-2"></i> Personal
+                </a>
+                
+                <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6 px-3">Ausencias</div>
+                <a href="#" class="flex items-center px-3 py-2 text-slate-300 hover:bg-slate-800 rounded-lg transition-colors">
+                    <i class="fas fa-plane-departure w-5 mr-2"></i> Vacaciones y Permisos
+                </a>
+
+                <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6 px-3 text-yellow-500">Ajustes (Admin)</div>
+                <a href="#" class="flex items-center px-3 py-2 text-slate-300 hover:bg-slate-800 rounded-lg transition-colors">
+                    <i class="fas fa-clock w-5 mr-2"></i> Horarios y Turnos
+                </a>
+                <a href="#" class="flex items-center px-3 py-2 text-slate-300 hover:bg-slate-800 rounded-lg transition-colors">
+                    <i class="fas fa-fingerprint w-5 mr-2"></i> Lectores Biométricos
                 </a>
             </nav>
         </div>
@@ -43,347 +62,179 @@
         
         <header class="bg-white shadow-sm border-b border-gray-200 p-4 flex justify-between items-center z-10">
             <div>
-                <h1 class="text-2xl font-bold text-gray-800" id="tituloPlanilla">Planilla de Empresa</h1>
-                <p class="text-sm text-gray-500">Gestión integral de empleados y accesos</p>
+                <h1 class="text-2xl font-bold text-gray-800">Resumen de Hoy</h1>
+                <p class="text-sm text-gray-500" id="relojTop">Cargando fecha y hora...</p>
             </div>
             
-            <button onclick="abrirPanelNuevo()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center">
-                <i class="fas fa-user-plus mr-2"></i> Nuevo Personal
+            <button onclick="togglePanelDerecho()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center">
+                <i class="fas fa-plus mr-2"></i> Nuevo Empleado
             </button>
         </header>
 
-        <div class="flex-1 overflow-y-auto p-6 flex flex-col">
-            
-            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6">
+        <div class="flex-1 overflow-y-auto p-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 
-                <div class="flex space-x-2 mb-4 border-b border-gray-100 pb-4">
-                    <button class="px-4 py-2 bg-blue-50 text-blue-700 font-semibold rounded-lg text-sm border border-blue-200">
-                        <i class="fas fa-user-check mr-2"></i>Activos (42)
-                    </button>
-                    <button class="px-4 py-2 bg-white hover:bg-gray-50 text-gray-600 font-medium rounded-lg text-sm border border-gray-200 transition-colors">
-                        <i class="fas fa-user-times mr-2"></i>Inactivos (3)
-                    </button>
-                    <button class="px-4 py-2 bg-white hover:bg-gray-50 text-gray-600 font-medium rounded-lg text-sm border border-gray-200 transition-colors">
-                        <i class="fas fa-users mr-2"></i>Todos (45)
-                    </button>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Personal de la Empresa</p>
+                            <h3 class="text-3xl font-bold text-gray-800 mt-1">45</h3>
+                        </div>
+                        <div class="p-3 bg-blue-50 text-blue-600 rounded-lg"><i class="fas fa-user-tie text-xl"></i></div>
+                    </div>
+                    <div class="mt-4 flex items-center text-sm">
+                        <span class="text-green-600 font-medium"><i class="fas fa-circle text-[8px] mr-1"></i> 42 Activos</span>
+                        <span class="mx-3 text-gray-300">|</span>
+                        <span class="text-red-500 font-medium"><i class="fas fa-circle text-[8px] mr-1"></i> 3 Retirados</span>
+                    </div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                        <label class="text-xs font-semibold text-gray-500 uppercase">Buscar Empleado</label>
-                        <div class="relative mt-1">
-                            <i class="fas fa-search absolute left-3 top-2.5 text-gray-400"></i>
-                            <input type="text" placeholder="Nombre, Apellido o C.I." class="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Asistencia de Hoy</p>
+                            <h3 class="text-3xl font-bold text-gray-800 mt-1">38 <span class="text-sm font-normal text-gray-500">/ 42</span></h3>
+                        </div>
+                        <div class="p-3 bg-green-50 text-green-600 rounded-lg"><i class="fas fa-check-circle text-xl"></i></div>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5 mb-1">
+                        <div class="bg-green-500 h-2.5 rounded-full" style="width: 90%"></div>
+                    </div>
+                    <p class="text-xs text-gray-500 text-right">90% de asistencia</p>
+                </div>
+
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-sm font-medium text-gray-500">Alertas del Día</p>
+                            <h3 class="text-3xl font-bold text-orange-500 mt-1">4</h3>
+                        </div>
+                        <div class="p-3 bg-orange-50 text-orange-600 rounded-lg"><i class="fas fa-exclamation-triangle text-xl"></i></div>
+                    </div>
+                    <div class="mt-4 space-y-2">
+                        <p class="text-sm text-gray-600"><i class="fas fa-clock text-orange-500 w-4"></i> 3 Llegadas tarde</p>
+                        <p class="text-sm text-gray-600"><i class="fas fa-user-times text-red-500 w-4"></i> 1 Falta sin marcar</p>
+                    </div>
+                </div>
+
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 lg:col-span-2">
+                    <h3 class="text-sm font-bold text-gray-800 mb-4 border-b pb-2">Turnos y Horarios Vigentes</h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="p-4 bg-gray-50 rounded-lg border border-gray-100">
+                            <p class="font-semibold text-gray-800">Administración</p>
+                            <p class="text-sm text-gray-600 mt-1"><i class="far fa-clock mr-1"></i> 08:00 AM - 16:00 PM</p>
+                            <p class="text-xs text-green-600 mt-1">Activo ahora</p>
+                        </div>
+                        <div class="p-4 bg-gray-50 rounded-lg border border-gray-100">
+                            <p class="font-semibold text-gray-800">Planta Nocturno</p>
+                            <p class="text-sm text-gray-600 mt-1"><i class="far fa-clock mr-1"></i> 22:00 PM - 06:00 AM</p>
+                            <p class="text-xs text-gray-400 mt-1">Próximo</p>
                         </div>
                     </div>
-                    <div>
-                        <label class="text-xs font-semibold text-gray-500 uppercase">Sucursal / Sección</label>
-                        <select class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
-                            <option value="">Todas las sucursales</option>
-                            <option>Central</option>
-                            <option>Planta El Alto</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="text-xs font-semibold text-gray-500 uppercase">Cargo</label>
-                        <select class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
-                            <option value="">Todos los cargos</option>
-                            <option>Administrativo</option>
-                            <option>Operario</option>
-                        </select>
-                    </div>
                 </div>
-            </div>
 
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 flex-1 overflow-hidden flex flex-col">
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left border-collapse">
-                        <thead>
-                            <tr class="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider border-b border-gray-200">
-                                <th class="p-4 font-semibold">ID Lector</th>
-                                <th class="p-4 font-semibold">Empleado</th>
-                                <th class="p-4 font-semibold">C.I.</th>
-                                <th class="p-4 font-semibold">Sección</th>
-                                <th class="p-4 font-semibold">Cargo</th>
-                                <th class="p-4 font-semibold">Turno</th>
-                                <th class="p-4 font-semibold">Estado</th>
-                            </tr>
-                        </thead>
-                        <tbody class="text-sm divide-y divide-gray-100">
-                            
-                            <tr onclick="abrirPanelEdicion('Juan Pérez')" class="hover:bg-blue-50 transition-colors cursor-pointer group">
-                                <td class="p-4 font-mono text-gray-500 font-semibold group-hover:text-blue-600">102</td>
-                                <td class="p-4">
-                                    <div class="flex items-center">
-                                        <div class="h-8 w-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold mr-3">JP</div>
-                                        <div>
-                                            <p class="font-bold text-gray-800">Juan Carlos Pérez</p>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td class="p-4 text-gray-600">8934521-LP</td>
-                                <td class="p-4 text-gray-600">Central</td>
-                                <td class="p-4 text-gray-600">Supervisor</td>
-                                <td class="p-4 text-gray-600"><i class="far fa-clock text-gray-400 mr-1"></i>08:00 - 16:00</td>
-                                <td class="p-4">
-                                    <span class="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs font-semibold border border-green-200">
-                                        <i class="fas fa-circle text-[8px] mr-1"></i>Activo
-                                    </span>
-                                </td>
-                            </tr>
-
-                        </tbody>
-                    </table>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-center space-y-4">
+                    <h3 class="text-sm font-bold text-gray-800 mb-2">Conexión con Lectores</h3>
+                    
+                    <button class="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 py-3 px-4 rounded-lg flex items-center justify-center transition-colors shadow-sm">
+                        <i class="fas fa-wifi mr-2"></i>
+                        <span class="text-sm font-semibold">Sincronizar Huellas a Red</span>
+                    </button>
+                    
+                    <button class="w-full bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 py-3 px-4 rounded-lg flex items-center justify-center transition-colors shadow-sm">
+                        <i class="fas fa-download mr-2"></i>
+                        <span class="text-sm font-semibold">Extraer Eventos Locales</span>
+                    </button>
                 </div>
+
             </div>
         </div>
 
-        <div id="overlayPanel" class="fixed inset-0 bg-gray-900 bg-opacity-40 z-30 hidden transition-opacity backdrop-blur-sm" onclick="cerrarPanel()"></div>
+        <div id="overlayPanel" class="fixed inset-0 bg-gray-900 bg-opacity-50 z-30 hidden transition-opacity" onclick="togglePanelDerecho()"></div>
         
-        <div id="panelDerecho" class="fixed inset-y-0 right-0 w-full md:w-[500px] bg-white shadow-2xl z-40 transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col">
+        <div id="panelDerecho" class="fixed inset-y-0 right-0 w-full md:w-96 bg-white shadow-2xl z-40 transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col">
             
-            <div class="p-6 border-b border-gray-200 flex justify-between items-center bg-white">
-                <h3 class="text-xl font-bold text-gray-800" id="drawerTitle">Nuevo Personal</h3>
-                <button onclick="cerrarPanel()" class="text-gray-400 hover:text-red-500 transition-colors">
-                    <i class="fas fa-times text-2xl"></i>
+            <div class="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+                <h3 class="text-lg font-bold text-gray-800">Registrar Nuevo Empleado</h3>
+                <button onclick="togglePanelDerecho()" class="text-gray-400 hover:text-red-500 transition-colors">
+                    <i class="fas fa-times text-xl"></i>
                 </button>
             </div>
             
-            <div class="flex-1 overflow-y-auto p-6 bg-gray-50">
-                <form id="empleadoForm" class="space-y-6">
-                    
-                    <div class="flex items-center space-x-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-                        <div class="h-16 w-16 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 border-2 border-dashed border-gray-300 cursor-pointer hover:bg-gray-100 transition-colors relative overflow-hidden">
-                            <i class="fas fa-camera text-xl"></i>
-                            <input type="file" class="absolute inset-0 opacity-0 cursor-pointer" accept="image/*">
-                        </div>
-                        <div class="flex-1">
-                            <label class="block text-xs font-bold text-blue-600 uppercase">ID Biométrico (Obligatorio)</label>
-                            <input type="number" placeholder="Ej. 102" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 text-lg font-bold">
-                        </div>
+            <div class="flex-1 overflow-y-auto p-6">
+                <form class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Nombre Completo</label>
+                        <input type="text" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
                     </div>
-
-                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm space-y-4">
-                        <h4 class="font-bold text-gray-800 border-b pb-2"><i class="far fa-id-card mr-2 text-gray-400"></i>Datos Personales</h4>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div class="col-span-2 md:col-span-1">
-                                <label class="block text-sm font-medium text-gray-700">Nombres</label>
-                                <input type="text" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm">
-                            </div>
-                            <div class="col-span-2 md:col-span-1">
-                                <label class="block text-sm font-medium text-gray-700">Apellidos</label>
-                                <input type="text" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">C.I.</label>
-                                <input type="text" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Sexo</label>
-                                <select class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm">
-                                    <option>Masculino</option>
-                                    <option>Femenino</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Celular</label>
-                                <input type="number" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Correo Electrónico</label>
-                                <input type="email" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm">
-                            </div>
-                        </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Documento de Identidad</label>
+                        <input type="text" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
                     </div>
-
-                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm space-y-4">
-                        <h4 class="font-bold text-gray-800 border-b pb-2"><i class="fas fa-briefcase mr-2 text-gray-400"></i>Datos Laborales</h4>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Sucursal/Sección</label>
-                                <select class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm">
-                                    <option>Central</option>
-                                    <option>Planta El Alto</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Cargo</label>
-                                <input type="text" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Tipo de Contrato</label>
-                                <select class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm">
-                                    <option>Ítem</option>
-                                    <option>Eventual</option>
-                                    <option>Consultoría</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Turno Asignado</label>
-                                <select class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm">
-                                    <option>Administración (08:00-16:00)</option>
-                                    <option>Nocturno (22:00-06:00)</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Salario Base</label>
-                                <div class="relative mt-1">
-                                    <span class="absolute left-3 top-2 text-gray-500">Bs.</span>
-                                    <input type="number" class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm">
-                                </div>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Bono Adicional</label>
-                                <div class="relative mt-1">
-                                    <span class="absolute left-3 top-2 text-gray-500">Bs.</span>
-                                    <input type="number" class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm">
-                                </div>
-                            </div>
-                        </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">ID en Lector Biométrico</label>
+                        <input type="number" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
                     </div>
-
-                    <div id="zonaSeguridad" class="hidden bg-white p-5 rounded-xl border border-gray-200 shadow-sm space-y-4">
-                        <h4 class="font-bold text-gray-800 border-b pb-2"><i class="fas fa-shield-alt mr-2 text-gray-400"></i>Estado y Movimientos</h4>
-                        
-                        <div class="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-200">
-                            <div>
-                                <p class="font-semibold text-gray-800">Empleado Activo</p>
-                                <p class="text-xs text-gray-500">Apague para registrar retiro</p>
-                            </div>
-                            
-                            <label class="relative inline-flex items-center cursor-pointer">
-                                <input type="checkbox" id="toggleEstado" class="sr-only peer" checked onchange="manejarCambioEstado()">
-                                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
-                            </label>
-                        </div>
-
-                        <div id="panelConfirmacion" class="hidden bg-red-50 border border-red-200 p-4 rounded-lg space-y-3 mt-4">
-                            <p class="text-sm font-bold text-red-700" id="textoConfirmacion">Confirmar Retiro de Personal</p>
-                            <div>
-                                <label class="block text-xs font-medium text-red-700">Fecha Efectiva del Movimiento</label>
-                                <input type="date" class="mt-1 w-full px-3 py-2 border border-red-300 rounded-md text-sm focus:ring-red-500">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-red-700">Motivo / Comentario</label>
-                                <input type="text" placeholder="Ej. Renuncia voluntaria" class="mt-1 w-full px-3 py-2 border border-red-300 rounded-md text-sm focus:ring-red-500">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-red-700"><i class="fas fa-lock mr-1"></i> Contraseña de Admin</label>
-                                <input type="password" placeholder="Requerido para guardar cambios" class="mt-1 w-full px-3 py-2 border border-red-300 rounded-md text-sm focus:ring-red-500">
-                            </div>
-                        </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Horario Asignado</label>
+                        <select class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                            <option>Administración (08:00 - 16:00)</option>
+                            <option>Planta Nocturno (22:00 - 06:00)</option>
+                        </select>
                     </div>
-
                 </form>
             </div>
 
-            <div class="p-6 border-t border-gray-200 bg-white flex items-center justify-between">
-                
-                <button id="btnEliminar" onclick="solicitarBorrado()" class="hidden text-red-500 hover:text-red-700 font-medium text-sm px-3 py-2 rounded transition-colors">
-                    <i class="fas fa-trash-alt mr-1"></i> Eliminar
-                </button>
-                
-                <div class="flex space-x-3 ml-auto">
-                    <button onclick="cerrarPanel()" class="bg-white border border-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-50 font-medium transition-colors text-sm shadow-sm">Cancelar</button>
-                    <button class="bg-blue-600 text-white px-8 py-2 rounded-lg hover:bg-blue-700 font-medium shadow-sm transition-colors text-sm">Guardar</button>
-                </div>
+            <div class="p-6 border-t border-gray-200 bg-gray-50 flex space-x-3">
+                <button onclick="togglePanelDerecho()" class="flex-1 bg-white border border-gray-300 text-gray-700 py-2 rounded-md hover:bg-gray-50 font-medium">Cancelar</button>
+                <button class="flex-1 bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 font-medium shadow-sm">Guardar</button>
             </div>
         </div>
 
     </main>
 
     <script>
-        // ── 1. SEGURIDAD DE SESIÓN ──
-        // Verificamos si alguien inició sesión leyendo la memoria "localStorage" del navegador.
+        // ── A. SEGURIDAD DEL FRONTEND ──
         const userDataStr = localStorage.getItem('userData');
-        if (!userDataStr) window.location.href = 'index.html'; // Si no hay datos, pa' fuera.
+        if (!userDataStr) window.location.href = 'index.html'; // Lo expulsa si no inició sesión
         
-        // Convertimos el texto JSON a un objeto JavaScript utilizable
+        // Convertimos el texto guardado a objeto y pintamos el nombre en el menú
         const userData = JSON.parse(userDataStr);
-        // Pintamos el nombre de la empresa en la esquina superior izquierda
         document.getElementById('empresaNameDisplay').textContent = userData.empresa;
-        // Pintamos el título gigante en el centro
-        document.getElementById('tituloPlanilla').textContent = `Planilla de ${userData.empresa}`;
+        document.getElementById('rolDisplay').textContent = `Rol: ${userData.rol}`;
 
-        // ── 2. ANIMACIONES DEL PANEL LATERAL ──
-        const panel = document.getElementById('panelDerecho');
-        const overlay = document.getElementById('overlayPanel');
-
-        // Función general para cerrar la ventana lateral
-        function cerrarPanel() {
-            panel.classList.add('translate-x-full'); // Mueve el panel hacia la derecha (afuera de la pantalla)
-            overlay.classList.add('hidden');         // Oculta el fondo borroso oscuro
+        function cerrarSesion() {
+            localStorage.clear(); // Borra todo
+            window.location.href = 'index.html';
         }
 
-        // Modo A: "Nuevo Personal"
-        // Esta función se activa con el botón azul superior de "+ Nuevo Personal"
-        function abrirPanelNuevo() {
-            // Ponemos títulos de "Nuevo"
-            document.getElementById('drawerTitle').textContent = "Registrar Nuevo Personal";
-            
-            // Ocultamos la Zona de Peligro y el Botón de Eliminar (porque no puedes borrar a alguien que no existe)
-            document.getElementById('zonaSeguridad').classList.add('hidden');
-            document.getElementById('btnEliminar').classList.add('hidden');
-            
-            // Limpiamos cualquier texto que haya quedado en las cajitas del formulario
-            document.getElementById('empleadoForm').reset();
-            
-            // Revelamos el panel deslizándolo hacia la izquierda
-            panel.classList.remove('translate-x-full');
-            overlay.classList.remove('hidden');
+        // ── B. EL RELOJ DINÁMICO ──
+        function actualizarReloj() {
+            const ahora = new Date();
+            // Formatea la fecha para que se vea bonita (ej. LUNES, 1 DE ABRIL DE 2024, 14:30:00)
+            const opciones = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
+            document.getElementById('relojTop').textContent = ahora.toLocaleDateString('es-ES', opciones).toUpperCase();
         }
+        // Le decimos a JavaScript que ejecute esta función cada 1000 milisegundos (1 segundo)
+        setInterval(actualizarReloj, 1000);
+        actualizarReloj(); // Ejecutamos la primera vez inmediatamente
 
-        // Modo B: "Editar Personal Existente"
-        // Esta función se activa al darle Clic a cualquier fila de la tabla
-        function abrirPanelEdicion(nombreEmpleado) {
-            // Cambiamos el título
-            document.getElementById('drawerTitle').textContent = "Perfil de " + nombreEmpleado;
+        // ── C. MAGIA DEL PANEL LATERAL DERECHO ──
+        function togglePanelDerecho() {
+            const panel = document.getElementById('panelDerecho');
+            const overlay = document.getElementById('overlayPanel');
             
-            // AHORA SÍ mostramos la Zona de Peligro (Interruptor y Botón de Eliminar)
-            document.getElementById('zonaSeguridad').classList.remove('hidden');
-            document.getElementById('btnEliminar').classList.remove('hidden');
-            
-            // Hacemos que el interruptor siempre arranque en la posición "Activo" por defecto (para el ejemplo)
-            document.getElementById('toggleEstado').checked = true;
-            document.getElementById('panelConfirmacion').classList.add('hidden'); // Ocultamos la caja de contraseña
-            
-            // Revelamos el panel
-            panel.classList.remove('translate-x-full');
-            overlay.classList.remove('hidden');
-        }
-
-        // ── 3. LÓGICA DEL INTERRUPTOR (TOGGLE) DE SEGURIDAD ──
-        let estadoOriginalActivo = true; // Variable que simula cómo estaba el empleado en la base de datos
-
-        function manejarCambioEstado() {
-            const toggle = document.getElementById('toggleEstado'); // El interruptor
-            const panelConf = document.getElementById('panelConfirmacion'); // La caja que pide contraseña
-            const textoConf = document.getElementById('textoConfirmacion'); // El título de esa caja
-
-            // Preguntamos: ¿El cliente movió el interruptor a una posición distinta de la original?
-            if (toggle.checked !== estadoOriginalActivo) {
-                // Si la respuesta es sí, revelamos la caja de contraseña quitándole el "hidden"
-                panelConf.classList.remove('hidden');
-                
-                if (!toggle.checked) {
-                    // Si apagó el interruptor (quiere retirar al empleado), pintamos la caja de rojo
-                    textoConf.textContent = "Confirmar RETIRO de Personal";
-                    panelConf.className = "bg-red-50 border border-red-200 p-4 rounded-lg space-y-3 mt-4";
-                } else {
-                    // Si lo encendió (quiere reincorporar a alguien), la pintamos de verde
-                    textoConf.textContent = "Confirmar REINTEGRO de Personal";
-                    panelConf.className = "bg-green-50 border border-green-200 p-4 rounded-lg space-y-3 mt-4";
-                }
+            // Si el panel tiene la clase "translate-x-full" (que lo tira a la derecha fuera de la pantalla)
+            if (panel.classList.contains('translate-x-full')) {
+                // Se la quitamos para que entre a la pantalla
+                panel.classList.remove('translate-x-full');
+                // Al fondo oscuro le quitamos el "hidden" para que aparezca
+                overlay.classList.remove('hidden');
             } else {
-                // Si el cliente juega con el interruptor y lo regresa a donde estaba, ocultamos la caja
-                panelConf.classList.add('hidden');
+                // Si ya está abierto, hacemos lo opuesto para cerrarlo
+                panel.classList.add('translate-x-full');
+                overlay.classList.add('hidden');
             }
-        }
-
-        // ── 4. BOTÓN DE BORRADO LÓGICO ──
-        function solicitarBorrado() {
-            // Alerta de sistema temporal hasta que programemos la base de datos
-            alert("⚠️ ACCIÓN CRÍTICA\nPara eliminar (borrado lógico) el registro y la asistencia de este empleado, ingrese su contraseña de Administrador en el diálogo que aparecerá (Próximamente).");
         }
     </script>
 </body>
