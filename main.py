@@ -446,14 +446,14 @@ def eliminar_empresa(empresa_id: int, usuario = Depends(verificar_token)):
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# A. SUCURSALES (Nivel Físico / Ubicaciones)
+# A. SUCURSALES (Físico)
 # ------------------------------------------------------------------------------
 @app.get("/sucursales")
 def obtener_sucursales(usuario = Depends(verificar_token)):
-    # Conectamos a la carpeta privada (esquema) del cliente
-    conn = conectar_bd(usuario["schema_name"])
+    schema = usuario["schema_name"]
+    conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT * FROM sucursales ORDER BY nombre")
+    cur.execute(f"SELECT * FROM {schema}.sucursales ORDER BY nombre")
     sucursales = cur.fetchall()
     cur.close()
     conn.close()
@@ -461,15 +461,16 @@ def obtener_sucursales(usuario = Depends(verificar_token)):
 
 @app.post("/sucursales")
 async def crear_sucursal(request: Request, usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
     data = await request.json()
     nombre = data.get("nombre")
     direccion = data.get("direccion", "")
     
-    conn = conectar_bd(usuario["schema_name"])
+    conn = conectar_bd(schema)
     cur = conn.cursor()
     try:
         cur.execute(
-            "INSERT INTO sucursales (nombre, direccion) VALUES (%s, %s) RETURNING id",
+            f"INSERT INTO {schema}.sucursales (nombre, direccion) VALUES (%s, %s) RETURNING id",
             (nombre, direccion)
         )
         nuevo_id = cur.fetchone()[0]
@@ -482,14 +483,34 @@ async def crear_sucursal(request: Request, usuario = Depends(verificar_token)):
         cur.close()
         conn.close()
 
+@app.delete("/sucursales/{sucursal_id}")
+def eliminar_sucursal(sucursal_id: int, usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    conn = conectar_bd(schema)
+    cur = conn.cursor()
+    try:
+        cur.execute(f"DELETE FROM {schema}.sucursales WHERE id = %s", (sucursal_id,))
+        conn.commit()
+        return {"mensaje": "Sucursal eliminada correctamente"}
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail="No puedes eliminar esta sucursal porque hay personal asignado a ella.")
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
 # ------------------------------------------------------------------------------
-# B. SECCIONES (Nivel Lógico / Departamentos)
+# B. SECCIONES (Lógico)
 # ------------------------------------------------------------------------------
 @app.get("/secciones")
 def obtener_secciones(usuario = Depends(verificar_token)):
-    conn = conectar_bd(usuario["schema_name"])
+    schema = usuario["schema_name"]
+    conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT * FROM secciones ORDER BY nombre")
+    cur.execute(f"SELECT * FROM {schema}.secciones ORDER BY nombre")
     secciones = cur.fetchall()
     cur.close()
     conn.close()
@@ -497,20 +518,40 @@ def obtener_secciones(usuario = Depends(verificar_token)):
 
 @app.post("/secciones")
 async def crear_seccion(request: Request, usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
     data = await request.json()
     nombre = data.get("nombre")
     descripcion = data.get("descripcion", "")
     
-    conn = conectar_bd(usuario["schema_name"])
+    conn = conectar_bd(schema)
     cur = conn.cursor()
     try:
         cur.execute(
-            "INSERT INTO secciones (nombre, descripcion) VALUES (%s, %s) RETURNING id",
+            f"INSERT INTO {schema}.secciones (nombre, descripcion) VALUES (%s, %s) RETURNING id",
             (nombre, descripcion)
         )
         nuevo_id = cur.fetchone()[0]
         conn.commit()
         return {"mensaje": "Sección registrada con éxito", "id": nuevo_id}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+@app.delete("/secciones/{seccion_id}")
+def eliminar_seccion(seccion_id: int, usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    conn = conectar_bd(schema)
+    cur = conn.cursor()
+    try:
+        cur.execute(f"DELETE FROM {schema}.secciones WHERE id = %s", (seccion_id,))
+        conn.commit()
+        return {"mensaje": "Sección eliminada correctamente"}
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail="No puedes eliminar este departamento porque tienes personal asignado a él.")
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
