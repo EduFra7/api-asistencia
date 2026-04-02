@@ -382,9 +382,13 @@
             }
         });
 
-        // 4. INICIAR CARGA DE TABLAS AL ABRIR LA PÁGINA
-        cargarSucursales();
-        cargarSecciones();
+        // 4. INICIAR CARGA DE TABLAS (SECUENCIAL PARA EVITAR COLISIÓN EN EL SERVIDOR)
+        async function iniciarPantallaOrdenada() {
+            await cargarSucursales(); // Primero esperamos que carguen las sucursales
+            await cargarSecciones();  // Cuando termine, cargamos las secciones
+        }
+        
+        iniciarPantallaOrdenada();
     </script>
 
     <!-- Conectamos nuestro archivo JS maestro del Sidebar -->
