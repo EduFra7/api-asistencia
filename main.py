@@ -563,6 +563,47 @@ async def crear_horario(request: Request, usuario = Depends(verificar_token)):
         cur.close()
         conn.close()
 
+# ------------------------------------------------------------------------------
+# D. RUTAS DE ELIMINACIÓN (SUCURSALES Y SECCIONES)
+# ------------------------------------------------------------------------------
+@app.delete("/sucursales/{sucursal_id}")
+def eliminar_sucursal(sucursal_id: int, usuario = Depends(verificar_token)):
+    conn = conectar_bd(usuario["schema_name"])
+    cur = conn.cursor()
+    try:
+        cur.execute("DELETE FROM sucursales WHERE id = %s", (sucursal_id,))
+        conn.commit()
+        return {"mensaje": "Sucursal eliminada correctamente"}
+    except psycopg2.IntegrityError:
+        # PROTECCIÓN ANTI-DESASTRES: Se activa si hay empleados en esta sucursal
+        conn.rollback()
+        raise HTTPException(status_code=400, detail="No puedes eliminar esta sucursal porque hay personal o relojes biométricos asignados a ella.")
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+@app.delete("/secciones/{seccion_id}")
+def eliminar_seccion(seccion_id: int, usuario = Depends(verificar_token)):
+    conn = conectar_bd(usuario["schema_name"])
+    cur = conn.cursor()
+    try:
+        cur.execute("DELETE FROM secciones WHERE id = %s", (seccion_id,))
+        conn.commit()
+        return {"mensaje": "Sección eliminada correctamente"}
+    except psycopg2.IntegrityError:
+        # PROTECCIÓN ANTI-DESASTRES: Se activa si hay empleados en esta sección
+        conn.rollback()
+        raise HTTPException(status_code=400, detail="No puedes eliminar este departamento porque tienes personal asignado a él.")
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
 # ── RUTA DE ESTADO (Para saber si la API está viva) ──
 @app.get("/")
 def inicio():
