@@ -6,6 +6,11 @@ from fastapi.responses import PlainTextResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
+
+from fastapi.security import OAuth2PasswordBearer
+# Definimos el esquema de seguridad (la URL donde los usuarios hacen login)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
 import psycopg2          # Librería para hablar con PostgreSQL (Supabase)
 import psycopg2.extras   # Herramientas extra para PostgreSQL (como diccionarios)
 import bcrypt            # Librería para encriptar contraseñas
@@ -386,6 +391,52 @@ async def iclock_data(request: Request):
                     
     return PlainTextResponse("OK") # Siempre hay que decirle "OK" al lector o se asustará y reenviará el dato.
 
+# ==============================================================================
+# 6. RUTA PARA ELIMINAR UNA EMPRESA (SOLO SUPERADMIN) ──
+# ==============================================================================
+
+@app.delete("/empresas/{empresa_id}")
+def eliminar_empresa(empresa_id: int, token: str = Depends(oauth2_scheme)):
+    # 1. SEGURIDAD: Verificamos que quien manda la orden tenga la placa de SuperAdmin
+    payload = verificar_token(token)
+    if payload.get("rol") != "superadmin":
+        raise HTTPException(status_code=403, detail="Acceso denegado. Solo SuperAdmin puede eliminar empresas.")
+
+    conn = conectar_bd()
+    cur = conn.cursor()
+    
+    try:
+        # 2. BUSCAR EL OBJETIVO: Obtenemos el nombre del esquema (carpeta) de esa empresa
+        cur.execute("SELECT schema_name FROM empresas WHERE id = %s", (empresa_id,))
+        empresa = cur.fetchone()
+        
+        if not empresa:
+            raise HTTPException(status_code=404, detail="La empresa no existe.")
+            
+        schema_name = empresa[0] # Extraemos el texto, ej: "emp_industrias_prueba"
+
+        # 3. LA EXPLOSIÓN CONTROLADA (DROP SCHEMA CASCADE)
+        # Esto borra el esquema y TODAS las tablas que creamos adentro de él
+        from psycopg2 import sql
+        cur.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema_name)))
+        
+        # 4. LIMPIEZA DE RASTROS: Borramos al administrador de esa empresa para que no pueda entrar más
+        cur.execute("DELETE FROM usuarios WHERE empresa_id = %s", (empresa_id,))
+        
+        # 5. BORRAR DEL REGISTRO MAESTRO: Borramos la empresa de la lista principal
+        cur.execute("DELETE FROM empresas WHERE id = %s", (empresa_id,))
+        
+        # 6. CONFIRMAR CAMBIOS: Guardamos la destrucción en la base de datos
+        conn.commit()
+        
+        return {"mensaje": f"La empresa y toda su información fueron eliminadas de raíz."}
+        
+    except Exception as e:
+        conn.rollback() # Si algo falla a la mitad, cancelamos la explosión
+        raise HTTPException(status_code=500, detail=f"Error al eliminar: {str(e)}")
+    finally:
+        cur.close()
+        conn.close()
 
 # ── RUTA DE ESTADO (Para saber si la API está viva) ──
 @app.get("/")
