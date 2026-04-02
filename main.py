@@ -192,20 +192,21 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
             VALUES (%s, %s, %s, %s, 'admin')
         """, (empresa_id, admin_nombre, admin_email, password_hash))
 
-        # 5. CREACIÓN FÍSICA DE LA BASE DE DATOS PRIVADA (Multitenant)
+        # 5. LA MAGIA: Crear el esquema y sus tablas privadas (VERSIÓN 2.0)
         from psycopg2 import sql
         
-        # Usamos sql.SQL().format() para inyectar el nombre del esquema de forma segura
-        # y evitar que un hacker inyecte comandos maliciosos en el nombre de la empresa.
+        # ATENCIÓN: El orden de creación importa. Primero los catálogos (sin dependencias), 
+        # luego los empleados, y al final los eventos.
         script_sql = sql.SQL("""
             CREATE SCHEMA {schema};
 
-            CREATE TABLE {schema}.empleados (
+            -- ==========================================
+            -- 1. TABLAS DE CATÁLOGOS (Datos Fijos)
+            -- ==========================================
+            CREATE TABLE {schema}.sucursales (
                 id SERIAL PRIMARY KEY,
-                nombre VARCHAR(150) NOT NULL,
-                documento VARCHAR(50) UNIQUE,
-                rfid VARCHAR(50) UNIQUE,
-                huella_template TEXT,
+                nombre VARCHAR(100) NOT NULL,
+                direccion TEXT,
                 creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
@@ -214,17 +215,54 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
                 nombre VARCHAR(50) NOT NULL,
                 hora_entrada TIME NOT NULL,
                 hora_salida TIME NOT NULL,
-                tolerancia_minutos INT DEFAULT 0
+                tolerancia_minutos INT DEFAULT 0, -- Minutos de gracia antes de marcar retraso
+                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
+            -- ==========================================
+            -- 2. TABLA PRINCIPAL DE EMPLEADOS (Planilla)
+            -- ==========================================
+            CREATE TABLE {schema}.empleados (
+                id SERIAL PRIMARY KEY,
+                bio_id INT UNIQUE,                     -- ID Numérico del Lector Biométrico
+                nombres VARCHAR(100) NOT NULL,
+                apellidos VARCHAR(100) NOT NULL,
+                ci VARCHAR(30) UNIQUE NOT NULL,        -- Carnet de Identidad (único)
+                sexo VARCHAR(20),
+                celular VARCHAR(20),
+                correo VARCHAR(100),
+                direccion TEXT,
+                fecha_ingreso DATE,
+                fecha_antiguedad DATE,                 -- Para cálculo de vacaciones/bonos
+                cargo VARCHAR(100),                    -- Texto libre (apoyado por el datalist del HTML)
+                sucursal_id INT REFERENCES {schema}.sucursales(id), -- Conexión a sucursal
+                tipo_contrato VARCHAR(50),
+                turno_id INT REFERENCES {schema}.horarios(id),      -- Conexión a su horario
+                salario_base NUMERIC(10, 2) DEFAULT 0.00,           -- Permite decimales (Ej. 2500.50)
+                bono NUMERIC(10, 2) DEFAULT 0.00,
+                
+                -- Control de Estado (Soft Delete y Bajas)
+                activo BOOLEAN DEFAULT TRUE,           -- El interruptor principal
+                fecha_retiro DATE,                     -- Se llena solo si activo pasa a FALSE
+                motivo_retiro TEXT,
+                eliminado BOOLEAN DEFAULT FALSE,       -- Para el botón "Eliminar" (Borrado Lógico)
+                
+                huella_template TEXT,                  -- Aquí guardaremos el string de la huella dactilar
+                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            -- ==========================================
+            -- 3. TABLAS DE HARDWARE Y ASISTENCIA
+            -- ==========================================
             CREATE TABLE {schema}.eventos_brutos (
                 id SERIAL PRIMARY KEY,
-                device_no VARCHAR(50),
-                item VARCHAR(50),
-                verify_mode VARCHAR(20),
-                action VARCHAR(20),
-                fecha_hora TIMESTAMP,
-                raw_data JSONB,
+                device_no VARCHAR(50),                 -- Número de serie del reloj ZKTeco
+                item VARCHAR(50),                      -- El bio_id del empleado que marcó
+                verify_mode VARCHAR(20),               -- Huella, Tarjeta, Rostro o Clave
+                action VARCHAR(20),                    -- Entrada, Salida, etc.
+                fecha_hora TIMESTAMP,                  -- El momento exacto del marcaje
+                raw_data JSONB,                        -- El paquete de datos original por si hay que depurar
                 creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
@@ -233,13 +271,13 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
                 empleado_id INT REFERENCES {schema}.empleados(id),
                 fecha DATE,
                 hora_marcaje TIMESTAMP,
-                tipo VARCHAR(20), 
-                estado VARCHAR(20), 
+                tipo VARCHAR(20),                      -- Ej: 'Entrada_Normal', 'Salida_Almuerzo'
+                estado VARCHAR(20),                    -- Ej: 'A_Tiempo', 'Retraso', 'Falta'
                 creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """).format(schema=sql.Identifier(schema_name))
 
-        cur.execute(script_sql) # Ejecutamos el gran bloque SQL
+        cur.execute(script_sql) # Ejecutamos todo el bloque para crear la empresa
 
         cur.close()
         conn.close()
