@@ -28,17 +28,16 @@
             <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6">
                 <div class="flex space-x-2 mb-4 border-b border-gray-100 pb-4">
                     <button onclick="simularFiltro('activos', this)" class="filtro-btn px-4 py-2 bg-blue-50 text-blue-700 font-semibold rounded-lg text-sm border border-blue-200 transition-colors">
-                        <i class="fas fa-user-check mr-2"></i>Activos (1)
+                        <i class="fas fa-user-check mr-2"></i>Activos
                     </button>
                     <button onclick="simularFiltro('inactivos', this)" class="filtro-btn px-4 py-2 bg-white hover:bg-gray-50 text-gray-600 font-medium rounded-lg text-sm border border-gray-200 transition-colors">
-                        <i class="fas fa-user-times mr-2"></i>Inactivos (0)
+                        <i class="fas fa-user-times mr-2"></i>Inactivos
                     </button>
                     <button onclick="simularFiltro('todos', this)" class="filtro-btn px-4 py-2 bg-white hover:bg-gray-50 text-gray-600 font-medium rounded-lg text-sm border border-gray-200 transition-colors">
-                        <i class="fas fa-users mr-2"></i>Todos (1)
+                        <i class="fas fa-users mr-2"></i>Todos
                     </button>
                 </div>
 
-                <!-- ── MODIFICACIÓN 1: CUADRÍCULA DE 4 COLUMNAS PARA FILTROS SEPARADOS ── -->
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
                         <label class="text-xs font-semibold text-gray-500 uppercase">Buscar Empleado</label>
@@ -48,35 +47,24 @@
                         </div>
                     </div>
                     
-                    <!-- NUEVO FILTRO: SUCURSAL (FÍSICA) -->
                     <div>
                         <label class="text-xs font-semibold text-gray-500 uppercase">Sucursal (Ubicación)</label>
                         <select onchange="simularFiltroSelect(this.value)" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
                             <option value="todas">Todas las sucursales</option>
-                            <option value="Central">Central</option>
-                            <option value="Planta">Planta El Alto</option>
                         </select>
                     </div>
 
-                    <!-- NUEVO FILTRO: SECCIÓN (LÓGICA) -->
                     <div>
                         <label class="text-xs font-semibold text-gray-500 uppercase">Sección (Depto)</label>
                         <select onchange="simularFiltroSelect(this.value)" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
                             <option value="todas">Todas las secciones</option>
-                            <option value="Mantenimiento">Mantenimiento</option>
-                            <option value="Produccion">Producción</option>
-                            <option value="Administracion">Administración</option>
                         </select>
                     </div>
 
-                    <!-- FILTRO EXISTENTE: CARGO -->
                     <div>
                         <label class="text-xs font-semibold text-gray-500 uppercase">Cargo</label>
                         <select onchange="simularFiltroSelect(this.value)" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
                             <option value="todos">Todos los cargos</option>
-                            <option value="Administrador">Administrador</option>
-                            <option value="Supervisor">Supervisor</option>
-                            <option value="Operario">Operario de Planta</option>
                         </select>
                     </div>
                 </div>
@@ -90,41 +78,15 @@
                                 <th class="p-4 font-semibold">ID Lector</th>
                                 <th class="p-4 font-semibold">Empleado</th>
                                 <th class="p-4 font-semibold">C.I.</th>
-                                <!-- ── MODIFICACIÓN 2: COLUMNAS SEPARADAS EN LA TABLA ── -->
                                 <th class="p-4 font-semibold">Sucursal</th>
                                 <th class="p-4 font-semibold">Sección</th>
                                 <th class="p-4 font-semibold">Cargo</th>
                                 <th class="p-4 font-semibold">Estado</th>
                             </tr>
                         </thead>
+                        <!-- ── MODIFICACIÓN: ID para inyectar datos reales ── -->
                         <tbody id="cuerpoTabla" class="text-sm divide-y divide-gray-100">
-                            
-                            <tr id="filaJuan" onclick="abrirPanelEdicion('Juan Carlos Pérez')" class="hover:bg-blue-50 transition-colors cursor-pointer group">
-                                <td class="p-4 font-mono text-gray-500 font-semibold group-hover:text-blue-600">102</td>
-                                <td class="p-4">
-                                    <div class="flex items-center">
-                                        <div class="h-8 w-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold mr-3">JP</div>
-                                        <div><p class="font-bold text-gray-800">Juan Carlos Pérez</p></div>
-                                    </div>
-                                </td>
-                                <td class="p-4 text-gray-600">8934521-LP</td>
-                                <!-- Datos inyectados por separado -->
-                                <td class="p-4 text-gray-600">Central</td>
-                                <td class="p-4 text-gray-600">Mantenimiento</td>
-                                <td class="p-4 text-gray-600">Supervisor</td>
-                                <td class="p-4">
-                                    <span class="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs font-semibold border border-green-200"><i class="fas fa-circle text-[8px] mr-1"></i>Activo</span>
-                                </td>
-                            </tr>
-                            
-                            <tr id="filaVacia" class="hidden">
-                                <!-- Colspan ajustado a 7 por la nueva columna -->
-                                <td colspan="7" class="p-8 text-center text-gray-500">
-                                    <i class="fas fa-folder-open text-4xl mb-3 text-gray-300 block"></i>
-                                    <p class="font-medium text-gray-600">No se encontraron empleados</p>
-                                    <p class="text-xs mt-1">Intenta ajustando los filtros de búsqueda.</p>
-                                </td>
-                            </tr>
+                            <tr><td colspan="7" class="p-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Cargando personal...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -161,7 +123,8 @@
                         </div>
                         <div class="flex-1">
                             <label class="block text-xs font-bold text-blue-600 uppercase">ID Lector Biométrico</label>
-                            <input type="number" id="bioId" placeholder="Ej. 102" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 text-lg font-bold disabled:bg-gray-100 disabled:text-gray-500">
+                            <!-- ── MODIFICACIÓN: ID emp_bio_id ── -->
+                            <input type="number" id="emp_bio_id" placeholder="Ej. 102" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 text-lg font-bold disabled:bg-gray-100 disabled:text-gray-500">
                         </div>
                     </div>
 
@@ -169,17 +132,21 @@
                         <h4 class="font-bold text-gray-800 border-b pb-2"><i class="far fa-id-card mr-2 text-gray-400"></i>Datos Personales</h4>
                         <div class="grid grid-cols-2 gap-4">
                             <div class="col-span-2 md:col-span-1">
-                                <label class="block text-sm font-medium text-gray-700">Nombres</label>
-                                <input type="text" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                                <label class="block text-sm font-medium text-gray-700">Nombres <span class="text-red-500">*</span></label>
+                                <!-- ── MODIFICACIÓN: ID emp_nombres ── -->
+                                <input type="text" id="emp_nombres" required class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
                             </div>
                             <div class="col-span-2 md:col-span-1">
-                                <label class="block text-sm font-medium text-gray-700">Apellidos</label>
-                                <input type="text" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                                <label class="block text-sm font-medium text-gray-700">Apellidos <span class="text-red-500">*</span></label>
+                                <!-- ── MODIFICACIÓN: ID emp_apellidos ── -->
+                                <input type="text" id="emp_apellidos" required class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
                             </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">C.I.</label>
-                                <input type="text" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                            <div class="col-span-2">
+                                <label class="block text-sm font-medium text-gray-700">C.I. <span class="text-red-500">*</span></label>
+                                <!-- ── MODIFICACIÓN: ID emp_ci ── -->
+                                <input type="text" id="emp_ci" required class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
                             </div>
+                            <!-- (Los demás campos de contacto quedan aquí, se conectarán en la siguiente fase) -->
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Sexo</label>
                                 <select class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
@@ -191,14 +158,6 @@
                                 <label class="block text-sm font-medium text-gray-700">Celular</label>
                                 <input type="tel" placeholder="Ej. 70012345" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
                             </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Correo</label>
-                                <input type="email" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
-                            </div>
-                            <div class="col-span-2">
-                                <label class="block text-sm font-medium text-gray-700">Dirección de Domicilio</label>
-                                <input type="text" placeholder="Ej. Zona Sur, Calle 3, #123" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
-                            </div>
                         </div>
                     </div>
 
@@ -206,49 +165,29 @@
                         <h4 class="font-bold text-gray-800 border-b pb-2"><i class="fas fa-briefcase mr-2 text-gray-400"></i>Datos Laborales</h4>
                         <div class="grid grid-cols-2 gap-4">
                             
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Fecha de Ingreso</label>
-                                <input type="date" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700" title="Fecha desde la cual se calculan los 3 meses y vacaciones">Inicio Antigüedad <i class="fas fa-info-circle text-blue-400"></i></label>
-                                <input type="date" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
-                            </div>
-
                             <div class="col-span-2">
                                 <label class="block text-sm font-medium text-gray-700">Cargo</label>
-                                <input list="lista-cargos" placeholder="Escriba o seleccione..." class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                                <!-- ── MODIFICACIÓN: ID emp_cargo ── -->
+                                <input list="lista-cargos" id="emp_cargo" placeholder="Escriba o seleccione..." class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
                                 <datalist id="lista-cargos">
                                     <option value="Administrador">
                                     <option value="Operario de Planta">
                                     <option value="Supervisor">
-                                    <option value="Guardia de Seguridad">
                                 </datalist>
                             </div>
 
-                            <!-- ── MODIFICACIÓN 3: SUCURSAL Y SECCIÓN SEPARADOS EN EL FORMULARIO ── -->
                             <div>
-                                <label class="block text-sm font-medium text-gray-700" title="Lugar Físico">Sucursal</label>
-                                <select class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
-                                    <option>Central</option>
-                                    <option>Planta El Alto</option>
+                                <label class="block text-sm font-medium text-gray-700" title="Lugar Físico">Sucursal <span class="text-red-500">*</span></label>
+                                <!-- ── MODIFICACIÓN: ID emp_sucursal ── -->
+                                <select id="emp_sucursal" required class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                                    <option value="">Cargando...</option>
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700" title="Departamento Organizacional">Sección</label>
-                                <select class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
-                                    <option>Administración</option>
-                                    <option>Producción</option>
-                                    <option>Mantenimiento</option>
-                                </select>
-                            </div>
-
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Contrato</label>
-                                <select class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
-                                    <option>Ítem</option>
-                                    <option selected>Eventual</option>
-                                    <option>Consultoría</option>
+                                <label class="block text-sm font-medium text-gray-700" title="Departamento Organizacional">Sección <span class="text-red-500">*</span></label>
+                                <!-- ── MODIFICACIÓN: ID emp_seccion ── -->
+                                <select id="emp_seccion" required class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                                    <option value="">Cargando...</option>
                                 </select>
                             </div>
 
@@ -259,65 +198,33 @@
                                     <option>Nocturno (22:00 - 06:00)</option>
                                 </select>
                             </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Salario Base</label>
-                                <div class="relative mt-1">
-                                    <span class="absolute left-3 top-2 text-gray-500">Bs.</span>
-                                    <input type="number" class="form-input w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm disabled:bg-gray-100">
-                                </div>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Bono Adicional</label>
-                                <div class="relative mt-1">
-                                    <span class="absolute left-3 top-2 text-gray-500">Bs.</span>
-                                    <input type="number" class="form-input w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm disabled:bg-gray-100">
-                                </div>
-                            </div>
 
                         </div>
                     </div>
 
+                    <!-- Panel de Seguridad Oculto -->
                     <div id="zonaSeguridad" class="hidden bg-white p-5 rounded-xl border border-gray-200 shadow-sm space-y-4">
                         <h4 class="font-bold text-gray-800 border-b pb-2"><i class="fas fa-shield-alt mr-2 text-gray-400"></i>Estado del Empleado</h4>
-                        
                         <div class="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-200">
                             <div><p class="font-semibold text-gray-800">Empleado Activo</p></div>
-                            
                             <label class="relative inline-flex items-center cursor-pointer">
-                                <input type="checkbox" id="toggleEstado" class="form-input sr-only peer" checked onchange="manejarCambioEstado()" disabled>
-                                <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+                                <input type="checkbox" id="toggleEstado" class="form-input sr-only peer" checked disabled>
+                                <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-green-500"></div>
                             </label>
                         </div>
-                        
-                        <div id="panelConfirmacion" class="hidden bg-red-50 border border-red-200 p-4 rounded-lg space-y-3 mt-4">
-                            <p class="text-sm font-bold text-red-700" id="textoConfirmacion">Confirmar Retiro de Personal</p>
-                            <div>
-                                <label class="block text-xs font-medium text-red-700">Fecha Efectiva del Movimiento</label>
-                                <input type="date" class="mt-1 w-full px-3 py-2 border border-red-300 rounded-md text-sm focus:ring-red-500">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-red-700">Motivo / Comentario</label>
-                                <input type="text" placeholder="Ej. Renuncia voluntaria" class="mt-1 w-full px-3 py-2 border border-red-300 rounded-md text-sm focus:ring-red-500">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-red-700"><i class="fas fa-lock mr-1"></i> Contraseña de Admin</label>
-                                <input type="password" placeholder="Requerido para cambios" class="mt-1 w-full px-3 py-2 border border-red-300 rounded-md text-sm focus:ring-red-500">
-                            </div>
-                        </div>
-
                     </div>
 
                 </form>
             </div>
 
             <div class="p-6 border-t border-gray-200 bg-white flex items-center justify-between">
-                <button id="btnEliminar" onclick="solicitarBorrado()" class="hidden text-red-500 hover:text-red-700 font-medium text-sm px-3 py-2 rounded transition-colors disabled:opacity-50">
+                <button id="btnEliminar" class="hidden text-red-500 font-medium text-sm px-3 py-2 rounded">
                     <i class="fas fa-trash-alt mr-1"></i> Eliminar
                 </button>
-                
                 <div class="flex space-x-3 ml-auto">
                     <button onclick="cerrarPanel()" class="bg-white border border-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-50 font-medium text-sm">Cerrar</button>
-                    <button id="btnGuardar" class="hidden bg-blue-600 text-white px-8 py-2 rounded-lg hover:bg-blue-700 font-medium shadow-sm text-sm">Guardar Cambios</button>
+                    <!-- ── MODIFICACIÓN: Evento onClick para guardar ── -->
+                    <button id="btnGuardar" onclick="guardarEmpleado()" class="hidden bg-blue-600 text-white px-8 py-2 rounded-lg hover:bg-blue-700 font-medium shadow-sm text-sm">Registrar</button>
                 </div>
             </div>
         </div>
@@ -325,12 +232,16 @@
     </main>
 
     <script>
+        // ── VARIABLES GLOBALES ──
+        const API_URL = "https://asistencia-api.up.railway.app";
+        const token = localStorage.getItem('token');
         const userDataStr = localStorage.getItem('userData');
-        if (!userDataStr) window.location.href = 'index.html';
+
+        if (!token || !userDataStr) window.location.href = 'index.html';
         const userData = JSON.parse(userDataStr);
-        document.getElementById('empresaNameDisplay').textContent = userData.empresa;
         document.getElementById('tituloPlanilla').textContent = `Planilla de ${userData.empresa}`;
 
+        // ── LÓGICA DE UI DEL PANEL ──
         const panel = document.getElementById('panelDerecho');
         const overlay = document.getElementById('overlayPanel');
         const inputsFormulario = document.querySelectorAll('.form-input'); 
@@ -348,7 +259,6 @@
             document.getElementById('btnHabilitarEdicion').classList.add('hidden');
             
             document.getElementById('empleadoForm').reset();
-            
             inputsFormulario.forEach(input => input.disabled = false);
             
             document.getElementById('btnGuardar').classList.remove('hidden');
@@ -358,107 +268,139 @@
             overlay.classList.remove('hidden');
         }
 
-        function abrirPanelEdicion(nombreEmpleado) {
-            document.getElementById('drawerTitle').textContent = "Perfil: " + nombreEmpleado;
-            document.getElementById('zonaSeguridad').classList.remove('hidden');
-            
-            document.getElementById('badgeModo').classList.remove('hidden');
-            document.getElementById('btnHabilitarEdicion').classList.remove('hidden');
-            
-            document.getElementById('btnEliminar').classList.add('hidden'); 
-            document.getElementById('btnGuardar').classList.add('hidden');  
-            
-            inputsFormulario.forEach(input => input.disabled = true);
+        // ==============================================================================
+        // ── MOTOR DE DATOS: COMUNICACIÓN CON LA BASE DE DATOS ──
+        // ==============================================================================
 
-            panel.classList.remove('translate-x-full');
-            overlay.classList.remove('hidden');
+        // 1. Cargar las listas desplegables (Sucursal y Sección)
+        async function cargarCatalogos() {
+            try {
+                const [resSucursales, resSecciones] = await Promise.all([
+                    fetch(`${API_URL}/sucursales`, { headers: { 'Authorization': `Bearer ${token}` } }),
+                    fetch(`${API_URL}/secciones`, { headers: { 'Authorization': `Bearer ${token}` } })
+                ]);
+
+                const sucursales = await resSucursales.json();
+                const secciones = await resSecciones.json();
+
+                const selectSucursal = document.getElementById('emp_sucursal');
+                selectSucursal.innerHTML = '<option value="">Seleccione Sucursal...</option>';
+                sucursales.forEach(s => {
+                    selectSucursal.innerHTML += `<option value="${s.id}">${s.nombre}</option>`;
+                });
+
+                const selectSeccion = document.getElementById('emp_seccion');
+                selectSeccion.innerHTML = '<option value="">Seleccione Sección...</option>';
+                secciones.forEach(s => {
+                    selectSeccion.innerHTML += `<option value="${s.id}">${s.nombre}</option>`;
+                });
+
+            } catch (error) {
+                console.error("Error al cargar los catálogos:", error);
+            }
         }
 
-        function habilitarEdicion() {
-            document.getElementById('badgeModo').classList.add('hidden');
-            document.getElementById('btnHabilitarEdicion').classList.add('hidden');
-            
-            document.getElementById('btnEliminar').classList.remove('hidden');
-            document.getElementById('btnGuardar').classList.remove('hidden');
-            document.getElementById('btnGuardar').textContent = "Guardar Cambios";
-            
-            inputsFormulario.forEach(input => input.disabled = false);
-        }
-
-        let estadoOriginalActivo = true; 
-
-        function manejarCambioEstado() {
-            const toggle = document.getElementById('toggleEstado');
-            const panelConf = document.getElementById('panelConfirmacion');
-            const textoConf = document.getElementById('textoConfirmacion');
-
-            if (toggle.checked !== estadoOriginalActivo) {
-                panelConf.classList.remove('hidden'); 
+        // 2. Cargar la Tabla Principal de Empleados
+        async function cargarEmpleados() {
+            const tbody = document.getElementById('cuerpoTabla');
+            try {
+                const res = await fetch(`${API_URL}/empleados`, { headers: { 'Authorization': `Bearer ${token}` } });
+                const data = await res.json();
                 
-                if (!toggle.checked) { 
-                    textoConf.textContent = "Confirmar RETIRO de Personal";
-                    panelConf.className = "bg-red-50 border border-red-200 p-4 rounded-lg space-y-3 mt-4";
-                } else { 
-                    textoConf.textContent = "Confirmar REINTEGRO de Personal";
-                    panelConf.className = "bg-green-50 border border-green-200 p-4 rounded-lg space-y-3 mt-4";
+                tbody.innerHTML = '';
+                if(data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-gray-500"><i class="fas fa-folder-open text-4xl mb-3 text-gray-300 block"></i><p class="font-medium text-gray-600">No hay personal registrado</p></td></tr>';
+                    return;
                 }
-            } else {
-                panelConf.classList.add('hidden');
+                
+                data.forEach(emp => {
+                    // Generar iniciales para el avatar
+                    const iniciales = (emp.nombres.charAt(0) + emp.apellidos.charAt(0)).toUpperCase();
+                    
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-blue-50 transition-colors cursor-pointer group">
+                            <td class="p-4 font-mono text-gray-500 font-semibold group-hover:text-blue-600">${emp.bio_id || '-'}</td>
+                            <td class="p-4">
+                                <div class="flex items-center">
+                                    <div class="h-8 w-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold mr-3">${iniciales}</div>
+                                    <div><p class="font-bold text-gray-800">${emp.nombres} ${emp.apellidos}</p></div>
+                                </div>
+                            </td>
+                            <td class="p-4 text-gray-600">${emp.ci}</td>
+                            <td class="p-4 text-gray-600">${emp.sucursal_nombre || 'No asignada'}</td>
+                            <td class="p-4 text-gray-600">${emp.seccion_nombre || 'No asignada'}</td>
+                            <td class="p-4 text-gray-600">${emp.cargo || '-'}</td>
+                            <td class="p-4">
+                                <span class="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs font-semibold border border-green-200">Activo</span>
+                            </td>
+                        </tr>
+                    `;
+                });
+            } catch (error) {
+                tbody.innerHTML = '<tr><td colspan="7" class="p-4 text-center text-red-500">Error cargando empleados</td></tr>';
             }
         }
 
-        function solicitarBorrado() {
-            alert("⚠️ ACCIÓN CRÍTICA\nEsto realizará un Soft Delete (Borrado Lógico) del empleado en la Base de Datos. Requerirá confirmación por contraseña.");
-        }
-
-        // ── 6. CÓDIGO TEMPORAL: MOCKING DE FILTROS ──
-        function simularFiltro(tipo, botonPresionado) {
-            document.querySelectorAll('.filtro-btn').forEach(btn => {
-                btn.className = "filtro-btn px-4 py-2 bg-white hover:bg-gray-50 text-gray-600 font-medium rounded-lg text-sm border border-gray-200 transition-colors";
-            });
-            botonPresionado.className = "filtro-btn px-4 py-2 bg-blue-50 text-blue-700 font-semibold rounded-lg text-sm border border-blue-200 transition-colors";
-
-            const filaJuan = document.getElementById('filaJuan');
-            const filaVacia = document.getElementById('filaVacia');
-
-            if (tipo === 'inactivos') {
-                filaJuan.classList.add('hidden'); 
-                filaVacia.classList.remove('hidden'); 
-            } else {
-                filaJuan.classList.remove('hidden');
-                filaVacia.classList.add('hidden');
-            }
-        }
-
-        function simularBusqueda(texto) {
-            const filaJuan = document.getElementById('filaJuan');
-            const filaVacia = document.getElementById('filaVacia');
+        // 3. Enviar el Formulario al Backend
+        async function guardarEmpleado() {
+            const btn = document.getElementById('btnGuardar');
             
-            if (texto.length > 0 && !'juan carlos pérez'.includes(texto.toLowerCase()) && !'8934521'.includes(texto) && !'102'.includes(texto)) {
-                filaJuan.classList.add('hidden');
-                filaVacia.classList.remove('hidden');
-            } else {
-                filaJuan.classList.remove('hidden');
-                filaVacia.classList.add('hidden');
+            const nombres = document.getElementById('emp_nombres').value;
+            const apellidos = document.getElementById('emp_apellidos').value;
+            const ci = document.getElementById('emp_ci').value;
+            const sucursal = document.getElementById('emp_sucursal').value;
+            const seccion = document.getElementById('emp_seccion').value;
+
+            if(!nombres || !apellidos || !ci || !sucursal || !seccion) {
+                alert("Por favor llena los campos obligatorios (*).");
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+
+            const payload = {
+                bio_id: document.getElementById('emp_bio_id').value || null,
+                nombres: nombres,
+                apellidos: apellidos,
+                ci: ci,
+                cargo: document.getElementById('emp_cargo').value,
+                sucursal_id: parseInt(sucursal),
+                seccion_id: parseInt(seccion)
+            };
+
+            try {
+                const res = await fetch(`${API_URL}/empleados`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await res.json();
+                if(!res.ok) throw new Error(data.detail || "Error al guardar");
+                
+                cerrarPanel();
+                await cargarEmpleados(); // Recargamos la tabla
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Registrar Empleado';
             }
         }
 
-        function simularFiltroSelect(valor) {
-            if (valor === 'Planta' || valor === 'Administrador' || valor === 'Operario') {
-                document.getElementById('filaJuan').classList.add('hidden');
-                document.getElementById('filaVacia').classList.remove('hidden');
-            } else {
-                document.getElementById('filaJuan').classList.remove('hidden');
-                document.getElementById('filaVacia').classList.add('hidden');
-            }
+        // ── INICIALIZACIÓN ORDENADA ──
+        async function arrancarPantalla() {
+            await cargarCatalogos();
+            await cargarEmpleados();
         }
+        arrancarPantalla();
+
     </script>
-<!-- Conectamos nuestro archivo JS maestro -->
+    
+    <!-- Conectamos nuestro archivo JS maestro -->
     <script src="menu.js"></script>
     <script>
-        // ... (Aquí van tus otros scripts de la página, como cargar el panel lateral derecho) ...
-
-        // Llamamos al creador del menú indicando que estamos en "planilla"
         renderizarMenu('planilla');
     </script>
 </body>
