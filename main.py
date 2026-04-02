@@ -6,11 +6,7 @@ from fastapi.responses import PlainTextResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
-
 from fastapi.security import OAuth2PasswordBearer
-# Definimos el esquema de seguridad (la URL donde los usuarios hacen login)
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
-
 import psycopg2          # Librería para hablar con PostgreSQL (Supabase)
 import psycopg2.extras   # Herramientas extra para PostgreSQL (como diccionarios)
 import bcrypt            # Librería para encriptar contraseñas
@@ -215,6 +211,15 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
                 creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
+            -- ¡NUEVA TABLA DE SECCIONES!
+            CREATE TABLE {schema}.secciones (
+                id SERIAL PRIMARY KEY,
+                nombre VARCHAR(100) NOT NULL,
+                descripcion TEXT,
+                estado BOOLEAN DEFAULT TRUE,
+                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
             CREATE TABLE {schema}.horarios (
                 id SERIAL PRIMARY KEY,
                 nombre VARCHAR(50) NOT NULL,
@@ -240,7 +245,8 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
                 fecha_ingreso DATE,
                 fecha_antiguedad DATE,                 -- Para cálculo de vacaciones/bonos
                 cargo VARCHAR(100),                    -- Texto libre (apoyado por el datalist del HTML)
-                sucursal_id INT REFERENCES {schema}.sucursales(id), -- Conexión a sucursal
+                sucursal_id INT REFERENCES {schema}.sucursales(id), -- Conexión Física
+                seccion_id INT REFERENCES {schema}.secciones(id),   -- ¡NUEVA! Conexión Lógica
                 tipo_contrato VARCHAR(50),
                 turno_id INT REFERENCES {schema}.horarios(id),      -- Conexión a su horario
                 salario_base NUMERIC(10, 2) DEFAULT 0.00,           -- Permite decimales (Ej. 2500.50)
@@ -396,44 +402,163 @@ async def iclock_data(request: Request):
 # ==============================================================================
 
 @app.delete("/empresas/{empresa_id}")
-def eliminar_empresa(empresa_id: int, token: str = Depends(oauth2_scheme)):
-    # 1. SEGURIDAD: Verificamos que quien manda la orden tenga la placa de SuperAdmin
-    payload = verificar_token(token)
-    if payload.get("rol") != "superadmin":
+def eliminar_empresa(empresa_id: int, usuario = Depends(verificar_token)):
+    # 1. SEGURIDAD: Verificamos usando tu propia función de seguridad
+    if usuario.get("rol") != "superadmin":
         raise HTTPException(status_code=403, detail="Acceso denegado. Solo SuperAdmin puede eliminar empresas.")
 
-    conn = conectar_bd()
+    # 2. Conectamos a la base de datos maestra (public)
+    conn = conectar_bd("public")
     cur = conn.cursor()
     
     try:
-        # 2. BUSCAR EL OBJETIVO: Obtenemos el nombre del esquema (carpeta) de esa empresa
+        # 3. BUSCAR EL OBJETIVO: Obtenemos el nombre del esquema (carpeta) de esa empresa
         cur.execute("SELECT schema_name FROM empresas WHERE id = %s", (empresa_id,))
         empresa = cur.fetchone()
         
         if not empresa:
             raise HTTPException(status_code=404, detail="La empresa no existe.")
             
-        schema_name = empresa[0] # Extraemos el texto, ej: "emp_industrias_prueba"
+        schema_name = empresa[0] # Extraemos el texto, ej: "empresa_industrias_prueba"
 
-        # 3. LA EXPLOSIÓN CONTROLADA (DROP SCHEMA CASCADE)
-        # Esto borra el esquema y TODAS las tablas que creamos adentro de él
+        # 4. LA EXPLOSIÓN CONTROLADA (DROP SCHEMA CASCADE)
         from psycopg2 import sql
         cur.execute(sql.SQL("DROP SCHEMA IF EXISTS {} CASCADE").format(sql.Identifier(schema_name)))
         
-        # 4. LIMPIEZA DE RASTROS: Borramos al administrador de esa empresa para que no pueda entrar más
+        # 5. LIMPIEZA DE RASTROS
         cur.execute("DELETE FROM usuarios WHERE empresa_id = %s", (empresa_id,))
-        
-        # 5. BORRAR DEL REGISTRO MAESTRO: Borramos la empresa de la lista principal
         cur.execute("DELETE FROM empresas WHERE id = %s", (empresa_id,))
         
-        # 6. CONFIRMAR CAMBIOS: Guardamos la destrucción en la base de datos
+        # 6. CONFIRMAR CAMBIOS
         conn.commit()
         
         return {"mensaje": f"La empresa y toda su información fueron eliminadas de raíz."}
         
     except Exception as e:
-        conn.rollback() # Si algo falla a la mitad, cancelamos la explosión
+        conn.rollback() # Si algo falla, cancelamos la explosión
         raise HTTPException(status_code=500, detail=f"Error al eliminar: {str(e)}")
+    finally:
+        cur.close()
+        conn.close()
+
+# ==============================================================================
+# 7. RUTAS DE CATÁLOGOS (ESTRUCTURA ORGANIZACIONAL Y TIEMPO)
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# A. SUCURSALES (Nivel Físico / Ubicaciones)
+# ------------------------------------------------------------------------------
+@app.get("/sucursales")
+def obtener_sucursales(usuario = Depends(verificar_token)):
+    # Conectamos a la carpeta privada (esquema) del cliente
+    conn = conectar_bd(usuario["schema_name"])
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT * FROM sucursales ORDER BY nombre")
+    sucursales = cur.fetchall()
+    cur.close()
+    conn.close()
+    return list(sucursales)
+
+@app.post("/sucursales")
+async def crear_sucursal(request: Request, usuario = Depends(verificar_token)):
+    data = await request.json()
+    nombre = data.get("nombre")
+    direccion = data.get("direccion", "")
+    
+    conn = conectar_bd(usuario["schema_name"])
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "INSERT INTO sucursales (nombre, direccion) VALUES (%s, %s) RETURNING id",
+            (nombre, direccion)
+        )
+        nuevo_id = cur.fetchone()[0]
+        conn.commit()
+        return {"mensaje": "Sucursal registrada con éxito", "id": nuevo_id}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+# ------------------------------------------------------------------------------
+# B. SECCIONES (Nivel Lógico / Departamentos)
+# ------------------------------------------------------------------------------
+@app.get("/secciones")
+def obtener_secciones(usuario = Depends(verificar_token)):
+    conn = conectar_bd(usuario["schema_name"])
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("SELECT * FROM secciones ORDER BY nombre")
+    secciones = cur.fetchall()
+    cur.close()
+    conn.close()
+    return list(secciones)
+
+@app.post("/secciones")
+async def crear_seccion(request: Request, usuario = Depends(verificar_token)):
+    data = await request.json()
+    nombre = data.get("nombre")
+    descripcion = data.get("descripcion", "")
+    
+    conn = conectar_bd(usuario["schema_name"])
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "INSERT INTO secciones (nombre, descripcion) VALUES (%s, %s) RETURNING id",
+            (nombre, descripcion)
+        )
+        nuevo_id = cur.fetchone()[0]
+        conn.commit()
+        return {"mensaje": "Sección registrada con éxito", "id": nuevo_id}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+# ------------------------------------------------------------------------------
+# C. HORARIOS Y TURNOS (Nivel Temporal)
+# ------------------------------------------------------------------------------
+@app.get("/horarios")
+def obtener_horarios(usuario = Depends(verificar_token)):
+    conn = conectar_bd(usuario["schema_name"])
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    # Formateamos las horas en SQL para que JSON las envíe limpio como "08:00"
+    cur.execute("""
+        SELECT id, nombre, 
+               TO_CHAR(hora_entrada, 'HH24:MI') as hora_entrada, 
+               TO_CHAR(hora_salida, 'HH24:MI') as hora_salida, 
+               tolerancia_minutos 
+        FROM horarios ORDER BY nombre
+    """)
+    horarios = cur.fetchall()
+    cur.close()
+    conn.close()
+    return list(horarios)
+
+@app.post("/horarios")
+async def crear_horario(request: Request, usuario = Depends(verificar_token)):
+    data = await request.json()
+    nombre = data.get("nombre")
+    hora_entrada = data.get("hora_entrada")
+    hora_salida = data.get("hora_salida")
+    tolerancia = data.get("tolerancia_minutos", 0) # Si no envían tolerancia, es 0
+    
+    conn = conectar_bd(usuario["schema_name"])
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "INSERT INTO horarios (nombre, hora_entrada, hora_salida, tolerancia_minutos) VALUES (%s, %s, %s, %s) RETURNING id",
+            (nombre, hora_entrada, hora_salida, tolerancia)
+        )
+        nuevo_id = cur.fetchone()[0]
+        conn.commit()
+        return {"mensaje": "Horario registrado con éxito", "id": nuevo_id}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
         conn.close()
