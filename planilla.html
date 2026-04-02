@@ -4,15 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Planilla - C.A Lector</title>
-    
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
-
 <body class="bg-gray-50 font-sans flex h-screen overflow-hidden text-gray-800">
 
     <aside class="w-64 bg-slate-900 text-white flex flex-col h-full shadow-xl z-20">
-        
         <div class="p-6 border-b border-slate-800">
             <h2 class="text-xl font-bold text-blue-400 truncate" id="empresaNameDisplay">Cargando...</h2>
             <p class="text-xs text-slate-400 mt-1 uppercase tracking-wider" id="rolDisplay">Admin</p>
@@ -24,10 +21,29 @@
                 <a href="dashboard_cliente.html" class="flex items-center px-3 py-2 text-slate-300 hover:bg-slate-800 rounded-lg transition-colors">
                     <i class="fas fa-chart-pie w-5 mr-2"></i> Dashboard
                 </a>
+                <a href="#" class="flex items-center px-3 py-2 text-slate-300 hover:bg-slate-800 rounded-lg transition-colors">
+                    <i class="fas fa-calendar-alt w-5 mr-2"></i> Calendario
+                </a>
+                <a href="#" class="flex items-center px-3 py-2 text-slate-300 hover:bg-slate-800 rounded-lg transition-colors">
+                    <i class="fas fa-file-alt w-5 mr-2"></i> Reporte del Día
+                </a>
 
                 <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6 px-3">Gestión de Planilla</div>
                 <a href="planilla.html" class="flex items-center px-3 py-2 bg-blue-600 rounded-lg text-white transition-colors shadow-sm">
                     <i class="fas fa-users w-5 mr-2"></i> Personal
+                </a>
+                
+                <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6 px-3">Ausencias</div>
+                <a href="#" class="flex items-center px-3 py-2 text-slate-300 hover:bg-slate-800 rounded-lg transition-colors">
+                    <i class="fas fa-plane-departure w-5 mr-2"></i> Vacaciones y Permisos
+                </a>
+
+                <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6 px-3 text-yellow-500">Ajustes (Admin)</div>
+                <a href="#" class="flex items-center px-3 py-2 text-slate-300 hover:bg-slate-800 rounded-lg transition-colors">
+                    <i class="fas fa-clock w-5 mr-2"></i> Horarios y Turnos
+                </a>
+                <a href="#" class="flex items-center px-3 py-2 text-slate-300 hover:bg-slate-800 rounded-lg transition-colors">
+                    <i class="fas fa-fingerprint w-5 mr-2"></i> Lectores Biométricos
                 </a>
             </nav>
         </div>
@@ -46,7 +62,6 @@
                 <h1 class="text-2xl font-bold text-gray-800" id="tituloPlanilla">Planilla de Empresa</h1>
                 <p class="text-sm text-gray-500">Gestión integral de empleados y accesos</p>
             </div>
-            
             <button onclick="abrirPanelNuevo()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center">
                 <i class="fas fa-user-plus mr-2"></i> Nuevo Personal
             </button>
@@ -55,16 +70,15 @@
         <div class="flex-1 overflow-y-auto p-6 flex flex-col">
             
             <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6">
-                
                 <div class="flex space-x-2 mb-4 border-b border-gray-100 pb-4">
-                    <button class="px-4 py-2 bg-blue-50 text-blue-700 font-semibold rounded-lg text-sm border border-blue-200">
-                        <i class="fas fa-user-check mr-2"></i>Activos (42)
+                    <button onclick="simularFiltro('activos', this)" class="filtro-btn px-4 py-2 bg-blue-50 text-blue-700 font-semibold rounded-lg text-sm border border-blue-200 transition-colors">
+                        <i class="fas fa-user-check mr-2"></i>Activos (1)
                     </button>
-                    <button class="px-4 py-2 bg-white hover:bg-gray-50 text-gray-600 font-medium rounded-lg text-sm border border-gray-200 transition-colors">
-                        <i class="fas fa-user-times mr-2"></i>Inactivos (3)
+                    <button onclick="simularFiltro('inactivos', this)" class="filtro-btn px-4 py-2 bg-white hover:bg-gray-50 text-gray-600 font-medium rounded-lg text-sm border border-gray-200 transition-colors">
+                        <i class="fas fa-user-times mr-2"></i>Inactivos (0)
                     </button>
-                    <button class="px-4 py-2 bg-white hover:bg-gray-50 text-gray-600 font-medium rounded-lg text-sm border border-gray-200 transition-colors">
-                        <i class="fas fa-users mr-2"></i>Todos (45)
+                    <button onclick="simularFiltro('todos', this)" class="filtro-btn px-4 py-2 bg-white hover:bg-gray-50 text-gray-600 font-medium rounded-lg text-sm border border-gray-200 transition-colors">
+                        <i class="fas fa-users mr-2"></i>Todos (1)
                     </button>
                 </div>
 
@@ -73,23 +87,24 @@
                         <label class="text-xs font-semibold text-gray-500 uppercase">Buscar Empleado</label>
                         <div class="relative mt-1">
                             <i class="fas fa-search absolute left-3 top-2.5 text-gray-400"></i>
-                            <input type="text" placeholder="Nombre, Apellido o C.I." class="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <input type="text" onkeyup="simularBusqueda(this.value)" placeholder="Nombre, C.I. o ID Lector..." class="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
                         </div>
                     </div>
                     <div>
                         <label class="text-xs font-semibold text-gray-500 uppercase">Sucursal / Sección</label>
-                        <select class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
-                            <option value="">Todas las sucursales</option>
-                            <option>Central</option>
-                            <option>Planta El Alto</option>
+                        <select onchange="simularFiltroSelect(this.value)" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <option value="todas">Todas las sucursales</option>
+                            <option value="Central">Central</option>
+                            <option value="Planta">Planta El Alto</option>
                         </select>
                     </div>
                     <div>
                         <label class="text-xs font-semibold text-gray-500 uppercase">Cargo</label>
-                        <select class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
-                            <option value="">Todos los cargos</option>
-                            <option>Administrativo</option>
-                            <option>Operario</option>
+                        <select onchange="simularFiltroSelect(this.value)" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <option value="todos">Todos los cargos</option>
+                            <option value="Administrador">Administrador</option>
+                            <option value="Supervisor">Supervisor</option>
+                            <option value="Operario">Operario de Planta</option>
                         </select>
                     </div>
                 </div>
@@ -105,33 +120,34 @@
                                 <th class="p-4 font-semibold">C.I.</th>
                                 <th class="p-4 font-semibold">Sección</th>
                                 <th class="p-4 font-semibold">Cargo</th>
-                                <th class="p-4 font-semibold">Turno</th>
                                 <th class="p-4 font-semibold">Estado</th>
                             </tr>
                         </thead>
-                        <tbody class="text-sm divide-y divide-gray-100">
+                        <tbody id="cuerpoTabla" class="text-sm divide-y divide-gray-100">
                             
-                            <tr onclick="abrirPanelEdicion('Juan Pérez')" class="hover:bg-blue-50 transition-colors cursor-pointer group">
+                            <tr id="filaJuan" onclick="abrirPanelEdicion('Juan Carlos Pérez')" class="hover:bg-blue-50 transition-colors cursor-pointer group">
                                 <td class="p-4 font-mono text-gray-500 font-semibold group-hover:text-blue-600">102</td>
                                 <td class="p-4">
                                     <div class="flex items-center">
                                         <div class="h-8 w-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold mr-3">JP</div>
-                                        <div>
-                                            <p class="font-bold text-gray-800">Juan Carlos Pérez</p>
-                                        </div>
+                                        <div><p class="font-bold text-gray-800">Juan Carlos Pérez</p></div>
                                     </div>
                                 </td>
                                 <td class="p-4 text-gray-600">8934521-LP</td>
                                 <td class="p-4 text-gray-600">Central</td>
                                 <td class="p-4 text-gray-600">Supervisor</td>
-                                <td class="p-4 text-gray-600"><i class="far fa-clock text-gray-400 mr-1"></i>08:00 - 16:00</td>
                                 <td class="p-4">
-                                    <span class="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs font-semibold border border-green-200">
-                                        <i class="fas fa-circle text-[8px] mr-1"></i>Activo
-                                    </span>
+                                    <span class="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs font-semibold border border-green-200"><i class="fas fa-circle text-[8px] mr-1"></i>Activo</span>
                                 </td>
                             </tr>
-
+                            
+                            <tr id="filaVacia" class="hidden">
+                                <td colspan="6" class="p-8 text-center text-gray-500">
+                                    <i class="fas fa-folder-open text-4xl mb-3 text-gray-300 block"></i>
+                                    <p class="font-medium text-gray-600">No se encontraron empleados</p>
+                                    <p class="text-xs mt-1">Intenta ajustando los filtros de búsqueda.</p>
+                                </td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
@@ -143,23 +159,32 @@
         <div id="panelDerecho" class="fixed inset-y-0 right-0 w-full md:w-[500px] bg-white shadow-2xl z-40 transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col">
             
             <div class="p-6 border-b border-gray-200 flex justify-between items-center bg-white">
-                <h3 class="text-xl font-bold text-gray-800" id="drawerTitle">Nuevo Personal</h3>
-                <button onclick="cerrarPanel()" class="text-gray-400 hover:text-red-500 transition-colors">
-                    <i class="fas fa-times text-2xl"></i>
-                </button>
+                <div>
+                    <h3 class="text-xl font-bold text-gray-800" id="drawerTitle">Nuevo Personal</h3>
+                    <span id="badgeModo" class="hidden mt-1 text-xs font-semibold px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full border border-yellow-200"><i class="fas fa-lock mr-1"></i>Modo Lectura</span>
+                </div>
+                
+                <div class="flex items-center space-x-3">
+                    <button id="btnHabilitarEdicion" onclick="habilitarEdicion()" class="hidden bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-sm font-medium transition-colors border border-gray-300">
+                        <i class="fas fa-edit mr-1"></i> Editar
+                    </button>
+                    <button onclick="cerrarPanel()" class="text-gray-400 hover:text-red-500 transition-colors">
+                        <i class="fas fa-times text-2xl"></i>
+                    </button>
+                </div>
             </div>
             
             <div class="flex-1 overflow-y-auto p-6 bg-gray-50">
                 <form id="empleadoForm" class="space-y-6">
                     
                     <div class="flex items-center space-x-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-                        <div class="h-16 w-16 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 border-2 border-dashed border-gray-300 cursor-pointer hover:bg-gray-100 transition-colors relative overflow-hidden">
+                        <div class="h-16 w-16 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 border-2 border-dashed border-gray-300 cursor-pointer hover:bg-gray-100 relative overflow-hidden">
                             <i class="fas fa-camera text-xl"></i>
-                            <input type="file" class="absolute inset-0 opacity-0 cursor-pointer" accept="image/*">
+                            <input type="file" id="fotoInput" class="absolute inset-0 opacity-0 cursor-pointer form-input" accept="image/*">
                         </div>
                         <div class="flex-1">
-                            <label class="block text-xs font-bold text-blue-600 uppercase">ID Biométrico (Obligatorio)</label>
-                            <input type="number" placeholder="Ej. 102" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 text-lg font-bold">
+                            <label class="block text-xs font-bold text-blue-600 uppercase">ID Lector Biométrico</label>
+                            <input type="number" id="bioId" placeholder="Ej. 102" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 text-lg font-bold disabled:bg-gray-100 disabled:text-gray-500">
                         </div>
                     </div>
 
@@ -168,30 +193,34 @@
                         <div class="grid grid-cols-2 gap-4">
                             <div class="col-span-2 md:col-span-1">
                                 <label class="block text-sm font-medium text-gray-700">Nombres</label>
-                                <input type="text" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm">
+                                <input type="text" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
                             </div>
                             <div class="col-span-2 md:col-span-1">
                                 <label class="block text-sm font-medium text-gray-700">Apellidos</label>
-                                <input type="text" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm">
+                                <input type="text" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">C.I.</label>
-                                <input type="text" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm">
+                                <input type="text" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Sexo</label>
-                                <select class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm">
+                                <select class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
                                     <option>Masculino</option>
                                     <option>Femenino</option>
                                 </select>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Celular</label>
-                                <input type="number" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm">
+                                <input type="tel" placeholder="Ej. 70012345" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700">Correo Electrónico</label>
-                                <input type="email" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm">
+                                <label class="block text-sm font-medium text-gray-700">Correo</label>
+                                <input type="email" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                            </div>
+                            <div class="col-span-2">
+                                <label class="block text-sm font-medium text-gray-700">Dirección de Domicilio</label>
+                                <input type="text" placeholder="Ej. Zona Sur, Calle 3, #123" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
                             </div>
                         </div>
                     </div>
@@ -199,64 +228,80 @@
                     <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm space-y-4">
                         <h4 class="font-bold text-gray-800 border-b pb-2"><i class="fas fa-briefcase mr-2 text-gray-400"></i>Datos Laborales</h4>
                         <div class="grid grid-cols-2 gap-4">
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Fecha de Ingreso</label>
+                                <input type="date" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700" title="Fecha desde la cual se calculan los 3 meses y vacaciones">Inicio Antigüedad <i class="fas fa-info-circle text-blue-400"></i></label>
+                                <input type="date" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                            </div>
+
+                            <div class="col-span-2">
+                                <label class="block text-sm font-medium text-gray-700">Cargo</label>
+                                <input list="lista-cargos" placeholder="Escriba o seleccione..." class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                                <datalist id="lista-cargos">
+                                    <option value="Administrador">
+                                    <option value="Operario de Planta">
+                                    <option value="Supervisor">
+                                    <option value="Guardia de Seguridad">
+                                </datalist>
+                            </div>
+
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Sucursal/Sección</label>
-                                <select class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm">
+                                <select class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
                                     <option>Central</option>
                                     <option>Planta El Alto</option>
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700">Cargo</label>
-                                <input type="text" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Tipo de Contrato</label>
-                                <select class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm">
+                                <label class="block text-sm font-medium text-gray-700">Contrato</label>
+                                <select class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
                                     <option>Ítem</option>
-                                    <option>Eventual</option>
+                                    <option selected>Eventual</option>
                                     <option>Consultoría</option>
                                 </select>
                             </div>
-                            <div>
+
+                            <div class="col-span-2">
                                 <label class="block text-sm font-medium text-gray-700">Turno Asignado</label>
-                                <select class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm">
-                                    <option>Administración (08:00-16:00)</option>
-                                    <option>Nocturno (22:00-06:00)</option>
+                                <select class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                                    <option>Administración (08:00 - 16:00)</option>
+                                    <option>Nocturno (22:00 - 06:00)</option>
                                 </select>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Salario Base</label>
                                 <div class="relative mt-1">
                                     <span class="absolute left-3 top-2 text-gray-500">Bs.</span>
-                                    <input type="number" class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm">
+                                    <input type="number" class="form-input w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm disabled:bg-gray-100">
                                 </div>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Bono Adicional</label>
                                 <div class="relative mt-1">
                                     <span class="absolute left-3 top-2 text-gray-500">Bs.</span>
-                                    <input type="number" class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm">
+                                    <input type="number" class="form-input w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm disabled:bg-gray-100">
                                 </div>
                             </div>
+
                         </div>
                     </div>
 
                     <div id="zonaSeguridad" class="hidden bg-white p-5 rounded-xl border border-gray-200 shadow-sm space-y-4">
-                        <h4 class="font-bold text-gray-800 border-b pb-2"><i class="fas fa-shield-alt mr-2 text-gray-400"></i>Estado y Movimientos</h4>
+                        <h4 class="font-bold text-gray-800 border-b pb-2"><i class="fas fa-shield-alt mr-2 text-gray-400"></i>Estado del Empleado</h4>
                         
                         <div class="flex items-center justify-between bg-gray-50 p-3 rounded-lg border border-gray-200">
-                            <div>
-                                <p class="font-semibold text-gray-800">Empleado Activo</p>
-                                <p class="text-xs text-gray-500">Apague para registrar retiro</p>
-                            </div>
+                            <div><p class="font-semibold text-gray-800">Empleado Activo</p></div>
                             
                             <label class="relative inline-flex items-center cursor-pointer">
-                                <input type="checkbox" id="toggleEstado" class="sr-only peer" checked onchange="manejarCambioEstado()">
-                                <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+                                <input type="checkbox" id="toggleEstado" class="form-input sr-only peer" checked onchange="manejarCambioEstado()" disabled>
+                                <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
                             </label>
                         </div>
-
+                        
                         <div id="panelConfirmacion" class="hidden bg-red-50 border border-red-200 p-4 rounded-lg space-y-3 mt-4">
                             <p class="text-sm font-bold text-red-700" id="textoConfirmacion">Confirmar Retiro de Personal</p>
                             <div>
@@ -269,23 +314,23 @@
                             </div>
                             <div>
                                 <label class="block text-xs font-medium text-red-700"><i class="fas fa-lock mr-1"></i> Contraseña de Admin</label>
-                                <input type="password" placeholder="Requerido para guardar cambios" class="mt-1 w-full px-3 py-2 border border-red-300 rounded-md text-sm focus:ring-red-500">
+                                <input type="password" placeholder="Requerido para cambios" class="mt-1 w-full px-3 py-2 border border-red-300 rounded-md text-sm focus:ring-red-500">
                             </div>
                         </div>
+
                     </div>
 
                 </form>
             </div>
 
             <div class="p-6 border-t border-gray-200 bg-white flex items-center justify-between">
-                
-                <button id="btnEliminar" onclick="solicitarBorrado()" class="hidden text-red-500 hover:text-red-700 font-medium text-sm px-3 py-2 rounded transition-colors">
+                <button id="btnEliminar" onclick="solicitarBorrado()" class="hidden text-red-500 hover:text-red-700 font-medium text-sm px-3 py-2 rounded transition-colors disabled:opacity-50">
                     <i class="fas fa-trash-alt mr-1"></i> Eliminar
                 </button>
                 
                 <div class="flex space-x-3 ml-auto">
-                    <button onclick="cerrarPanel()" class="bg-white border border-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-50 font-medium transition-colors text-sm shadow-sm">Cancelar</button>
-                    <button class="bg-blue-600 text-white px-8 py-2 rounded-lg hover:bg-blue-700 font-medium shadow-sm transition-colors text-sm">Guardar</button>
+                    <button onclick="cerrarPanel()" class="bg-white border border-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-50 font-medium text-sm">Cerrar</button>
+                    <button id="btnGuardar" class="hidden bg-blue-600 text-white px-8 py-2 rounded-lg hover:bg-blue-700 font-medium shadow-sm text-sm">Guardar Cambios</button>
                 </div>
             </div>
         </div>
@@ -293,97 +338,132 @@
     </main>
 
     <script>
-        // ── 1. SEGURIDAD DE SESIÓN ──
-        // Verificamos si alguien inició sesión leyendo la memoria "localStorage" del navegador.
         const userDataStr = localStorage.getItem('userData');
-        if (!userDataStr) window.location.href = 'index.html'; // Si no hay datos, pa' fuera.
-        
-        // Convertimos el texto JSON a un objeto JavaScript utilizable
+        if (!userDataStr) window.location.href = 'index.html';
         const userData = JSON.parse(userDataStr);
-        // Pintamos el nombre de la empresa en la esquina superior izquierda
         document.getElementById('empresaNameDisplay').textContent = userData.empresa;
-        // Pintamos el título gigante en el centro
         document.getElementById('tituloPlanilla').textContent = `Planilla de ${userData.empresa}`;
 
-        // ── 2. ANIMACIONES DEL PANEL LATERAL ──
         const panel = document.getElementById('panelDerecho');
         const overlay = document.getElementById('overlayPanel');
+        const inputsFormulario = document.querySelectorAll('.form-input'); 
 
-        // Función general para cerrar la ventana lateral
         function cerrarPanel() {
-            panel.classList.add('translate-x-full'); // Mueve el panel hacia la derecha (afuera de la pantalla)
-            overlay.classList.add('hidden');         // Oculta el fondo borroso oscuro
+            panel.classList.add('translate-x-full');
+            overlay.classList.add('hidden');
         }
 
-        // Modo A: "Nuevo Personal"
-        // Esta función se activa con el botón azul superior de "+ Nuevo Personal"
         function abrirPanelNuevo() {
-            // Ponemos títulos de "Nuevo"
             document.getElementById('drawerTitle').textContent = "Registrar Nuevo Personal";
-            
-            // Ocultamos la Zona de Peligro y el Botón de Eliminar (porque no puedes borrar a alguien que no existe)
             document.getElementById('zonaSeguridad').classList.add('hidden');
             document.getElementById('btnEliminar').classList.add('hidden');
+            document.getElementById('badgeModo').classList.add('hidden');
+            document.getElementById('btnHabilitarEdicion').classList.add('hidden');
             
-            // Limpiamos cualquier texto que haya quedado en las cajitas del formulario
             document.getElementById('empleadoForm').reset();
             
-            // Revelamos el panel deslizándolo hacia la izquierda
+            inputsFormulario.forEach(input => input.disabled = false);
+            
+            document.getElementById('btnGuardar').classList.remove('hidden');
+            document.getElementById('btnGuardar').textContent = "Registrar Empleado";
+
             panel.classList.remove('translate-x-full');
             overlay.classList.remove('hidden');
         }
 
-        // Modo B: "Editar Personal Existente"
-        // Esta función se activa al darle Clic a cualquier fila de la tabla
         function abrirPanelEdicion(nombreEmpleado) {
-            // Cambiamos el título
-            document.getElementById('drawerTitle').textContent = "Perfil de " + nombreEmpleado;
-            
-            // AHORA SÍ mostramos la Zona de Peligro (Interruptor y Botón de Eliminar)
+            document.getElementById('drawerTitle').textContent = "Perfil: " + nombreEmpleado;
             document.getElementById('zonaSeguridad').classList.remove('hidden');
-            document.getElementById('btnEliminar').classList.remove('hidden');
             
-            // Hacemos que el interruptor siempre arranque en la posición "Activo" por defecto (para el ejemplo)
-            document.getElementById('toggleEstado').checked = true;
-            document.getElementById('panelConfirmacion').classList.add('hidden'); // Ocultamos la caja de contraseña
+            document.getElementById('badgeModo').classList.remove('hidden');
+            document.getElementById('btnHabilitarEdicion').classList.remove('hidden');
             
-            // Revelamos el panel
+            document.getElementById('btnEliminar').classList.add('hidden'); 
+            document.getElementById('btnGuardar').classList.add('hidden');  
+            
+            inputsFormulario.forEach(input => input.disabled = true);
+
             panel.classList.remove('translate-x-full');
             overlay.classList.remove('hidden');
         }
 
-        // ── 3. LÓGICA DEL INTERRUPTOR (TOGGLE) DE SEGURIDAD ──
-        let estadoOriginalActivo = true; // Variable que simula cómo estaba el empleado en la base de datos
+        function habilitarEdicion() {
+            document.getElementById('badgeModo').classList.add('hidden');
+            document.getElementById('btnHabilitarEdicion').classList.add('hidden');
+            
+            document.getElementById('btnEliminar').classList.remove('hidden');
+            document.getElementById('btnGuardar').classList.remove('hidden');
+            document.getElementById('btnGuardar').textContent = "Guardar Cambios";
+            
+            inputsFormulario.forEach(input => input.disabled = false);
+        }
+
+        let estadoOriginalActivo = true; 
 
         function manejarCambioEstado() {
-            const toggle = document.getElementById('toggleEstado'); // El interruptor
-            const panelConf = document.getElementById('panelConfirmacion'); // La caja que pide contraseña
-            const textoConf = document.getElementById('textoConfirmacion'); // El título de esa caja
+            const toggle = document.getElementById('toggleEstado');
+            const panelConf = document.getElementById('panelConfirmacion');
+            const textoConf = document.getElementById('textoConfirmacion');
 
-            // Preguntamos: ¿El cliente movió el interruptor a una posición distinta de la original?
             if (toggle.checked !== estadoOriginalActivo) {
-                // Si la respuesta es sí, revelamos la caja de contraseña quitándole el "hidden"
-                panelConf.classList.remove('hidden');
+                panelConf.classList.remove('hidden'); 
                 
-                if (!toggle.checked) {
-                    // Si apagó el interruptor (quiere retirar al empleado), pintamos la caja de rojo
+                if (!toggle.checked) { 
                     textoConf.textContent = "Confirmar RETIRO de Personal";
                     panelConf.className = "bg-red-50 border border-red-200 p-4 rounded-lg space-y-3 mt-4";
-                } else {
-                    // Si lo encendió (quiere reincorporar a alguien), la pintamos de verde
+                } else { 
                     textoConf.textContent = "Confirmar REINTEGRO de Personal";
                     panelConf.className = "bg-green-50 border border-green-200 p-4 rounded-lg space-y-3 mt-4";
                 }
             } else {
-                // Si el cliente juega con el interruptor y lo regresa a donde estaba, ocultamos la caja
                 panelConf.classList.add('hidden');
             }
         }
 
-        // ── 4. BOTÓN DE BORRADO LÓGICO ──
         function solicitarBorrado() {
-            // Alerta de sistema temporal hasta que programemos la base de datos
-            alert("⚠️ ACCIÓN CRÍTICA\nPara eliminar (borrado lógico) el registro y la asistencia de este empleado, ingrese su contraseña de Administrador en el diálogo que aparecerá (Próximamente).");
+            alert("⚠️ ACCIÓN CRÍTICA\nEsto realizará un Soft Delete (Borrado Lógico) del empleado en la Base de Datos. Requerirá confirmación por contraseña.");
+        }
+
+        // ── 6. CÓDIGO TEMPORAL: MOCKING DE FILTROS ──
+        function simularFiltro(tipo, botonPresionado) {
+            document.querySelectorAll('.filtro-btn').forEach(btn => {
+                btn.className = "filtro-btn px-4 py-2 bg-white hover:bg-gray-50 text-gray-600 font-medium rounded-lg text-sm border border-gray-200 transition-colors";
+            });
+            botonPresionado.className = "filtro-btn px-4 py-2 bg-blue-50 text-blue-700 font-semibold rounded-lg text-sm border border-blue-200 transition-colors";
+
+            const filaJuan = document.getElementById('filaJuan');
+            const filaVacia = document.getElementById('filaVacia');
+
+            if (tipo === 'inactivos') {
+                filaJuan.classList.add('hidden'); 
+                filaVacia.classList.remove('hidden'); 
+            } else {
+                filaJuan.classList.remove('hidden');
+                filaVacia.classList.add('hidden');
+            }
+        }
+
+        function simularBusqueda(texto) {
+            const filaJuan = document.getElementById('filaJuan');
+            const filaVacia = document.getElementById('filaVacia');
+            
+            if (texto.length > 0 && !'juan carlos pérez'.includes(texto.toLowerCase()) && !'8934521'.includes(texto) && !'102'.includes(texto)) {
+                filaJuan.classList.add('hidden');
+                filaVacia.classList.remove('hidden');
+            } else {
+                filaJuan.classList.remove('hidden');
+                filaVacia.classList.add('hidden');
+            }
+        }
+
+        function simularFiltroSelect(valor) {
+            if (valor === 'Planta' || valor === 'Administrador' || valor === 'Operario') {
+                document.getElementById('filaJuan').classList.add('hidden');
+                document.getElementById('filaVacia').classList.remove('hidden');
+            } else {
+                document.getElementById('filaJuan').classList.remove('hidden');
+                document.getElementById('filaVacia').classList.add('hidden');
+            }
         }
     </script>
 </body>
