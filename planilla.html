@@ -82,7 +82,8 @@
                     </button>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <!-- ── MODIFICACIÓN 1: CUADRÍCULA DE 4 COLUMNAS PARA FILTROS SEPARADOS ── -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
                         <label class="text-xs font-semibold text-gray-500 uppercase">Buscar Empleado</label>
                         <div class="relative mt-1">
@@ -90,14 +91,29 @@
                             <input type="text" onkeyup="simularBusqueda(this.value)" placeholder="Nombre, C.I. o ID Lector..." class="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
                         </div>
                     </div>
+                    
+                    <!-- NUEVO FILTRO: SUCURSAL (FÍSICA) -->
                     <div>
-                        <label class="text-xs font-semibold text-gray-500 uppercase">Sucursal / Sección</label>
+                        <label class="text-xs font-semibold text-gray-500 uppercase">Sucursal (Ubicación)</label>
                         <select onchange="simularFiltroSelect(this.value)" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
                             <option value="todas">Todas las sucursales</option>
                             <option value="Central">Central</option>
                             <option value="Planta">Planta El Alto</option>
                         </select>
                     </div>
+
+                    <!-- NUEVO FILTRO: SECCIÓN (LÓGICA) -->
+                    <div>
+                        <label class="text-xs font-semibold text-gray-500 uppercase">Sección (Depto)</label>
+                        <select onchange="simularFiltroSelect(this.value)" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <option value="todas">Todas las secciones</option>
+                            <option value="Mantenimiento">Mantenimiento</option>
+                            <option value="Produccion">Producción</option>
+                            <option value="Administracion">Administración</option>
+                        </select>
+                    </div>
+
+                    <!-- FILTRO EXISTENTE: CARGO -->
                     <div>
                         <label class="text-xs font-semibold text-gray-500 uppercase">Cargo</label>
                         <select onchange="simularFiltroSelect(this.value)" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
@@ -118,6 +134,8 @@
                                 <th class="p-4 font-semibold">ID Lector</th>
                                 <th class="p-4 font-semibold">Empleado</th>
                                 <th class="p-4 font-semibold">C.I.</th>
+                                <!-- ── MODIFICACIÓN 2: COLUMNAS SEPARADAS EN LA TABLA ── -->
+                                <th class="p-4 font-semibold">Sucursal</th>
                                 <th class="p-4 font-semibold">Sección</th>
                                 <th class="p-4 font-semibold">Cargo</th>
                                 <th class="p-4 font-semibold">Estado</th>
@@ -134,7 +152,9 @@
                                     </div>
                                 </td>
                                 <td class="p-4 text-gray-600">8934521-LP</td>
+                                <!-- Datos inyectados por separado -->
                                 <td class="p-4 text-gray-600">Central</td>
+                                <td class="p-4 text-gray-600">Mantenimiento</td>
                                 <td class="p-4 text-gray-600">Supervisor</td>
                                 <td class="p-4">
                                     <span class="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs font-semibold border border-green-200"><i class="fas fa-circle text-[8px] mr-1"></i>Activo</span>
@@ -142,7 +162,8 @@
                             </tr>
                             
                             <tr id="filaVacia" class="hidden">
-                                <td colspan="6" class="p-8 text-center text-gray-500">
+                                <!-- Colspan ajustado a 7 por la nueva columna -->
+                                <td colspan="7" class="p-8 text-center text-gray-500">
                                     <i class="fas fa-folder-open text-4xl mb-3 text-gray-300 block"></i>
                                     <p class="font-medium text-gray-600">No se encontraron empleados</p>
                                     <p class="text-xs mt-1">Intenta ajustando los filtros de búsqueda.</p>
@@ -249,13 +270,23 @@
                                 </datalist>
                             </div>
 
+                            <!-- ── MODIFICACIÓN 3: SUCURSAL Y SECCIÓN SEPARADOS EN EL FORMULARIO ── -->
                             <div>
-                                <label class="block text-sm font-medium text-gray-700">Sucursal/Sección</label>
+                                <label class="block text-sm font-medium text-gray-700" title="Lugar Físico">Sucursal</label>
                                 <select class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
                                     <option>Central</option>
                                     <option>Planta El Alto</option>
                                 </select>
                             </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700" title="Departamento Organizacional">Sección</label>
+                                <select class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                                    <option>Administración</option>
+                                    <option>Producción</option>
+                                    <option>Mantenimiento</option>
+                                </select>
+                            </div>
+
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Contrato</label>
                                 <select class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
