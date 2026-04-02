@@ -645,6 +645,70 @@ def eliminar_seccion(seccion_id: int, usuario = Depends(verificar_token)):
         cur.close()
         conn.close()
 
+# ==============================================================================
+# 8. GESTIÓN DE PLANILLA (EMPLEADOS)
+# ==============================================================================
+
+@app.get("/empleados")
+def obtener_empleados(usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    conn = conectar_bd(schema)
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    
+    # El JOIN une la tabla empleados con sucursales y secciones para traer los nombres reales
+    query = f"""
+        SELECT e.*, 
+               s.nombre as sucursal_nombre, 
+               sec.nombre as seccion_nombre
+        FROM {schema}.empleados e
+        LEFT JOIN {schema}.sucursales s ON e.sucursal_id = s.id
+        LEFT JOIN {schema}.secciones sec ON e.seccion_id = sec.id
+        WHERE e.eliminado = FALSE
+        ORDER BY e.nombres
+    """
+    cur.execute(query)
+    empleados = cur.fetchall()
+    cur.close()
+    conn.close()
+    return list(empleados)
+
+@app.post("/empleados")
+async def registrar_empleado(request: Request, usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    data = await request.json()
+    
+    conn = conectar_bd(schema)
+    cur = conn.cursor()
+    try:
+        # Extraemos los datos del JSON que enviará el Frontend
+        bio_id = data.get("bio_id") or None
+        nombres = data.get("nombres")
+        apellidos = data.get("apellidos")
+        ci = data.get("ci")
+        sucursal_id = data.get("sucursal_id") or None
+        seccion_id = data.get("seccion_id") or None
+        cargo = data.get("cargo", "")
+        
+        cur.execute(f"""
+            INSERT INTO {schema}.empleados 
+            (bio_id, nombres, apellidos, ci, sucursal_id, seccion_id, cargo) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
+        """, (bio_id, nombres, apellidos, ci, sucursal_id, seccion_id, cargo))
+        
+        nuevo_id = cur.fetchone()[0]
+        conn.commit()
+        return {"mensaje": "Personal registrado con éxito", "id": nuevo_id}
+        
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail="Error: Ya existe un empleado con ese C.I. o ID Biométrico.")
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
 # ── RUTA DE ESTADO (Para saber si la API está viva) ──
 @app.get("/")
 def inicio():
