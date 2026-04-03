@@ -265,15 +265,15 @@
                             <p class="text-sm font-bold text-red-700" id="textoConfirmacion">Confirmar Retiro de Personal</p>
                             <div>
                                 <label class="block text-xs font-medium text-red-700">Fecha Efectiva del Movimiento</label>
-                                <input type="date" class="mt-1 w-full px-3 py-2 border border-red-300 rounded-md text-sm focus:ring-red-500">
+                                <input type="date" id="emp_fecha_retiro" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-red-500 disabled:bg-gray-100">
                             </div>
                             <div>
                                 <label class="block text-xs font-medium text-red-700">Motivo / Comentario</label>
-                                <input type="text" placeholder="Ej. Renuncia voluntaria" class="mt-1 w-full px-3 py-2 border border-red-300 rounded-md text-sm focus:ring-red-500">
+                                <input type="text" id="emp_motivo_retiro" placeholder="Ej. Renuncia voluntaria" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-red-500 disabled:bg-gray-100">
                             </div>
-                            <div>
+                            <div id="contenedorContrasena">
                                 <label class="block text-xs font-medium text-red-700"><i class="fas fa-lock mr-1"></i> Contraseña de Admin</label>
-                                <input type="password" placeholder="Requerido para cambios" class="mt-1 w-full px-3 py-2 border border-red-300 rounded-md text-sm focus:ring-red-500">
+                                <input type="password" id="emp_admin_password" placeholder="Requerida para autorizar baja" class="mt-1 w-full px-3 py-2 border border-red-300 rounded-md text-sm focus:ring-red-500 shadow-sm">
                             </div>
                         </div>
 
@@ -377,6 +377,30 @@
             // ⚡ SINCRONIZACIÓN PERFECTA DEL BOTÓN
             const toggle = document.getElementById('toggleEstado');
             toggle.checked = emp.activo; // Pone el botón verde o gris según la Base de Datos
+
+            // ⚡ SINCRONIZACIÓN DEL ESTADO Y PANEL DE RETIRO
+            const panelConf = document.getElementById('panelConfirmacion');
+            const contContrasena = document.getElementById('contenedorContrasena');
+            
+            if (!emp.activo) {
+                // Es un empleado INACTIVO: Mostramos el motivo en Modo Lectura
+                panelConf.classList.remove('hidden');
+                panelConf.className = "bg-gray-50 border border-gray-200 p-4 rounded-lg space-y-3 mt-4 transition-all";
+                document.getElementById('textoConfirmacion').textContent = "Información de Retiro Histórico";
+                document.getElementById('textoConfirmacion').className = "text-sm font-bold text-gray-700";
+                
+                document.getElementById('emp_fecha_retiro').value = emp.fecha_retiro ? emp.fecha_retiro.split('T')[0] : '';
+                document.getElementById('emp_motivo_retiro').value = emp.motivo_retiro || '';
+                contContrasena.classList.add('hidden'); // Ocultamos la contraseña, no hace falta para leer
+            } else {
+                // Es un empleado ACTIVO: Ocultamos el panel
+                panelConf.classList.add('hidden');
+                document.getElementById('emp_fecha_retiro').value = '';
+                document.getElementById('emp_motivo_retiro').value = '';
+                document.getElementById('emp_admin_password').value = '';
+                contContrasena.classList.remove('hidden');
+            }
+
             document.getElementById('panelConfirmacion').classList.add('hidden'); // Oculta alertas viejas
 
             // Interfaz visual (Modo Lectura)
@@ -413,12 +437,14 @@
             const toggle = document.getElementById('toggleEstado');
             const panelConf = document.getElementById('panelConfirmacion');
             const textoConf = document.getElementById('textoConfirmacion');
-
+            const contContrasena = document.getElementById('contenedorContrasena');
             // Lógica simple y directa: Si lo apagas, pide confirmación. Si lo enciendes, oculta la alerta.
             if (!toggle.checked) {
                 panelConf.classList.remove('hidden');
                 textoConf.textContent = "Confirmar RETIRO de Personal (Pasará a Inactivo)";
+                textoConf.className = "text-sm font-bold text-red-700";
                 panelConf.className = "bg-red-50 border border-red-200 p-4 rounded-lg space-y-3 mt-4 transition-all";
+                contContrasena.classList.remove('hidden'); // Exige contraseña
             } else {
                 panelConf.classList.add('hidden');
             }
@@ -592,7 +618,11 @@
                 fecha_antiguedad: document.getElementById('emp_fecha_antiguedad').value || null,
                 tipo_contrato: document.getElementById('emp_contrato').value,
                 salario_base: parseFloat(document.getElementById('emp_salario').value) || 0.00,
-                bono: parseFloat(document.getElementById('emp_bono').value) || 0.00
+                bono: parseFloat(document.getElementById('emp_bono').value) || 0.00,
+                // --- LOS CAMPOS CRÍTICOS DE BAJA ---
+                fecha_retiro: document.getElementById('emp_fecha_retiro').value || null,
+                motivo_retiro: document.getElementById('emp_motivo_retiro').value.trim(),
+                admin_password: document.getElementById('emp_admin_password').value
             };
 
             console.log("📦 [DATOS CAPTURADOS]:", payload);

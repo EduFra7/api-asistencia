@@ -737,6 +737,27 @@ async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depe
     schema = usuario["schema_name"]
     data = await request.json()
     
+    # --- 1. SEGURIDAD ESTRICTA: VERIFICAR CONTRASEÑA DE BAJA ---
+    activo_nuevo = data.get("activo", True)
+    
+    if not activo_nuevo: # Si la orden es "Apagar" al empleado
+        admin_password = data.get("admin_password")
+        if not admin_password:
+            raise HTTPException(status_code=400, detail="Contraseña de administrador requerida para ejecutar la baja.")
+        
+        # Conectamos a la base maestra para ver la contraseña del usuario que está intentando hacer esto
+        conn_pub = conectar_bd("public")
+        cur_pub = conn_pub.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur_pub.execute("SELECT password_hash FROM usuarios WHERE id = %s", (usuario["id"],))
+        user_db = cur_pub.fetchone()
+        cur_pub.close()
+        conn_pub.close()
+
+        # Comparamos la contraseña digitada contra el Hash de la Base de Datos
+        if not user_db or not bcrypt.checkpw(admin_password.encode(), user_db["password_hash"].encode()):
+            raise HTTPException(status_code=401, detail="Contraseña incorrecta. Operación de baja denegada.")
+
+    # --- 2. ACTUALIZACIÓN EN LA BASE DE DATOS ---
     conn = conectar_bd(schema)
     cur = conn.cursor()
     try:
@@ -746,20 +767,22 @@ async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depe
                 sucursal_id = %s, seccion_id = %s, cargo = %s, activo = %s,
                 sexo = %s, celular = %s, correo = %s, direccion = %s,
                 fecha_ingreso = %s, fecha_antiguedad = %s, tipo_contrato = %s, 
-                salario_base = %s, bono = %s
+                salario_base = %s, bono = %s,
+                fecha_retiro = %s, motivo_retiro = %s
             WHERE id = %s
         """, (
             data.get("bio_id"), data.get("nombres"), data.get("apellidos"), 
             data.get("ci"), data.get("sucursal_id"), data.get("seccion_id"), 
-            data.get("cargo"), data.get("activo"),
+            data.get("cargo"), activo_nuevo,
             data.get("sexo"), data.get("celular"), data.get("correo"), data.get("direccion"),
             data.get("fecha_ingreso"), data.get("fecha_antiguedad"), data.get("tipo_contrato"),
             data.get("salario_base", 0), data.get("bono", 0),
+            data.get("fecha_retiro"), data.get("motivo_retiro"), # Inyectamos la información histórica
             empleado_id
         ))
         
         conn.commit()
-        return {"mensaje": "Empleado actualizado con éxito"}
+        return {"mensaje": "Perfil del empleado actualizado con éxito"}
         
     except psycopg2.IntegrityError:
         conn.rollback()
