@@ -336,18 +336,37 @@
             overlay.classList.remove('hidden');
         }
 
-        function abrirPanelEdicion(nombreEmpleado) {
-            document.getElementById('drawerTitle').textContent = "Perfil: " + nombreEmpleado;
-            document.getElementById('zonaSeguridad').classList.remove('hidden');
+        function abrirPanelEdicion(idEmpleado) {
+            // 1. Buscamos al empleado exacto en nuestra memoria
+            const emp = listaEmpleadosGlobal.find(e => e.id === idEmpleado);
+            if(!emp) return;
+
+            // 2. Cambiamos el título
+            document.getElementById('drawerTitle').textContent = "Perfil: " + emp.nombres;
             
+            // 3. Inyectamos los datos en los inputs del formulario
+            document.getElementById('bioId').value = emp.bio_id || '';
+            document.getElementById('emp_nombres').value = emp.nombres || '';
+            document.getElementById('emp_apellidos').value = emp.apellidos || '';
+            document.getElementById('emp_ci').value = emp.ci || '';
+            document.getElementById('emp_cargo').value = emp.cargo || '';
+            
+            // Seleccionamos la sucursal y sección correctas
+            if(emp.sucursal_id) document.getElementById('emp_sucursal').value = emp.sucursal_id;
+            if(emp.seccion_id) document.getElementById('emp_seccion').value = emp.seccion_id;
+
+            // 4. Preparamos la interfaz visual (Modo Lectura)
+            document.getElementById('zonaSeguridad').classList.remove('hidden');
             document.getElementById('badgeModo').classList.remove('hidden');
             document.getElementById('btnHabilitarEdicion').classList.remove('hidden');
             
             document.getElementById('btnEliminar').classList.add('hidden'); 
             document.getElementById('btnGuardar').classList.add('hidden');  
             
+            // Bloqueamos los campos para que no editen sin querer
             inputsFormulario.forEach(input => input.disabled = true);
 
+            // 5. Abrimos el panel
             panel.classList.remove('translate-x-full');
             overlay.classList.remove('hidden');
         }
@@ -412,6 +431,7 @@
         // ==============================================================================
         const API_URL = "https://asistencia-api.up.railway.app";
         const token_api = localStorage.getItem('token'); // Usamos token_api para no chocar con tu const 'token' si la hay
+        let listaEmpleadosGlobal = [];
 
         // 1. Cargar las listas desplegables (Sucursal y Sección)
         async function cargarCatalogos() {
@@ -441,43 +461,41 @@
             }
         }
 
-        // 2. Cargar la Tabla Principal de Empleados
+        // 2. Cargar la Tabla de Empleados desde Railway
         async function cargarEmpleados() {
             const tbody = document.getElementById('cuerpoTabla');
             try {
                 const res = await fetch(`${API_URL}/empleados`, { headers: { 'Authorization': `Bearer ${token_api}` } });
                 const data = await res.json();
                 
+                listaEmpleadosGlobal = data; // <--- GUARDAMOS LOS DATOS AQUÍ
+                
                 tbody.innerHTML = '';
-                if(data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-gray-500"><i class="fas fa-folder-open text-4xl mb-3 text-gray-300 block"></i><p class="font-medium text-gray-600">No hay personal registrado</p></td></tr>';
+                if(!data || data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-gray-500">No hay personal registrado</td></tr>';
                     return;
                 }
                 
                 data.forEach(emp => {
                     const iniciales = (emp.nombres.charAt(0) + emp.apellidos.charAt(0)).toUpperCase();
+                    // AÑADIMOS EL ONCLICK AQUÍ ABAJO PASANDO EL ID DEL EMPLEADO
                     tbody.innerHTML += `
-                        <tr class="hover:bg-blue-50 transition-colors cursor-pointer group">
-                            <td class="p-4 font-mono text-gray-500 font-semibold group-hover:text-blue-600">${emp.bio_id || '-'}</td>
+                        <tr onclick="abrirPanelEdicion(${emp.id})" class="hover:bg-blue-50 transition-colors cursor-pointer group">
+                            <td class="p-4 font-mono text-gray-500">${emp.bio_id || '-'}</td>
                             <td class="p-4">
                                 <div class="flex items-center">
                                     <div class="h-8 w-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold mr-3">${iniciales}</div>
-                                    <div><p class="font-bold text-gray-800">${emp.nombres} ${emp.apellidos}</p></div>
+                                    <p class="font-bold text-gray-800 group-hover:text-blue-600">${emp.nombres} ${emp.apellidos}</p>
                                 </div>
                             </td>
-                            <td class="p-4 text-gray-600">${emp.ci}</td>
-                            <td class="p-4 text-blue-700 font-medium bg-blue-50/50">${emp.sucursal_nombre || 'No asignada'}</td>
-                            <td class="p-4 text-indigo-700 font-medium bg-indigo-50/50">${emp.seccion_nombre || 'No asignada'}</td>
-                            <td class="p-4 text-gray-600">${emp.cargo || '-'}</td>
-                            <td class="p-4">
-                                <span class="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs font-semibold border border-green-200">Activo</span>
-                            </td>
-                        </tr>
-                    `;
+                            <td class="p-4">${emp.ci}</td>
+                            <td class="p-4">${emp.sucursal_nombre || '-'}</td>
+                            <td class="p-4">${emp.seccion_nombre || '-'}</td>
+                            <td class="p-4">${emp.cargo || '-'}</td>
+                            <td class="p-4"><span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-semibold">Activo</span></td>
+                        </tr>`;
                 });
-            } catch (error) {
-                tbody.innerHTML = '<tr><td colspan="7" class="p-4 text-center text-red-500">Error cargando empleados</td></tr>';
-            }
+            } catch (error) { tbody.innerHTML = '<tr><td colspan="7" class="p-4 text-center text-red-500">Error de conexión con Railway</td></tr>'; }
         }
 
         // 3. Enviar el Formulario al Backend (Horario NO obligatorio)
