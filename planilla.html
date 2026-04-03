@@ -345,26 +345,27 @@
         }
 
         function abrirPanelEdicion(idEmpleado) {
-            empleadoEditandoId = idEmpleado;
-            // 1. Buscamos al empleado exacto en nuestra memoria
             const emp = listaEmpleadosGlobal.find(e => e.id === idEmpleado);
             if(!emp) return;
 
-            // 2. Cambiamos el título
+            empleadoEditandoId = emp.id; // Marcamos que estamos EDITANDO
             document.getElementById('drawerTitle').textContent = "Perfil: " + emp.nombres;
             
-            // 3. Inyectamos los datos en los inputs del formulario
+            // Llenado de datos básicos
             document.getElementById('bioId').value = emp.bio_id || '';
             document.getElementById('emp_nombres').value = emp.nombres || '';
             document.getElementById('emp_apellidos').value = emp.apellidos || '';
             document.getElementById('emp_ci').value = emp.ci || '';
             document.getElementById('emp_cargo').value = emp.cargo || '';
-            
-            // Seleccionamos la sucursal y sección correctas
             if(emp.sucursal_id) document.getElementById('emp_sucursal').value = emp.sucursal_id;
             if(emp.seccion_id) document.getElementById('emp_seccion').value = emp.seccion_id;
 
-            // 4. Preparamos la interfaz visual (Modo Lectura)
+            // ⚡ SINCRONIZACIÓN PERFECTA DEL BOTÓN
+            const toggle = document.getElementById('toggleEstado');
+            toggle.checked = emp.activo; // Pone el botón verde o gris según la Base de Datos
+            document.getElementById('panelConfirmacion').classList.add('hidden'); // Oculta alertas viejas
+
+            // Interfaz visual (Modo Lectura)
             document.getElementById('zonaSeguridad').classList.remove('hidden');
             document.getElementById('badgeModo').classList.remove('hidden');
             document.getElementById('btnHabilitarEdicion').classList.remove('hidden');
@@ -372,16 +373,10 @@
             document.getElementById('btnEliminar').classList.add('hidden'); 
             document.getElementById('btnGuardar').classList.add('hidden');  
             
-            // Bloqueamos los campos para que no editen sin querer
             inputsFormulario.forEach(input => input.disabled = true);
 
-            // 5. Abrimos el panel
             panel.classList.remove('translate-x-full');
             overlay.classList.remove('hidden');
-
-            document.getElementById('toggleEstado').checked = emp.activo;
-            manejarCambioEstado();
-
         }
 
         function habilitarEdicion() {
@@ -397,21 +392,19 @@
 
         let estadoOriginalActivo = true; 
 
+// ==========================================
+        // 1. REPARACIÓN DEL BOTÓN ACTIVO/INACTIVO
+        // ==========================================
         function manejarCambioEstado() {
             const toggle = document.getElementById('toggleEstado');
             const panelConf = document.getElementById('panelConfirmacion');
             const textoConf = document.getElementById('textoConfirmacion');
 
-            if (toggle.checked !== estadoOriginalActivo) {
-                panelConf.classList.remove('hidden'); 
-                
-                if (!toggle.checked) { 
-                    textoConf.textContent = "Confirmar RETIRO de Personal";
-                    panelConf.className = "bg-red-50 border border-red-200 p-4 rounded-lg space-y-3 mt-4";
-                } else { 
-                    textoConf.textContent = "Confirmar REINTEGRO de Personal";
-                    panelConf.className = "bg-green-50 border border-green-200 p-4 rounded-lg space-y-3 mt-4";
-                }
+            // Lógica simple y directa: Si lo apagas, pide confirmación. Si lo enciendes, oculta la alerta.
+            if (!toggle.checked) {
+                panelConf.classList.remove('hidden');
+                textoConf.textContent = "Confirmar RETIRO de Personal (Pasará a Inactivo)";
+                panelConf.className = "bg-red-50 border border-red-200 p-4 rounded-lg space-y-3 mt-4 transition-all";
             } else {
                 panelConf.classList.add('hidden');
             }
@@ -559,32 +552,44 @@
         }
 
         // 3. Enviar el Formulario al Backend (Horario NO obligatorio)
+        // MOTOR DE GUARDADO "MODO DIOS" (Caza-Bugs)
+        // ==========================================
         async function guardarEmpleado() {
+            console.log("🚀 [INICIO] Intentando guardar datos...");
             const btn = document.getElementById('btnGuardar');
             
+            // 1. Armamos el paquete de datos
             const payload = {
                 bio_id: document.getElementById('bioId').value ? parseInt(document.getElementById('bioId').value) : null,
-                nombres: document.getElementById('emp_nombres').value,
-                apellidos: document.getElementById('emp_apellidos').value,
-                ci: document.getElementById('emp_ci').value,
-                cargo: document.getElementById('emp_cargo').value,
+                nombres: document.getElementById('emp_nombres').value.trim(),
+                apellidos: document.getElementById('emp_apellidos').value.trim(),
+                ci: document.getElementById('emp_ci').value.trim(),
+                cargo: document.getElementById('emp_cargo').value.trim(),
                 sucursal_id: parseInt(document.getElementById('emp_sucursal').value),
                 seccion_id: parseInt(document.getElementById('emp_seccion').value),
                 activo: document.getElementById('toggleEstado').checked
             };
 
-            if(!payload.nombres || !payload.ci || !payload.sucursal_id) {
-                return alert("Completa los campos obligatorios (Nombres, C.I., Sucursal).");
+            console.log("📦 [DATOS CAPTURADOS]:", payload);
+
+            // 2. Validación Anti-Fallos Silenciosos
+            if(!payload.nombres || !payload.ci || isNaN(payload.sucursal_id)) {
+                console.error("❌ [BLOQUEO] Faltan datos obligatorios. Sucursal ID detectado como:", payload.sucursal_id);
+                alert("⚠️ Error: Los campos Nombres, C.I. y Sucursal son obligatorios. Verifica que hayas seleccionado una Sucursal válida.");
+                return; // Cortamos la ejecución aquí
             }
 
+            // Bloqueamos el botón para evitar doble clic
             btn.disabled = true;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Procesando con Railway...';
 
-            // AQUÍ ESTÁ LA MAGIA: Decidimos la ruta y el método
+            // Decidimos si es CREAR o ACTUALIZAR
             const metodoHTTP = empleadoEditandoId ? 'PUT' : 'POST';
             const urlFinal = empleadoEditandoId 
-                ? `${API_URL}/empleados/${empleadoEditandoId}` // Si existe, actualiza
-                : `${API_URL}/empleados`;                     // Si no, crea
+                ? `${API_URL}/empleados/${empleadoEditandoId}` 
+                : `${API_URL}/empleados`;
+
+            console.log(`📡 [ENVIANDO API] Método: ${metodoHTTP} | URL: ${urlFinal}`);
 
             try {
                 const res = await fetch(urlFinal, {
@@ -594,13 +599,22 @@
                 });
                 
                 const data = await res.json();
-                if(!res.ok) throw new Error(data.detail || "Error al guardar");
+                console.log("📥 [RESPUESTA RAILWAY]:", data);
+
+                if(!res.ok) {
+                    throw new Error(data.detail || "Error desconocido en la Base de Datos");
+                }
                 
+                // Si todo sale bien
+                alert(`✅ ÉXITO: ${data.mensaje || 'Empleado guardado correctamente'}`);
                 cerrarPanel();
-                await cargarEmpleados(); // Recarga la tabla con los datos frescos
+                await cargarEmpleados(); 
+                
             } catch (error) { 
-                alert(`Error: ${error.message}`); 
+                console.error("💥 [ERROR CRÍTICO CAPTURADO]:", error);
+                alert(`❌ ERROR DEL SERVIDOR:\n${error.message}\n\nRevisa la consola (F12) para detalles técnicos.`);
             } finally { 
+                // Siempre devolvemos el botón a la normalidad, pase lo que pase
                 btn.disabled = false; 
                 btn.innerHTML = empleadoEditandoId ? 'Guardar Cambios' : 'Registrar Empleado'; 
             }
