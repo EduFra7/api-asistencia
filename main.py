@@ -680,22 +680,45 @@ async def registrar_empleado(request: Request, usuario = Depends(verificar_token
     conn = conectar_bd(schema)
     cur = conn.cursor()
     try:
-        cur.execute(f"""
-            INSERT INTO {schema}.empleados 
-            (bio_id, nombres, apellidos, ci, sucursal_id, seccion_id, cargo, activo) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
-        """, (
-            data.get("bio_id") or None, data.get("nombres"), data.get("apellidos"), 
-            data.get("ci"), data.get("sucursal_id") or None, data.get("seccion_id") or None, 
-            data.get("cargo", ""), data.get("activo", True)
-        ))
-        nuevo_id = cur.fetchone()[0]
+        ci = data.get("ci")
+        bio_id = data.get("bio_id") or None
+        
+        # 1. Buscamos si el C.I. existe en cualquier estado (Activo, Inactivo o Eliminado de prueba)
+        cur.execute(f"SELECT id, eliminado FROM {schema}.empleados WHERE ci = %s", (ci,))
+        existe = cur.fetchone()
+
+        if existe:
+            id_db, esta_eliminado = existe
+            if not esta_eliminado:
+                # CASO: Está en el sistema como Activo o Inactivo. NO PERMITIMOS DUPLICAR.
+                raise HTTPException(status_code=400, detail="ERROR: Ese C.I. ya existe. Si fue retirado, búscalo en 'Inactivos' y cámbialo a 'Activo'.")
+            else:
+                # CASO: Era un registro "Eliminado" (limpieza de prueba). LO RESUCITAMOS.
+                cur.execute(f"""
+                    UPDATE {schema}.empleados 
+                    SET bio_id = %s, nombres = %s, apellidos = %s, 
+                        sucursal_id = %s, seccion_id = %s, cargo = %s,
+                        eliminado = FALSE, activo = TRUE
+                    WHERE id = %s
+                """, (bio_id, data.get("nombres"), data.get("apellidos"), 
+                      data.get("sucursal_id"), data.get("seccion_id"), data.get("cargo"), id_db))
+                msg = "Empleado reactivado correctamente."
+        else:
+            # 2. CASO: Es 100% nuevo, no hay rastro de él.
+            cur.execute(f"""
+                INSERT INTO {schema}.empleados 
+                (bio_id, nombres, apellidos, ci, sucursal_id, seccion_id, cargo, activo) 
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """, (bio_id, data.get("nombres"), data.get("apellidos"), ci, 
+                  data.get("sucursal_id"), data.get("seccion_id"), data.get("cargo"), True))
+            msg = "Personal registrado con éxito."
+
         conn.commit()
-        return {"mensaje": "Personal registrado con éxito", "id": nuevo_id}
+        return {"mensaje": msg}
         
     except psycopg2.IntegrityError:
         conn.rollback()
-        raise HTTPException(status_code=400, detail="ERROR: Ese C.I. o ID Biométrico ya existe. Si el empleado fue retirado, búscalo en 'Inactivos' y edita su estado a 'Activo'.")
+        raise HTTPException(status_code=400, detail="El ID Biométrico ya está ocupado por otro empleado activo.")
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
