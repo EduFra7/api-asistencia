@@ -6,6 +6,9 @@
     <title>Planilla - C.A Lector</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Librerías para exportación a PDF (jsPDF + AutoTable) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
 </head>
 <body class="bg-gray-50 font-sans flex h-screen overflow-hidden text-gray-800">
 
@@ -26,15 +29,23 @@
         <div class="flex-1 overflow-y-auto p-6 flex flex-col">
             
             <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6">
-                <div class="flex space-x-2 mb-4 border-b border-gray-100 pb-4">
-                    <button onclick="cambiarFiltro('activos', this)" class="filtro-btn px-4 py-2 bg-blue-50 text-blue-700 font-semibold rounded-lg text-sm border border-blue-200 transition-colors">
-                        <i class="fas fa-user-check mr-2"></i>Activos (1)
-                    </button>
-                    <button onclick="cambiarFiltro('inactivos', this)" class="filtro-btn px-4 py-2 bg-white hover:bg-gray-50 text-gray-600 font-medium rounded-lg text-sm border border-gray-200 transition-colors">
-                        <i class="fas fa-user-times mr-2"></i>Inactivos (0)
-                    </button>
-                    <button onclick="cambiarFiltro('todos', this)" class="filtro-btn px-4 py-2 bg-white hover:bg-gray-50 text-gray-600 font-medium rounded-lg text-sm border border-gray-200 transition-colors">
-                        <i class="fas fa-users mr-2"></i>Todos (1)
+                <div class="flex justify-between items-center mb-4 border-b border-gray-100 pb-4">
+                    <!-- Grupo de Filtros Izquierda -->
+                    <div class="flex space-x-2">
+                        <button onclick="cambiarFiltro('activos', this)" class="filtro-btn px-4 py-2 bg-blue-50 text-blue-700 font-semibold rounded-lg text-sm border border-blue-200 transition-colors">
+                            <i class="fas fa-user-check mr-2"></i>Activos (0)
+                        </button>
+                        <button onclick="cambiarFiltro('inactivos', this)" class="filtro-btn px-4 py-2 bg-white hover:bg-gray-50 text-gray-600 font-medium rounded-lg text-sm border border-gray-200 transition-colors">
+                            <i class="fas fa-user-times mr-2"></i>Inactivos (0)
+                        </button>
+                        <button onclick="cambiarFiltro('todos', this)" class="filtro-btn px-4 py-2 bg-white hover:bg-gray-50 text-gray-600 font-medium rounded-lg text-sm border border-gray-200 transition-colors">
+                            <i class="fas fa-users mr-2"></i>Todos (0)
+                        </button>
+                    </div>
+
+                    <!-- Botón PDF Derecha -->
+                    <button onclick="generarReportePDF()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center">
+                        <i class="fas fa-file-pdf mr-2"></i> Exportar a PDF
                     </button>
                 </div>
 
@@ -333,6 +344,10 @@
         let listaEmpleadosGlobal = [];
         let empleadoEditandoId = null;
 
+        function cerrarSesion() {
+            localStorage.clear(); // Borra todo
+            window.location.href = 'index.html';
+        }
 
         function cerrarPanel() {
             panel.classList.add('translate-x-full');
@@ -362,25 +377,21 @@
             const emp = listaEmpleadosGlobal.find(e => e.id === idEmpleado);
             if(!emp) return;
 
-            empleadoEditandoId = emp.id; // Marcamos que estamos EDITANDO
+            empleadoEditandoId = emp.id; 
             document.getElementById('drawerTitle').textContent = "Perfil: " + emp.nombres;
             
-            // Llenado de datos básicos
+            // Llenado de datos básicos y extras
             document.getElementById('bioId').value = emp.bio_id || '';
             document.getElementById('emp_nombres').value = emp.nombres || '';
             document.getElementById('emp_apellidos').value = emp.apellidos || '';
             document.getElementById('emp_ci').value = emp.ci || '';
             document.getElementById('emp_cargo').value = emp.cargo || '';
-            // --- INYECTANDO LOS CAMPOS EXTRAS AL HACER CLIC ---
             document.getElementById('emp_sexo').value = emp.sexo || 'Masculino';
             document.getElementById('emp_celular').value = emp.celular || '';
             document.getElementById('emp_correo').value = emp.correo || '';
             document.getElementById('emp_direccion').value = emp.direccion || '';
-            
-            // Las fechas a veces vienen con horas desde la BD, las recortamos a solo YYYY-MM-DD
             document.getElementById('emp_fecha_ingreso').value = emp.fecha_ingreso ? emp.fecha_ingreso.split('T')[0] : '';
             document.getElementById('emp_fecha_antiguedad').value = emp.fecha_antiguedad ? emp.fecha_antiguedad.split('T')[0] : '';
-            
             document.getElementById('emp_contrato').value = emp.tipo_contrato || 'Eventual';
             document.getElementById('emp_salario').value = emp.salario_base || '';
             document.getElementById('emp_bono').value = emp.bono || '';
@@ -390,7 +401,7 @@
 
             // ⚡ SINCRONIZACIÓN PERFECTA DEL BOTÓN
             const toggle = document.getElementById('toggleEstado');
-            toggle.checked = emp.activo; // Pone el botón verde o gris según la Base de Datos
+            toggle.checked = emp.activo;
 
             // ⚡ SINCRONIZACIÓN DEL ESTADO Y PANEL DE RETIRO
             const panelConf = document.getElementById('panelConfirmacion');
@@ -400,7 +411,6 @@
             if (!emp.activo) {
                 // Si el empleado es INACTIVO, mostramos la razón del retiro
                 panelConf.classList.remove('hidden');
-                // Cambiamos el color a gris para que se vea como "Historial" y no como "Alerta"
                 panelConf.className = "bg-gray-100 border border-gray-300 p-4 rounded-lg space-y-3 mt-4 shadow-inner";
                 textoConf.textContent = "📜 Información de Retiro (Histórico)";
                 textoConf.className = "text-sm font-bold text-gray-600 uppercase tracking-wider";
@@ -409,17 +419,17 @@
                 document.getElementById('emp_fecha_retiro').value = emp.fecha_retiro ? emp.fecha_retiro.split('T')[0] : '';
                 document.getElementById('emp_motivo_retiro').value = emp.motivo_retiro || 'No especificado';
                 
-                // Ocultamos la contraseña porque estamos en modo lectura
+                // Ocultamos la contraseña en modo lectura
                 contContrasena.classList.add('hidden');
             } else {
-                // Si es ACTIVO, limpiamos y ocultamos el panel de retiro
+                // Si es ACTIVO, limpiamos y ocultamos el panel
                 panelConf.classList.add('hidden');
                 document.getElementById('emp_fecha_retiro').value = '';
                 document.getElementById('emp_motivo_retiro').value = '';
                 contContrasena.classList.remove('hidden');
             }
 
-            document.getElementById('panelConfirmacion').classList.add('hidden'); // Oculta alertas viejas
+            // NOTA DEL ARQUITECTO: Se eliminó la línea problemática que ocultaba el panel aquí
 
             // Interfaz visual (Modo Lectura)
             document.getElementById('zonaSeguridad').classList.remove('hidden');
@@ -435,8 +445,6 @@
             overlay.classList.remove('hidden');
 
             // Bloquear campos en modo lectura
-            inputsFormulario.forEach(input => input.disabled = true);
-            // IMPORTANTE: Aseguramos que los nuevos campos también se bloqueen
             document.getElementById('emp_fecha_retiro').disabled = true;
             document.getElementById('emp_motivo_retiro').disabled = true;
         }
@@ -449,12 +457,17 @@
             document.getElementById('btnGuardar').classList.remove('hidden');
             document.getElementById('btnGuardar').textContent = "Guardar Cambios";
             
+            // Desbloquea los inputs estándar
             inputsFormulario.forEach(input => input.disabled = false);
+            
+            // ⚡ ARREGLO: Desbloqueo forzado de los campos de retiro
+            document.getElementById('emp_fecha_retiro').disabled = false;
+            document.getElementById('emp_motivo_retiro').disabled = false;
         }
 
         let estadoOriginalActivo = true; 
 
-// ==========================================
+        // ==========================================
         // 1. REPARACIÓN DEL BOTÓN ACTIVO/INACTIVO
         // ==========================================
         function manejarCambioEstado() {
@@ -699,7 +712,98 @@
             }
         }
 
-        // 4. Iniciar la pantalla ordenadamente (Añade esta función al final de todo el JS)
+        // ==========================================
+        // 4. EXPORTACIÓN A PDF (Nivel Corporativo)
+        // ==========================================
+        function generarReportePDF() {
+            // 1. Iniciamos el documento: 'l' (Landscape/Horizontal), 'pt' (Puntos), 'letter' (Tamaño Carta)
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('l', 'pt', 'letter');
+
+            // 2. Respetamos el filtro seleccionado actualmente en pantalla
+            const listaFiltrada = listaEmpleadosGlobal.filter(emp => {
+                if(filtroActual === 'activos') return emp.activo === true;
+                if(filtroActual === 'inactivos') return emp.activo === false;
+                return true; // Si es 'todos'
+            });
+
+            if(listaFiltrada.length === 0) {
+                alert("No hay información para exportar con este filtro.");
+                return;
+            }
+
+            // 3. Preparar los datos. Agrupamos en bloques para que quepa perfecto en la hoja
+            const head = [['ID', 'Datos Personales', 'Contacto', 'Ubicación Laboral', 'Contrato e Ingresos', 'Estado / Retiro']];
+            
+            const body = listaFiltrada.map(emp => {
+                // Bloque 1: Personal
+                const personal = `${emp.nombres} ${emp.apellidos}\nC.I.: ${emp.ci}\nSexo: ${emp.sexo || 'N/A'}`;
+                
+                // Bloque 2: Contacto
+                const contacto = `Cel: ${emp.celular || '-'}\nCorreo: ${emp.correo || '-'}\nDir: ${emp.direccion || '-'}`;
+                
+                // Bloque 3: Laboral
+                const laboral = `Cargo: ${emp.cargo || '-'}\nSucursal: ${emp.sucursal_nombre || '-'}\nSección: ${emp.seccion_nombre || '-'}\nIngreso: ${emp.fecha_ingreso ? emp.fecha_ingreso.split('T')[0] : '-'}`;
+                
+                // Bloque 4: Económico
+                const ingresos = `Contrato: ${emp.tipo_contrato || '-'}\nSalario: Bs. ${emp.salario_base || '0.00'}\nBono: Bs. ${emp.bono || '0.00'}\nInicio Ant.: ${emp.fecha_antiguedad ? emp.fecha_antiguedad.split('T')[0] : '-'}`;
+                
+                // Bloque 5: Estado y Retiro
+                let retiro = emp.activo ? '🟢 ACTIVO' : '🔴 INACTIVO';
+                if (!emp.activo) {
+                    retiro += `\nFecha Baja: ${emp.fecha_retiro ? emp.fecha_retiro.split('T')[0] : '-'}`;
+                    retiro += `\nMotivo: ${emp.motivo_retiro || 'No especificado'}`;
+                }
+
+                return [
+                    emp.bio_id || '-',
+                    personal,
+                    contacto,
+                    laboral,
+                    ingresos,
+                    retiro
+                ];
+            });
+
+            // 4. Encabezado del Documento
+            const nombreEmpresa = userData.empresa || 'Empresa';
+            const estadoTexto = filtroActual.toUpperCase();
+            const fechaHoy = new Date().toLocaleDateString('es-ES');
+
+            doc.setFontSize(16);
+            doc.setTextColor(31, 41, 55);
+            doc.text(`Reporte Maestro de Planilla - ${nombreEmpresa}`, 40, 40);
+            
+            doc.setFontSize(10);
+            doc.setTextColor(100, 100, 100);
+            doc.text(`Filtro Aplicado: EMPLEADOS ${estadoTexto}  |  Fecha de Emisión: ${fechaHoy}`, 40, 55);
+
+            // 5. Dibujar la Tabla
+            doc.autoTable({
+                startY: 70,
+                head: head,
+                body: body,
+                theme: 'grid',
+                styles: { fontSize: 8, cellPadding: 4, valign: 'middle', textColor: [50, 50, 50] },
+                headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold' },
+                alternateRowStyles: { fillColor: [249, 250, 251] },
+                // Configuramos los anchos de columna para que el contenido respire
+                columnStyles: {
+                    0: { cellWidth: 40, halign: 'center' }, // ID
+                    1: { cellWidth: 130 }, // Personal
+                    2: { cellWidth: 130 }, // Contacto
+                    3: { cellWidth: 140 }, // Laboral
+                    4: { cellWidth: 130 }, // Ingresos
+                    5: { cellWidth: 140 }  // Retiro
+                }
+            });
+
+            // 6. Descargar el archivo
+            const nombreArchivo = `Planilla_${nombreEmpresa}_${estadoTexto}_${new Date().getTime()}.pdf`;
+            doc.save(nombreArchivo);
+        }
+
+        // 5. Iniciar la pantalla ordenadamente (Añade esta función al final de todo el JS)
         async function arrancarPantallaPlanilla() {
             await cargarCatalogos();
             await cargarEmpleados();
