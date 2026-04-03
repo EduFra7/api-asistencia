@@ -98,32 +98,8 @@
                             </tr>
                         </thead>
                         <tbody id="cuerpoTabla" class="text-sm divide-y divide-gray-100">
-                            
-                            <tr id="filaJuan" onclick="abrirPanelEdicion('Juan Carlos Pérez')" class="hover:bg-blue-50 transition-colors cursor-pointer group">
-                                <td class="p-4 font-mono text-gray-500 font-semibold group-hover:text-blue-600">102</td>
-                                <td class="p-4">
-                                    <div class="flex items-center">
-                                        <div class="h-8 w-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold mr-3">JP</div>
-                                        <div><p class="font-bold text-gray-800">Juan Carlos Pérez</p></div>
-                                    </div>
-                                </td>
-                                <td class="p-4 text-gray-600">8934521-LP</td>
-                                <!-- Datos inyectados por separado -->
-                                <td class="p-4 text-gray-600">Central</td>
-                                <td class="p-4 text-gray-600">Mantenimiento</td>
-                                <td class="p-4 text-gray-600">Supervisor</td>
-                                <td class="p-4">
-                                    <span class="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs font-semibold border border-green-200"><i class="fas fa-circle text-[8px] mr-1"></i>Activo</span>
-                                </td>
-                            </tr>
-                            
-                            <tr id="filaVacia" class="hidden">
-                                <!-- Colspan ajustado a 7 por la nueva columna -->
-                                <td colspan="7" class="p-8 text-center text-gray-500">
-                                    <i class="fas fa-folder-open text-4xl mb-3 text-gray-300 block"></i>
-                                    <p class="font-medium text-gray-600">No se encontraron empleados</p>
-                                    <p class="text-xs mt-1">Intenta ajustando los filtros de búsqueda.</p>
-                                </td>
+                            <tr>
+                                <td colspan="7" class="p-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Cargando personal...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -154,7 +130,7 @@
             <div class="flex-1 overflow-y-auto p-6 bg-gray-50">
                 <form id="empleadoForm" class="space-y-6">
                     
-                    <div class="flex items-center space-x-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                   <div class="flex items-center space-x-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
                         <div class="h-16 w-16 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 border-2 border-dashed border-gray-300 cursor-pointer hover:bg-gray-100 relative overflow-hidden">
                             <i class="fas fa-camera text-xl"></i>
                             <input type="file" id="fotoInput" class="absolute inset-0 opacity-0 cursor-pointer form-input" accept="image/*">
@@ -170,15 +146,15 @@
                         <div class="grid grid-cols-2 gap-4">
                             <div class="col-span-2 md:col-span-1">
                                 <label class="block text-sm font-medium text-gray-700">Nombres</label>
-                                <input type="text" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                                <input type="text" id="emp_nombres" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
                             </div>
                             <div class="col-span-2 md:col-span-1">
                                 <label class="block text-sm font-medium text-gray-700">Apellidos</label>
-                                <input type="text" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                                <input type="text" id="emp_apellidos" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">C.I.</label>
-                                <input type="text" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                                <input type="text" id="emp_ci" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Sexo</label>
@@ -217,7 +193,7 @@
 
                             <div class="col-span-2">
                                 <label class="block text-sm font-medium text-gray-700">Cargo</label>
-                                <input list="lista-cargos" placeholder="Escriba o seleccione..." class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                                <input list="lista-cargos" id="emp_cargo" placeholder="Escriba o seleccione..." class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
                                 <datalist id="lista-cargos">
                                     <option value="Administrador">
                                     <option value="Operario de Planta">
@@ -226,20 +202,16 @@
                                 </datalist>
                             </div>
 
-                            <!-- ── MODIFICACIÓN 3: SUCURSAL Y SECCIÓN SEPARADOS EN EL FORMULARIO ── -->
                             <div>
                                 <label class="block text-sm font-medium text-gray-700" title="Lugar Físico">Sucursal</label>
-                                <select class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
-                                    <option>Central</option>
-                                    <option>Planta El Alto</option>
+                                <select id="emp_sucursal" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                                    <option value="">Cargando...</option>
                                 </select>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700" title="Departamento Organizacional">Sección</label>
-                                <select class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
-                                    <option>Administración</option>
-                                    <option>Producción</option>
-                                    <option>Mantenimiento</option>
+                                <select id="emp_seccion" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                                    <option value="">Cargando...</option>
                                 </select>
                             </div>
 
@@ -305,7 +277,7 @@
                             </div>
                         </div>
 
-                    </div>
+                    </div> 
 
                 </form>
             </div>
@@ -317,7 +289,7 @@
                 
                 <div class="flex space-x-3 ml-auto">
                     <button onclick="cerrarPanel()" class="bg-white border border-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-50 font-medium text-sm">Cerrar</button>
-                    <button id="btnGuardar" class="hidden bg-blue-600 text-white px-8 py-2 rounded-lg hover:bg-blue-700 font-medium shadow-sm text-sm">Guardar Cambios</button>
+                    <button id="btnGuardar" onclick="guardarEmpleado()" class="hidden bg-blue-600 text-white px-8 py-2 rounded-lg hover:bg-blue-700 font-medium shadow-sm text-sm">Guardar Cambios</button>
                 </div>
             </div>
         </div>
@@ -452,6 +424,139 @@
                 document.getElementById('filaVacia').classList.add('hidden');
             }
         }
+
+        // ==============================================================================
+        // ── MOTOR DE DATOS: CONEXIÓN CON LA API ──
+        // ==============================================================================
+        const API_URL = "https://asistencia-api.up.railway.app";
+        const token_api = localStorage.getItem('token'); // Usamos token_api para no chocar con tu const 'token' si la hay
+
+        // 1. Cargar las listas desplegables (Sucursal y Sección)
+        async function cargarCatalogos() {
+            try {
+                const [resSucursales, resSecciones] = await Promise.all([
+                    fetch(`${API_URL}/sucursales`, { headers: { 'Authorization': `Bearer ${token_api}` } }),
+                    fetch(`${API_URL}/secciones`, { headers: { 'Authorization': `Bearer ${token_api}` } })
+                ]);
+
+                const sucursales = await resSucursales.json();
+                const secciones = await resSecciones.json();
+
+                const selectSucursal = document.getElementById('emp_sucursal');
+                selectSucursal.innerHTML = '<option value="">Seleccione Sucursal...</option>';
+                sucursales.forEach(s => {
+                    selectSucursal.innerHTML += `<option value="${s.id}">${s.nombre}</option>`;
+                });
+
+                const selectSeccion = document.getElementById('emp_seccion');
+                selectSeccion.innerHTML = '<option value="">Seleccione Sección...</option>';
+                secciones.forEach(s => {
+                    selectSeccion.innerHTML += `<option value="${s.id}">${s.nombre}</option>`;
+                });
+
+            } catch (error) {
+                console.error("Error al cargar catálogos:", error);
+            }
+        }
+
+        // 2. Cargar la Tabla Principal de Empleados
+        async function cargarEmpleados() {
+            const tbody = document.getElementById('cuerpoTabla');
+            try {
+                const res = await fetch(`${API_URL}/empleados`, { headers: { 'Authorization': `Bearer ${token_api}` } });
+                const data = await res.json();
+                
+                tbody.innerHTML = '';
+                if(data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-gray-500"><i class="fas fa-folder-open text-4xl mb-3 text-gray-300 block"></i><p class="font-medium text-gray-600">No hay personal registrado</p></td></tr>';
+                    return;
+                }
+                
+                data.forEach(emp => {
+                    const iniciales = (emp.nombres.charAt(0) + emp.apellidos.charAt(0)).toUpperCase();
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-blue-50 transition-colors cursor-pointer group">
+                            <td class="p-4 font-mono text-gray-500 font-semibold group-hover:text-blue-600">${emp.bio_id || '-'}</td>
+                            <td class="p-4">
+                                <div class="flex items-center">
+                                    <div class="h-8 w-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold mr-3">${iniciales}</div>
+                                    <div><p class="font-bold text-gray-800">${emp.nombres} ${emp.apellidos}</p></div>
+                                </div>
+                            </td>
+                            <td class="p-4 text-gray-600">${emp.ci}</td>
+                            <td class="p-4 text-blue-700 font-medium bg-blue-50/50">${emp.sucursal_nombre || 'No asignada'}</td>
+                            <td class="p-4 text-indigo-700 font-medium bg-indigo-50/50">${emp.seccion_nombre || 'No asignada'}</td>
+                            <td class="p-4 text-gray-600">${emp.cargo || '-'}</td>
+                            <td class="p-4">
+                                <span class="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs font-semibold border border-green-200">Activo</span>
+                            </td>
+                        </tr>
+                    `;
+                });
+            } catch (error) {
+                tbody.innerHTML = '<tr><td colspan="7" class="p-4 text-center text-red-500">Error cargando empleados</td></tr>';
+            }
+        }
+
+        // 3. Enviar el Formulario al Backend (Horario NO obligatorio)
+        async function guardarEmpleado() {
+            const btn = document.getElementById('btnGuardar');
+            
+            const bio_id = document.getElementById('bioId').value;
+            const nombres = document.getElementById('emp_nombres').value;
+            const apellidos = document.getElementById('emp_apellidos').value;
+            const ci = document.getElementById('emp_ci').value;
+            const sucursal = document.getElementById('emp_sucursal').value;
+            const seccion = document.getElementById('emp_seccion').value;
+            const cargo = document.getElementById('emp_cargo').value;
+
+            // Validamos solo lo esencial
+            if(!nombres || !apellidos || !ci || !sucursal || !seccion) {
+                alert("Por favor llena los campos esenciales: Nombres, Apellidos, C.I., Sucursal y Sección.");
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+
+            const payload = {
+                bio_id: bio_id ? parseInt(bio_id) : null,
+                nombres: nombres,
+                apellidos: apellidos,
+                ci: ci,
+                cargo: cargo,
+                sucursal_id: parseInt(sucursal),
+                seccion_id: parseInt(seccion)
+            };
+
+            try {
+                const res = await fetch(`${API_URL}/empleados`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token_api}` },
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await res.json();
+                if(!res.ok) throw new Error(data.detail || "Error al guardar");
+                
+                cerrarPanel();
+                await cargarEmpleados(); 
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Guardar Cambios';
+            }
+        }
+
+        // 4. Iniciar la pantalla ordenadamente (Añade esta función al final de todo el JS)
+        async function arrancarPantallaPlanilla() {
+            await cargarCatalogos();
+            await cargarEmpleados();
+        }
+        
+        arrancarPantallaPlanilla();
+
     </script>
 <!-- Conectamos nuestro archivo JS maestro -->
     <script src="menu.js"></script>
