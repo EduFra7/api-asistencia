@@ -413,26 +413,39 @@
             }
         }
 
-        function solicitarBorrado() {
-            alert("⚠️ ACCIÓN CRÍTICA\nEsto realizará un Soft Delete (Borrado Lógico) del empleado en la Base de Datos. Requerirá confirmación por contraseña.");
-        }
+        // ELIMINAR EMPLEADO REAL
+        async function solicitarBorrado() {
+            if(!empleadoEditandoId) return;
+            
+            // Reemplazamos el alert falso por una confirmación real del navegador
+            const confirmacion = confirm("⚠️ ¿Estás completamente seguro de retirar a este empleado del sistema?\nEsta acción lo ocultará de la planilla.");
+            
+            if(!confirmacion) return; // Si dice que no, cancelamos todo
 
-        // ── 6. CÓDIGO TEMPORAL: MOCKING DE FILTROS (CORREGIDO) ──
-        function simularFiltro(tipo, botonPresionado) {
-            // Solo cambiamos el color del botón visualmente para que no se congele
-            document.querySelectorAll('.filtro-btn').forEach(btn => {
-                btn.className = "filtro-btn px-4 py-2 bg-white hover:bg-gray-50 text-gray-600 font-medium rounded-lg text-sm border border-gray-200 transition-colors";
-            });
-            botonPresionado.className = "filtro-btn px-4 py-2 bg-blue-50 text-blue-700 font-semibold rounded-lg text-sm border border-blue-200 transition-colors";
-            console.log("Filtro seleccionado: " + tipo + " (Filtro real en construcción)");
-        }
+            const btn = document.getElementById('btnEliminar');
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Eliminando...';
+            btn.disabled = true;
 
-        function simularBusqueda(texto) {
-            console.log("Buscando: " + texto + " (Búsqueda real en construcción)");
-        }
-
-        function simularFiltroSelect(valor) {
-            console.log("Filtro select cambiado a: " + valor + " (Filtro real en construcción)");
+            try {
+                const res = await fetch(`${API_URL}/empleados/${empleadoEditandoId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token_api}` }
+                });
+                
+                if(res.ok) {
+                    cerrarPanel();
+                    await cargarEmpleados(); // Recarga la tabla para que desaparezca
+                } else {
+                    const errorData = await res.json();
+                    alert("Error al eliminar: " + errorData.detail);
+                }
+            } catch (error) {
+                console.error(error);
+                alert("Error de conexión con el servidor al intentar eliminar.");
+            } finally {
+                btn.innerHTML = '<i class="fas fa-trash-alt mr-1"></i> Eliminar';
+                btn.disabled = false;
+            }
         }
 
         // ==============================================================================

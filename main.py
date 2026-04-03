@@ -742,6 +742,29 @@ async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depe
         cur.close()
         conn.close()
 
+@app.delete("/empleados/{empleado_id}")
+async def eliminar_empleado(empleado_id: int, request: Request, usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    conn = conectar_bd(schema)
+    cur = conn.cursor()
+    try:
+        # Borrado Lógico: Lo ocultamos del sistema pero no rompemos el historial
+        cur.execute(f"""
+            UPDATE {schema}.empleados 
+            SET eliminado = TRUE, activo = FALSE 
+            WHERE id = %s
+        """, (empleado_id,))
+        
+        conn.commit()
+        return {"mensaje": "Empleado eliminado correctamente"}
+        
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
 # ── RUTA DE ESTADO (Para saber si la API está viva) ──
 @app.get("/")
 def inicio():
