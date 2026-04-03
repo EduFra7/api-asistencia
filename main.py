@@ -709,6 +709,39 @@ async def registrar_empleado(request: Request, usuario = Depends(verificar_token
         cur.close()
         conn.close()
 
+@app.put("/empleados/{empleado_id}")
+async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    data = await request.json()
+    
+    conn = conectar_bd(schema)
+    cur = conn.cursor()
+    try:
+        # Actualizamos solo los datos del empleado que coincida con el ID
+        cur.execute(f"""
+            UPDATE {schema}.empleados 
+            SET bio_id = %s, nombres = %s, apellidos = %s, ci = %s, 
+                sucursal_id = %s, seccion_id = %s, cargo = %s
+            WHERE id = %s
+        """, (
+            data.get("bio_id"), data.get("nombres"), data.get("apellidos"), 
+            data.get("ci"), data.get("sucursal_id"), data.get("seccion_id"), 
+            data.get("cargo"), empleado_id
+        ))
+        
+        conn.commit()
+        return {"mensaje": "Empleado actualizado con éxito"}
+        
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail="Error: El C.I. o ID Biométrico ya está siendo usado por otro empleado.")
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
 # ── RUTA DE ESTADO (Para saber si la API está viva) ──
 @app.get("/")
 def inicio():

@@ -313,12 +313,20 @@
         const overlay = document.getElementById('overlayPanel');
         const inputsFormulario = document.querySelectorAll('.form-input');
 
+        //VARIABLES PÁRA CONEXIÓN CON SERVIDOR Y EDICIÓN DE PERESONAL
+        const API_URL = "https://asistencia-api.up.railway.app";
+        const token_api = localStorage.getItem('token'); // Usamos token_api para no chocar con tu const 'token' si la hay
+        let listaEmpleadosGlobal = [];
+        let empleadoEditandoId = null;
+
+
         function cerrarPanel() {
             panel.classList.add('translate-x-full');
             overlay.classList.add('hidden');
         }
 
         function abrirPanelNuevo() {
+            empleadoEditandoId = null;
             document.getElementById('drawerTitle').textContent = "Registrar Nuevo Personal";
             document.getElementById('zonaSeguridad').classList.add('hidden');
             document.getElementById('btnEliminar').classList.add('hidden');
@@ -337,6 +345,7 @@
         }
 
         function abrirPanelEdicion(idEmpleado) {
+            empleadoEditandoId = idEmpleado;
             // 1. Buscamos al empleado exacto en nuestra memoria
             const emp = listaEmpleadosGlobal.find(e => e.id === idEmpleado);
             if(!emp) return;
@@ -429,9 +438,6 @@
         // ==============================================================================
         // ── MOTOR DE DATOS: CONEXIÓN CON LA API ──
         // ==============================================================================
-        const API_URL = "https://asistencia-api.up.railway.app";
-        const token_api = localStorage.getItem('token'); // Usamos token_api para no chocar con tu const 'token' si la hay
-        let listaEmpleadosGlobal = [];
 
         // 1. Cargar las listas desplegables (Sucursal y Sección)
         async function cargarCatalogos() {
@@ -502,36 +508,32 @@
         async function guardarEmpleado() {
             const btn = document.getElementById('btnGuardar');
             
-            const bio_id = document.getElementById('bioId').value;
-            const nombres = document.getElementById('emp_nombres').value;
-            const apellidos = document.getElementById('emp_apellidos').value;
-            const ci = document.getElementById('emp_ci').value;
-            const sucursal = document.getElementById('emp_sucursal').value;
-            const seccion = document.getElementById('emp_seccion').value;
-            const cargo = document.getElementById('emp_cargo').value;
+            const payload = {
+                bio_id: document.getElementById('bioId').value ? parseInt(document.getElementById('bioId').value) : null,
+                nombres: document.getElementById('emp_nombres').value,
+                apellidos: document.getElementById('emp_apellidos').value,
+                ci: document.getElementById('emp_ci').value,
+                cargo: document.getElementById('emp_cargo').value,
+                sucursal_id: parseInt(document.getElementById('emp_sucursal').value),
+                seccion_id: parseInt(document.getElementById('emp_seccion').value)
+            };
 
-            // Validamos solo lo esencial
-            if(!nombres || !apellidos || !ci || !sucursal || !seccion) {
-                alert("Por favor llena los campos esenciales: Nombres, Apellidos, C.I., Sucursal y Sección.");
-                return;
+            if(!payload.nombres || !payload.ci || !payload.sucursal_id) {
+                return alert("Completa los campos obligatorios (Nombres, C.I., Sucursal).");
             }
 
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
 
-            const payload = {
-                bio_id: bio_id ? parseInt(bio_id) : null,
-                nombres: nombres,
-                apellidos: apellidos,
-                ci: ci,
-                cargo: cargo,
-                sucursal_id: parseInt(sucursal),
-                seccion_id: parseInt(seccion)
-            };
+            // AQUÍ ESTÁ LA MAGIA: Decidimos la ruta y el método
+            const metodoHTTP = empleadoEditandoId ? 'PUT' : 'POST';
+            const urlFinal = empleadoEditandoId 
+                ? `${API_URL}/empleados/${empleadoEditandoId}` // Si existe, actualiza
+                : `${API_URL}/empleados`;                     // Si no, crea
 
             try {
-                const res = await fetch(`${API_URL}/empleados`, {
-                    method: 'POST',
+                const res = await fetch(urlFinal, {
+                    method: metodoHTTP,
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token_api}` },
                     body: JSON.stringify(payload)
                 });
@@ -540,12 +542,12 @@
                 if(!res.ok) throw new Error(data.detail || "Error al guardar");
                 
                 cerrarPanel();
-                await cargarEmpleados(); 
-            } catch (error) {
-                alert(`Error: ${error.message}`);
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = 'Guardar Cambios';
+                await cargarEmpleados(); // Recarga la tabla con los datos frescos
+            } catch (error) { 
+                alert(`Error: ${error.message}`); 
+            } finally { 
+                btn.disabled = false; 
+                btn.innerHTML = empleadoEditandoId ? 'Guardar Cambios' : 'Registrar Empleado'; 
             }
         }
 
