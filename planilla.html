@@ -260,20 +260,34 @@
                                 <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
                             </label>
                         </div>
-                        
-                        <div id="panelConfirmacion" class="hidden bg-red-50 border border-red-200 p-4 rounded-lg space-y-3 mt-4">
-                            <p class="text-sm font-bold text-red-700" id="textoConfirmacion">Confirmar Retiro de Personal</p>
-                            <div>
-                                <label class="block text-xs font-medium text-red-700">Fecha Efectiva del Movimiento</label>
-                                <input type="date" id="emp_fecha_retiro" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-red-500 disabled:bg-gray-100">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-medium text-red-700">Motivo / Comentario</label>
-                                <input type="text" id="emp_motivo_retiro" placeholder="Ej. Renuncia voluntaria" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-red-500 disabled:bg-gray-100">
-                            </div>
-                            <div id="contenedorContrasena">
-                                <label class="block text-xs font-medium text-red-700"><i class="fas fa-lock mr-1"></i> Contraseña de Admin</label>
-                                <input type="password" id="emp_admin_password" placeholder="Requerida para autorizar baja" class="mt-1 w-full px-3 py-2 border border-red-300 rounded-md text-sm focus:ring-red-500 shadow-sm">
+
+                        <div id="panelConfirmacion" class="hidden bg-gray-50 border border-gray-200 p-4 rounded-lg space-y-3 mt-4 shadow-inner">
+                             <p class="text-sm font-bold text-gray-700 uppercase tracking-wider" id="textoConfirmacion">
+                                Información de Retiro
+                            </p>
+    
+                            <div class="grid grid-cols-1 gap-3">
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-500 uppercase">Fecha de Baja/Retiro</label>
+                                    <input type="date" id="emp_fecha_retiro" 
+                                        class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-600">
+                                </div>
+                                
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-500 uppercase">Motivo o Comentario</label>
+                                    <textarea id="emp_motivo_retiro" rows="2" 
+                                            class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-white focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-600"
+                                            placeholder="Sin motivo registrado"></textarea>
+                                </div>
+
+                                <div id="contenedorContrasena" class="hidden">
+                                    <label class="block text-xs font-bold text-red-600 uppercase">
+                                        <i class="fas fa-lock mr-1"></i> Confirmar con Contraseña Admin
+                                    </label>
+                                    <input type="password" id="emp_admin_password" 
+                                        class="mt-1 w-full px-3 py-2 border border-red-300 rounded-md text-sm focus:ring-red-500 shadow-sm"
+                                        placeholder="Escribe tu contraseña">
+                                </div>
                             </div>
                         </div>
 
@@ -381,23 +395,27 @@
             // ⚡ SINCRONIZACIÓN DEL ESTADO Y PANEL DE RETIRO
             const panelConf = document.getElementById('panelConfirmacion');
             const contContrasena = document.getElementById('contenedorContrasena');
+            const textoConf = document.getElementById('textoConfirmacion');
             
             if (!emp.activo) {
-                // Es un empleado INACTIVO: Mostramos el motivo en Modo Lectura
+                // Si el empleado es INACTIVO, mostramos la razón del retiro
                 panelConf.classList.remove('hidden');
-                panelConf.className = "bg-gray-50 border border-gray-200 p-4 rounded-lg space-y-3 mt-4 transition-all";
-                document.getElementById('textoConfirmacion').textContent = "Información de Retiro Histórico";
-                document.getElementById('textoConfirmacion').className = "text-sm font-bold text-gray-700";
+                // Cambiamos el color a gris para que se vea como "Historial" y no como "Alerta"
+                panelConf.className = "bg-gray-100 border border-gray-300 p-4 rounded-lg space-y-3 mt-4 shadow-inner";
+                textoConf.textContent = "📜 Información de Retiro (Histórico)";
+                textoConf.className = "text-sm font-bold text-gray-600 uppercase tracking-wider";
                 
+                // Llenamos los campos de retiro
                 document.getElementById('emp_fecha_retiro').value = emp.fecha_retiro ? emp.fecha_retiro.split('T')[0] : '';
-                document.getElementById('emp_motivo_retiro').value = emp.motivo_retiro || '';
-                contContrasena.classList.add('hidden'); // Ocultamos la contraseña, no hace falta para leer
+                document.getElementById('emp_motivo_retiro').value = emp.motivo_retiro || 'No especificado';
+                
+                // Ocultamos la contraseña porque estamos en modo lectura
+                contContrasena.classList.add('hidden');
             } else {
-                // Es un empleado ACTIVO: Ocultamos el panel
+                // Si es ACTIVO, limpiamos y ocultamos el panel de retiro
                 panelConf.classList.add('hidden');
                 document.getElementById('emp_fecha_retiro').value = '';
                 document.getElementById('emp_motivo_retiro').value = '';
-                document.getElementById('emp_admin_password').value = '';
                 contContrasena.classList.remove('hidden');
             }
 
@@ -415,6 +433,12 @@
 
             panel.classList.remove('translate-x-full');
             overlay.classList.remove('hidden');
+
+            // Bloquear campos en modo lectura
+            inputsFormulario.forEach(input => input.disabled = true);
+            // IMPORTANTE: Aseguramos que los nuevos campos también se bloqueen
+            document.getElementById('emp_fecha_retiro').disabled = true;
+            document.getElementById('emp_motivo_retiro').disabled = true;
         }
 
         function habilitarEdicion() {

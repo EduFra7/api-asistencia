@@ -650,27 +650,28 @@ def eliminar_seccion(seccion_id: int, usuario = Depends(verificar_token)):
 # ==============================================================================
 
 @app.get("/empleados")
-def obtener_empleados(usuario = Depends(verificar_token)):
+async def obtener_empleados(usuario = Depends(verificar_token)):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
+    # Usamos RealDictCursor para que JavaScript entienda los nombres de las columnas fácilmente
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    
-    # El JOIN une la tabla empleados con sucursales y secciones para traer los nombres reales
-    query = f"""
-        SELECT e.*, 
-               s.nombre as sucursal_nombre, 
-               sec.nombre as seccion_nombre
-        FROM {schema}.empleados e
-        LEFT JOIN {schema}.sucursales s ON e.sucursal_id = s.id
-        LEFT JOIN {schema}.secciones sec ON e.seccion_id = sec.id
-        WHERE e.eliminado = FALSE
-        ORDER BY e.nombres
-    """
-    cur.execute(query)
-    empleados = cur.fetchall()
-    cur.close()
-    conn.close()
-    return list(empleados)
+    try:
+        # ⚡ IMPORTANTE: Agregamos fecha_retiro y motivo_retiro al SELECT
+        cur.execute(f"""
+            SELECT e.*, 
+                   s.nombre as sucursal_nombre, 
+                   sec.nombre as seccion_nombre
+            FROM {schema}.empleados e
+            LEFT JOIN {schema}.sucursales s ON e.sucursal_id = s.id
+            LEFT JOIN {schema}.secciones sec ON e.seccion_id = sec.id
+            WHERE e.eliminado = FALSE
+            ORDER BY e.nombres ASC
+        """)
+        empleados = cur.fetchall()
+        return empleados
+    finally:
+        cur.close()
+        conn.close()
 
 @app.post("/empleados")
 async def registrar_empleado(request: Request, usuario = Depends(verificar_token)):
