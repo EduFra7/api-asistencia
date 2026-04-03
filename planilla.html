@@ -158,22 +158,22 @@
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Sexo</label>
-                                <select class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                                <select id="emp_sexo" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
                                     <option>Masculino</option>
                                     <option>Femenino</option>
                                 </select>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Celular</label>
-                                <input type="tel" placeholder="Ej. 70012345" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                                <input type="tel" id="emp_celular" placeholder="Ej. 70012345" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Correo</label>
-                                <input type="email" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                                <input type="email" id="emp_correo" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
                             </div>
                             <div class="col-span-2">
                                 <label class="block text-sm font-medium text-gray-700">Dirección de Domicilio</label>
-                                <input type="text" placeholder="Ej. Zona Sur, Calle 3, #123" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                                <input type="text" id="emp_direccion" placeholder="Ej. Zona Sur, Calle 3, #123" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
                             </div>
                         </div>
                     </div>
@@ -184,11 +184,11 @@
                             
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Fecha de Ingreso</label>
-                                <input type="date" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                                <input type="date" id="emp_fecha_ingreso" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700" title="Fecha desde la cual se calculan los 3 meses y vacaciones">Inicio Antigüedad <i class="fas fa-info-circle text-blue-400"></i></label>
-                                <input type="date" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                                <input type="date" id="emp_fecha_antiguedad" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
                             </div>
 
                             <div class="col-span-2">
@@ -217,7 +217,7 @@
 
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Contrato</label>
-                                <select class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
+                                <select id="emp_contrato" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
                                     <option>Ítem</option>
                                     <option selected>Eventual</option>
                                     <option>Consultoría</option>
@@ -235,14 +235,14 @@
                                 <label class="block text-sm font-medium text-gray-700">Salario Base</label>
                                 <div class="relative mt-1">
                                     <span class="absolute left-3 top-2 text-gray-500">Bs.</span>
-                                    <input type="number" class="form-input w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm disabled:bg-gray-100">
+                                    <input type="number" id="emp_salario" class="form-input w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm disabled:bg-gray-100">
                                 </div>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700">Bono Adicional</label>
                                 <div class="relative mt-1">
                                     <span class="absolute left-3 top-2 text-gray-500">Bs.</span>
-                                    <input type="number" class="form-input w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm disabled:bg-gray-100">
+                                    <input type="number" id="emp_bono" class="form-input w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm disabled:bg-gray-100">
                                 </div>
                             </div>
 
@@ -357,6 +357,20 @@
             document.getElementById('emp_apellidos').value = emp.apellidos || '';
             document.getElementById('emp_ci').value = emp.ci || '';
             document.getElementById('emp_cargo').value = emp.cargo || '';
+            // --- INYECTANDO LOS CAMPOS EXTRAS AL HACER CLIC ---
+            document.getElementById('emp_sexo').value = emp.sexo || 'Masculino';
+            document.getElementById('emp_celular').value = emp.celular || '';
+            document.getElementById('emp_correo').value = emp.correo || '';
+            document.getElementById('emp_direccion').value = emp.direccion || '';
+            
+            // Las fechas a veces vienen con horas desde la BD, las recortamos a solo YYYY-MM-DD
+            document.getElementById('emp_fecha_ingreso').value = emp.fecha_ingreso ? emp.fecha_ingreso.split('T')[0] : '';
+            document.getElementById('emp_fecha_antiguedad').value = emp.fecha_antiguedad ? emp.fecha_antiguedad.split('T')[0] : '';
+            
+            document.getElementById('emp_contrato').value = emp.tipo_contrato || 'Eventual';
+            document.getElementById('emp_salario').value = emp.salario_base || '';
+            document.getElementById('emp_bono').value = emp.bono || '';
+            
             if(emp.sucursal_id) document.getElementById('emp_sucursal').value = emp.sucursal_id;
             if(emp.seccion_id) document.getElementById('emp_seccion').value = emp.seccion_id;
 
@@ -559,7 +573,7 @@
             const btn = document.getElementById('btnGuardar');
             
             // 1. Armamos el paquete de datos
-            const payload = {
+           const payload = {
                 bio_id: document.getElementById('bioId').value ? parseInt(document.getElementById('bioId').value) : null,
                 nombres: document.getElementById('emp_nombres').value.trim(),
                 apellidos: document.getElementById('emp_apellidos').value.trim(),
@@ -567,7 +581,18 @@
                 cargo: document.getElementById('emp_cargo').value.trim(),
                 sucursal_id: parseInt(document.getElementById('emp_sucursal').value),
                 seccion_id: parseInt(document.getElementById('emp_seccion').value),
-                activo: document.getElementById('toggleEstado').checked
+                activo: document.getElementById('toggleEstado').checked,
+                
+                // --- LOS CAMPOS NUEVOS CONECTADOS ---
+                sexo: document.getElementById('emp_sexo').value,
+                celular: document.getElementById('emp_celular').value.trim(),
+                correo: document.getElementById('emp_correo').value.trim(),
+                direccion: document.getElementById('emp_direccion').value.trim(),
+                fecha_ingreso: document.getElementById('emp_fecha_ingreso').value || null,
+                fecha_antiguedad: document.getElementById('emp_fecha_antiguedad').value || null,
+                tipo_contrato: document.getElementById('emp_contrato').value,
+                salario_base: parseFloat(document.getElementById('emp_salario').value) || 0.00,
+                bono: parseFloat(document.getElementById('emp_bono').value) || 0.00
             };
 
             console.log("📦 [DATOS CAPTURADOS]:", payload);

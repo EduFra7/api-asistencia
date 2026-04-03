@@ -706,11 +706,17 @@ async def registrar_empleado(request: Request, usuario = Depends(verificar_token
         else:
             # 2. CASO: Es 100% nuevo, no hay rastro de él.
             cur.execute(f"""
-                INSERT INTO {schema}.empleados 
-                (bio_id, nombres, apellidos, ci, sucursal_id, seccion_id, cargo, activo) 
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            """, (bio_id, data.get("nombres"), data.get("apellidos"), ci, 
-                  data.get("sucursal_id"), data.get("seccion_id"), data.get("cargo"), True))
+            INSERT INTO {schema}.empleados 
+            (bio_id, nombres, apellidos, ci, sucursal_id, seccion_id, cargo, activo,
+             sexo, celular, correo, direccion, fecha_ingreso, fecha_antiguedad, tipo_contrato, salario_base, bono) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (
+            bio_id, data.get("nombres"), data.get("apellidos"), ci, 
+            data.get("sucursal_id"), data.get("seccion_id"), data.get("cargo"), True,
+            data.get("sexo"), data.get("celular"), data.get("correo"), data.get("direccion"),
+            data.get("fecha_ingreso"), data.get("fecha_antiguedad"), data.get("tipo_contrato"),
+            data.get("salario_base", 0), data.get("bono", 0)
+        ))
             msg = "Personal registrado con éxito."
 
         conn.commit()
@@ -737,13 +743,19 @@ async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depe
         cur.execute(f"""
             UPDATE {schema}.empleados 
             SET bio_id = %s, nombres = %s, apellidos = %s, ci = %s, 
-                sucursal_id = %s, seccion_id = %s, cargo = %s,
-                activo = %s  -- ¡AQUÍ GUARDAMOS SI ESTÁ ACTIVO O INACTIVO!
+                sucursal_id = %s, seccion_id = %s, cargo = %s, activo = %s,
+                sexo = %s, celular = %s, correo = %s, direccion = %s,
+                fecha_ingreso = %s, fecha_antiguedad = %s, tipo_contrato = %s, 
+                salario_base = %s, bono = %s
             WHERE id = %s
         """, (
             data.get("bio_id"), data.get("nombres"), data.get("apellidos"), 
             data.get("ci"), data.get("sucursal_id"), data.get("seccion_id"), 
-            data.get("cargo"), data.get("activo"), empleado_id
+            data.get("cargo"), data.get("activo"),
+            data.get("sexo"), data.get("celular"), data.get("correo"), data.get("direccion"),
+            data.get("fecha_ingreso"), data.get("fecha_antiguedad"), data.get("tipo_contrato"),
+            data.get("salario_base", 0), data.get("bono", 0),
+            empleado_id
         ))
         
         conn.commit()
