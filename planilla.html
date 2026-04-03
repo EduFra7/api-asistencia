@@ -749,7 +749,7 @@
                 const ingresos = `Contrato: ${emp.tipo_contrato || '-'}\nSalario: Bs. ${emp.salario_base || '0.00'}\nBono: Bs. ${emp.bono || '0.00'}\nInicio Ant.: ${emp.fecha_antiguedad ? emp.fecha_antiguedad.split('T')[0] : '-'}`;
                 
                 // Bloque 5: Estado y Retiro
-                let retiro = emp.activo ? '🟢 ACTIVO' : '🔴 INACTIVO';
+                let retiro = emp.activo ? '[ ACTIVO ]' : '[ INACTIVO ]';
                 if (!emp.activo) {
                     retiro += `\nFecha Baja: ${emp.fecha_retiro ? emp.fecha_retiro.split('T')[0] : '-'}`;
                     retiro += `\nMotivo: ${emp.motivo_retiro || 'No especificado'}`;
