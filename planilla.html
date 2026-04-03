@@ -27,13 +27,13 @@
             
             <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6">
                 <div class="flex space-x-2 mb-4 border-b border-gray-100 pb-4">
-                    <button onclick="simularFiltro('activos', this)" class="filtro-btn px-4 py-2 bg-blue-50 text-blue-700 font-semibold rounded-lg text-sm border border-blue-200 transition-colors">
+                    <button onclick="cambiarFiltro('activos', this)" class="filtro-btn px-4 py-2 bg-blue-50 text-blue-700 font-semibold rounded-lg text-sm border border-blue-200 transition-colors">
                         <i class="fas fa-user-check mr-2"></i>Activos (1)
                     </button>
-                    <button onclick="simularFiltro('inactivos', this)" class="filtro-btn px-4 py-2 bg-white hover:bg-gray-50 text-gray-600 font-medium rounded-lg text-sm border border-gray-200 transition-colors">
+                    <button onclick="cambiarFiltro('inactivos', this)" class="filtro-btn px-4 py-2 bg-white hover:bg-gray-50 text-gray-600 font-medium rounded-lg text-sm border border-gray-200 transition-colors">
                         <i class="fas fa-user-times mr-2"></i>Inactivos (0)
                     </button>
-                    <button onclick="simularFiltro('todos', this)" class="filtro-btn px-4 py-2 bg-white hover:bg-gray-50 text-gray-600 font-medium rounded-lg text-sm border border-gray-200 transition-colors">
+                    <button onclick="cambiarFiltro('todos', this)" class="filtro-btn px-4 py-2 bg-white hover:bg-gray-50 text-gray-600 font-medium rounded-lg text-sm border border-gray-200 transition-colors">
                         <i class="fas fa-users mr-2"></i>Todos (1)
                     </button>
                 </div>
@@ -378,6 +378,10 @@
             // 5. Abrimos el panel
             panel.classList.remove('translate-x-full');
             overlay.classList.remove('hidden');
+
+            document.getElementById('toggleEstado').checked = emp.activo;
+            manejarCambioEstado();
+
         }
 
         function habilitarEdicion() {
@@ -480,41 +484,78 @@
             }
         }
 
-        // 2. Cargar la Tabla de Empleados desde Railway
+        let filtroActual = 'activos'; // Estado inicial
+
+        // 2. Cargar datos de Railway (Se ejecuta una vez o tras guardar/borrar)
         async function cargarEmpleados() {
-            const tbody = document.getElementById('cuerpoTabla');
             try {
                 const res = await fetch(`${API_URL}/empleados`, { headers: { 'Authorization': `Bearer ${token_api}` } });
-                const data = await res.json();
-                
-                listaEmpleadosGlobal = data; // <--- GUARDAMOS LOS DATOS AQUÍ
-                
-                tbody.innerHTML = '';
-                if(!data || data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-gray-500">No hay personal registrado</td></tr>';
-                    return;
-                }
-                
-                data.forEach(emp => {
-                    const iniciales = (emp.nombres.charAt(0) + emp.apellidos.charAt(0)).toUpperCase();
-                    // AÑADIMOS EL ONCLICK AQUÍ ABAJO PASANDO EL ID DEL EMPLEADO
-                    tbody.innerHTML += `
-                        <tr onclick="abrirPanelEdicion(${emp.id})" class="hover:bg-blue-50 transition-colors cursor-pointer group">
-                            <td class="p-4 font-mono text-gray-500">${emp.bio_id || '-'}</td>
-                            <td class="p-4">
-                                <div class="flex items-center">
-                                    <div class="h-8 w-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold mr-3">${iniciales}</div>
-                                    <p class="font-bold text-gray-800 group-hover:text-blue-600">${emp.nombres} ${emp.apellidos}</p>
-                                </div>
-                            </td>
-                            <td class="p-4">${emp.ci}</td>
-                            <td class="p-4">${emp.sucursal_nombre || '-'}</td>
-                            <td class="p-4">${emp.seccion_nombre || '-'}</td>
-                            <td class="p-4">${emp.cargo || '-'}</td>
-                            <td class="p-4"><span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-semibold">Activo</span></td>
-                        </tr>`;
-                });
-            } catch (error) { tbody.innerHTML = '<tr><td colspan="7" class="p-4 text-center text-red-500">Error de conexión con Railway</td></tr>'; }
+                listaEmpleadosGlobal = await res.json();
+                renderizarTabla(); // Dibuja la tabla según el filtro
+            } catch (error) { 
+                document.getElementById('cuerpoTabla').innerHTML = '<tr><td colspan="7" class="p-4 text-center text-red-500">Error de conexión</td></tr>'; 
+            }
+        }
+
+        // Dibuja la tabla aplicando los filtros
+        function renderizarTabla() {
+            const tbody = document.getElementById('cuerpoTabla');
+            tbody.innerHTML = '';
+            
+            // Filtramos la lista global según el botón presionado
+            const listaFiltrada = listaEmpleadosGlobal.filter(emp => {
+                if(filtroActual === 'activos') return emp.activo === true;
+                if(filtroActual === 'inactivos') return emp.activo === false;
+                return true; // Si es 'todos', pasan ambos
+            });
+
+            // Actualizamos los contadores visuales (Opcional, pero da toque Senior)
+            const countActivos = listaEmpleadosGlobal.filter(e => e.activo).length;
+            const countInactivos = listaEmpleadosGlobal.filter(e => !e.activo).length;
+            document.querySelector("button[onclick=\"cambiarFiltro('activos', this)\"]").innerHTML = `<i class="fas fa-user-check mr-2"></i>Activos (${countActivos})`;
+            document.querySelector("button[onclick=\"cambiarFiltro('inactivos', this)\"]").innerHTML = `<i class="fas fa-user-times mr-2"></i>Inactivos (${countInactivos})`;
+            document.querySelector("button[onclick=\"cambiarFiltro('todos', this)\"]").innerHTML = `<i class="fas fa-users mr-2"></i>Todos (${listaEmpleadosGlobal.length})`;
+
+            if(listaFiltrada.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-gray-500">No hay personal en esta categoría</td></tr>';
+                return;
+            }
+            
+            listaFiltrada.forEach(emp => {
+                const iniciales = (emp.nombres.charAt(0) + emp.apellidos.charAt(0)).toUpperCase();
+                const badgeEstado = emp.activo 
+                    ? '<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-semibold">Activo</span>'
+                    : '<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-semibold">Inactivo</span>';
+
+                tbody.innerHTML += `
+                    <tr onclick="abrirPanelEdicion(${emp.id})" class="hover:bg-blue-50 transition-colors cursor-pointer group">
+                        <td class="p-4 font-mono text-gray-500">${emp.bio_id || '-'}</td>
+                        <td class="p-4">
+                            <div class="flex items-center">
+                                <div class="h-8 w-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold mr-3">${iniciales}</div>
+                                <p class="font-bold text-gray-800 group-hover:text-blue-600">${emp.nombres} ${emp.apellidos}</p>
+                            </div>
+                        </td>
+                        <td class="p-4">${emp.ci}</td>
+                        <td class="p-4">${emp.sucursal_nombre || '-'}</td>
+                        <td class="p-4">${emp.seccion_nombre || '-'}</td>
+                        <td class="p-4">${emp.cargo || '-'}</td>
+                        <td class="p-4">${badgeEstado}</td>
+                    </tr>`;
+            });
+        }
+
+        // Función que se llama cuando haces clic en los botones de arriba
+        function cambiarFiltro(tipo, botonPresionado) {
+            filtroActual = tipo;
+            
+            // Estilos de botones
+            document.querySelectorAll('.filtro-btn').forEach(btn => {
+                btn.className = "filtro-btn px-4 py-2 bg-white hover:bg-gray-50 text-gray-600 font-medium rounded-lg text-sm border border-gray-200 transition-colors";
+            });
+            botonPresionado.className = "filtro-btn px-4 py-2 bg-blue-50 text-blue-700 font-semibold rounded-lg text-sm border border-blue-200 transition-colors";
+            
+            renderizarTabla();
         }
 
         // 3. Enviar el Formulario al Backend (Horario NO obligatorio)
@@ -528,7 +569,8 @@
                 ci: document.getElementById('emp_ci').value,
                 cargo: document.getElementById('emp_cargo').value,
                 sucursal_id: parseInt(document.getElementById('emp_sucursal').value),
-                seccion_id: parseInt(document.getElementById('emp_seccion').value)
+                seccion_id: parseInt(document.getElementById('emp_seccion').value),
+                activo: document.getElementById('toggleEstado').checked
             };
 
             if(!payload.nombres || !payload.ci || !payload.sucursal_id) {

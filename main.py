@@ -680,28 +680,22 @@ async def registrar_empleado(request: Request, usuario = Depends(verificar_token
     conn = conectar_bd(schema)
     cur = conn.cursor()
     try:
-        # Extraemos los datos del JSON que enviará el Frontend
-        bio_id = data.get("bio_id") or None
-        nombres = data.get("nombres")
-        apellidos = data.get("apellidos")
-        ci = data.get("ci")
-        sucursal_id = data.get("sucursal_id") or None
-        seccion_id = data.get("seccion_id") or None
-        cargo = data.get("cargo", "")
-        
         cur.execute(f"""
             INSERT INTO {schema}.empleados 
-            (bio_id, nombres, apellidos, ci, sucursal_id, seccion_id, cargo) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
-        """, (bio_id, nombres, apellidos, ci, sucursal_id, seccion_id, cargo))
-        
+            (bio_id, nombres, apellidos, ci, sucursal_id, seccion_id, cargo, activo) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
+        """, (
+            data.get("bio_id") or None, data.get("nombres"), data.get("apellidos"), 
+            data.get("ci"), data.get("sucursal_id") or None, data.get("seccion_id") or None, 
+            data.get("cargo", ""), data.get("activo", True)
+        ))
         nuevo_id = cur.fetchone()[0]
         conn.commit()
         return {"mensaje": "Personal registrado con éxito", "id": nuevo_id}
         
     except psycopg2.IntegrityError:
         conn.rollback()
-        raise HTTPException(status_code=400, detail="Error: Ya existe un empleado con ese C.I. o ID Biométrico.")
+        raise HTTPException(status_code=400, detail="ERROR: Ese C.I. o ID Biométrico ya existe. Si el empleado fue retirado, búscalo en 'Inactivos' y edita su estado a 'Activo'.")
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -717,16 +711,16 @@ async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depe
     conn = conectar_bd(schema)
     cur = conn.cursor()
     try:
-        # Actualizamos solo los datos del empleado que coincida con el ID
         cur.execute(f"""
             UPDATE {schema}.empleados 
             SET bio_id = %s, nombres = %s, apellidos = %s, ci = %s, 
-                sucursal_id = %s, seccion_id = %s, cargo = %s
+                sucursal_id = %s, seccion_id = %s, cargo = %s,
+                activo = %s  -- ¡AQUÍ GUARDAMOS SI ESTÁ ACTIVO O INACTIVO!
             WHERE id = %s
         """, (
             data.get("bio_id"), data.get("nombres"), data.get("apellidos"), 
             data.get("ci"), data.get("sucursal_id"), data.get("seccion_id"), 
-            data.get("cargo"), empleado_id
+            data.get("cargo"), data.get("activo"), empleado_id
         ))
         
         conn.commit()
@@ -734,7 +728,7 @@ async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depe
         
     except psycopg2.IntegrityError:
         conn.rollback()
-        raise HTTPException(status_code=400, detail="Error: El C.I. o ID Biométrico ya está siendo usado por otro empleado.")
+        raise HTTPException(status_code=400, detail="El C.I. o ID Biométrico ya está siendo usado por otro empleado en el sistema.")
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -748,16 +742,18 @@ async def eliminar_empleado(empleado_id: int, request: Request, usuario = Depend
     conn = conectar_bd(schema)
     cur = conn.cursor()
     try:
-        # Borrado Lógico: Lo ocultamos del sistema pero no rompemos el historial
+        # TRUCO SENIOR: Renombramos el CI para liberarlo y ponemos bio_id en NULL
         cur.execute(f"""
             UPDATE {schema}.empleados 
-            SET eliminado = TRUE, activo = FALSE 
+            SET eliminado = TRUE, 
+                activo = FALSE, 
+                bio_id = NULL,
+                ci = ci || '-DEL-' || id  -- Agrega "-DEL-ID" al carnet para liberar el número original
             WHERE id = %s
         """, (empleado_id,))
         
         conn.commit()
-        return {"mensaje": "Empleado eliminado correctamente"}
-        
+        return {"mensaje": "Registro de prueba eliminado. C.I. y ID Biométrico liberados."}
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
