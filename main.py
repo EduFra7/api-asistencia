@@ -7,6 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from fastapi.security import OAuth2PasswordBearer
+from datetime import datetime 
+
 import psycopg2          # Librería para hablar con PostgreSQL (Supabase)
 import psycopg2.extras   # Herramientas extra para PostgreSQL (como diccionarios)
 import bcrypt            # Librería para encriptar contraseñas
@@ -261,6 +263,7 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
                 huella_template TEXT,                  -- Aquí guardaremos el string de la huella dactilar
                 creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                historial_movimientos TEXT DEFAULT ''   -- Caja negra de registro de movimiento
             );
 
             -- ==========================================
@@ -758,10 +761,42 @@ async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depe
         if not user_db or not bcrypt.checkpw(admin_password.encode(), user_db["password_hash"].encode()):
             raise HTTPException(status_code=401, detail="Contraseña incorrecta. Operación de baja denegada.")
 
-    # --- 2. ACTUALIZACIÓN EN LA BASE DE DATOS ---
+    # --- 2. ACTUALIZACIÓN Y CAJA NEGRA ---
     conn = conectar_bd(schema)
     cur = conn.cursor()
     try:
+        # A. Consultamos el estado ACTUAL antes de guardar los cambios
+        cur.execute(f"SELECT activo, fecha_retiro, motivo_retiro, historial_movimientos FROM {schema}.empleados WHERE id = %s", (empleado_id,))
+        estado_db = cur.fetchone()
+        
+        activo_actual = estado_db[0]
+        historial_existente = estado_db[3] or ""
+        nuevo_historial = historial_existente
+        
+        fecha_retiro_final = data.get("fecha_retiro")
+        motivo_retiro_final = data.get("motivo_retiro")
+        
+        fecha_auditoria = datetime.now().strftime("%Y-%m-%d")
+
+        # B. LÓGICA DE AUDITORÍA (CAJA NEGRA)
+        if not activo_actual and activo_nuevo:
+            # CASO: RECONTRATACIÓN (Estaba inactivo y ahora es activo)
+            old_fecha = estado_db[1] or "Desconocida"
+            old_motivo = estado_db[2] or "Sin motivo especificado"
+            if old_fecha != "Desconocida":
+                anotacion = f"➤ [RECONTRATADO EL {fecha_auditoria}]: Su baja anterior fue el {old_fecha} por '{old_motivo}'.\n"
+                nuevo_historial = anotacion + historial_existente # Ponemos lo más nuevo arriba
+            
+            # Limpiamos su estado actual para que empiece en blanco
+            fecha_retiro_final = None
+            motivo_retiro_final = None
+
+        elif activo_actual and not activo_nuevo:
+            # CASO: DESPIDO / RETIRO (Estaba activo y ahora es inactivo)
+            anotacion = f"➤ [DADO DE BAJA EL {fecha_auditoria}]: Motivo registrado: {motivo_retiro_final}.\n"
+            nuevo_historial = anotacion + historial_existente
+
+        # C. GUARDAMOS TODO EN POSTGRESQL
         cur.execute(f"""
             UPDATE {schema}.empleados 
             SET bio_id = %s, nombres = %s, apellidos = %s, ci = %s, 
@@ -769,7 +804,8 @@ async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depe
                 sexo = %s, celular = %s, correo = %s, direccion = %s,
                 fecha_ingreso = %s, fecha_antiguedad = %s, tipo_contrato = %s, 
                 salario_base = %s, bono = %s,
-                fecha_retiro = %s, motivo_retiro = %s
+                fecha_retiro = %s, motivo_retiro = %s,
+                historial_movimientos = %s  -- ¡Guardamos la caja negra!
             WHERE id = %s
         """, (
             data.get("bio_id"), data.get("nombres"), data.get("apellidos"), 
@@ -778,12 +814,13 @@ async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depe
             data.get("sexo"), data.get("celular"), data.get("correo"), data.get("direccion"),
             data.get("fecha_ingreso"), data.get("fecha_antiguedad"), data.get("tipo_contrato"),
             data.get("salario_base", 0), data.get("bono", 0),
-            data.get("fecha_retiro"), data.get("motivo_retiro"), # Inyectamos la información histórica
+            fecha_retiro_final, motivo_retiro_final,
+            nuevo_historial,
             empleado_id
         ))
         
         conn.commit()
-        return {"mensaje": "Perfil del empleado actualizado con éxito"}
+        return {"mensaje": "Perfil actualizado y bitácora registrada con éxito."}
         
     except psycopg2.IntegrityError:
         conn.rollback()

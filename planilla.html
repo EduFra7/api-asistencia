@@ -44,9 +44,14 @@
                     </div>
 
                     <!-- Botón PDF Derecha -->
-                    <button onclick="generarReportePDF()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center">
-                        <i class="fas fa-file-pdf mr-2"></i> Exportar a PDF
-                    </button>
+                    <div class="flex space-x-2">
+                        <button onclick="exportarExcel()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center">
+                            <i class="fas fa-file-excel mr-2"></i> Excel
+                        </button>
+                        <button onclick="generarReportePDF()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center">
+                            <i class="fas fa-file-pdf mr-2"></i> PDF
+                        </button>
+                    </div>
                 </div>
 
                 <!-- ── MODIFICACIÓN 1: CUADRÍCULA DE 4 COLUMNAS PARA FILTROS SEPARADOS ── -->
@@ -301,7 +306,11 @@
                                 </div>
                             </div>
                         </div>
-
+                        <!-- CAJA NEGRA / HISTORIAL -->
+                        <div id="panelHistorial" class="hidden bg-amber-50 border border-amber-200 p-4 rounded-lg space-y-2 mt-4 shadow-inner">
+                            <p class="text-xs font-bold text-amber-800 uppercase tracking-wider"><i class="fas fa-archive mr-1"></i> Historial de Movimientos</p>
+                            <textarea id="emp_historial" rows="3" readonly class="w-full px-3 py-2 border border-amber-300 rounded-md text-xs bg-amber-100 text-gray-800 font-mono focus:outline-none resize-none"></textarea>
+                        </div>
                     </div> 
 
                 </form>
@@ -429,6 +438,16 @@
                 contContrasena.classList.remove('hidden');
             }
 
+            // ⚡ CARGAR CAJA NEGRA (HISTORIAL)
+            const panelHistorial = document.getElementById('panelHistorial');
+            if (emp.historial_movimientos && emp.historial_movimientos.trim() !== "") {
+                panelHistorial.classList.remove('hidden');
+                document.getElementById('emp_historial').value = emp.historial_movimientos;
+            } else {
+                panelHistorial.classList.add('hidden');
+                document.getElementById('emp_historial').value = '';
+            }   
+
             // NOTA DEL ARQUITECTO: Se eliminó la línea problemática que ocultaba el panel aquí
 
             // Interfaz visual (Modo Lectura)
@@ -447,6 +466,8 @@
             // Bloquear campos en modo lectura
             document.getElementById('emp_fecha_retiro').disabled = true;
             document.getElementById('emp_motivo_retiro').disabled = true;
+
+       
         }
 
         function habilitarEdicion() {
@@ -749,10 +770,13 @@
                 const ingresos = `Contrato: ${emp.tipo_contrato || '-'}\nSalario: Bs. ${emp.salario_base || '0.00'}\nBono: Bs. ${emp.bono || '0.00'}\nInicio Ant.: ${emp.fecha_antiguedad ? emp.fecha_antiguedad.split('T')[0] : '-'}`;
                 
                 // Bloque 5: Estado y Retiro
-                let retiro = emp.activo ? '[ ACTIVO ]' : '[ INACTIVO ]';
+                let retiro = emp.activo ? 'ACTIVO' : 'INACTIVO';
                 if (!emp.activo) {
                     retiro += `\nFecha Baja: ${emp.fecha_retiro ? emp.fecha_retiro.split('T')[0] : '-'}`;
                     retiro += `\nMotivo: ${emp.motivo_retiro || 'No especificado'}`;
+                }
+                if (emp.historial_movimientos) {
+                    retiro += `\n\n-- HISTORIAL --\n${emp.historial_movimientos}`;
                 }
 
                 return [
@@ -803,7 +827,50 @@
             doc.save(nombreArchivo);
         }
 
-        // 5. Iniciar la pantalla ordenadamente (Añade esta función al final de todo el JS)
+        // ==========================================
+        // EXPORTACIÓN A EXCEL (CSV Nativo)
+        // ==========================================
+        function exportarExcel() {
+            const listaFiltrada = listaEmpleadosGlobal.filter(emp => {
+                if(filtroActual === 'activos') return emp.activo === true;
+                if(filtroActual === 'inactivos') return emp.activo === false;
+                return true; 
+            });
+
+            if(listaFiltrada.length === 0) return alert("No hay datos para exportar.");
+
+            // Cabeceras del Excel
+            let csvContent = "ID_Lector,Nombres,Apellidos,CI,Sexo,Celular,Correo,Cargo,Sucursal,Seccion,Ingreso,Contrato,Salario_Base,Bono,Estado,Fecha_Baja,Motivo_Baja,Historial\n";
+
+            listaFiltrada.forEach(emp => {
+                // Función para limpiar textos de comas y saltos de línea que rompen Excel
+                const limpiar = (str) => str ? `"${str.toString().replace(/"/g, '""').replace(/\n/g, ' ')}"` : '""';
+                
+                const fila = [
+                    emp.bio_id || '', limpiar(emp.nombres), limpiar(emp.apellidos), limpiar(emp.ci),
+                    limpiar(emp.sexo), limpiar(emp.celular), limpiar(emp.correo),
+                    limpiar(emp.cargo), limpiar(emp.sucursal_nombre), limpiar(emp.seccion_nombre),
+                    emp.fecha_ingreso ? emp.fecha_ingreso.split('T')[0] : '',
+                    limpiar(emp.tipo_contrato), emp.salario_base || 0, emp.bono || 0,
+                    emp.activo ? 'ACTIVO' : 'INACTIVO',
+                    emp.fecha_retiro ? emp.fecha_retiro.split('T')[0] : '',
+                    limpiar(emp.motivo_retiro), limpiar(emp.historial_movimientos)
+                ];
+                csvContent += fila.join(",") + "\n";
+            });
+
+            // Forzar descarga con formato UTF-8 (Para los acentos en Excel)
+            const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `Planilla_${filtroActual.toUpperCase()}_${new Date().getTime()}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // 6. Iniciar la pantalla ordenadamente (Añade esta función al final de todo el JS)
         async function arrancarPantallaPlanilla() {
             await cargarCatalogos();
             await cargarEmpleados();
