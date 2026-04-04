@@ -784,7 +784,7 @@ async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depe
             old_fecha = estado_db[1] or "Desconocida"
             old_motivo = estado_db[2] or "Sin motivo especificado"
             if old_fecha != "Desconocida":
-                anotacion = f"➤ [RECONTRATADO EL {fecha_auditoria}]: Su baja anterior fue el {old_fecha} por '{old_motivo}'.\n"
+                anotacion = f"RECONTRATADO EL {fecha_auditoria}: Su baja anterior fue el {old_fecha} por '{old_motivo}'.\n"
                 nuevo_historial = anotacion + historial_existente # Ponemos lo más nuevo arriba
             
             # Limpiamos su estado actual para que empiece en blanco
