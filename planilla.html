@@ -9,6 +9,8 @@
     <!-- Librerías para exportación a PDF (jsPDF + AutoTable) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <!-- Librería para exportación a Excel nativo (.xlsx) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body class="bg-gray-50 font-sans flex h-screen overflow-hidden text-gray-800">
 
@@ -828,7 +830,7 @@
         }
 
         // ==========================================
-        // EXPORTACIÓN A EXCEL (CSV Nativo)
+        // EXPORTACIÓN A EXCEL NATIVO (.xlsx)
         // ==========================================
         function exportarExcel() {
             const listaFiltrada = listaEmpleadosGlobal.filter(emp => {
@@ -839,35 +841,59 @@
 
             if(listaFiltrada.length === 0) return alert("No hay datos para exportar.");
 
-            // Cabeceras del Excel
-            let csvContent = "ID_Lector,Nombres,Apellidos,CI,Sexo,Celular,Correo,Cargo,Sucursal,Seccion,Ingreso,Contrato,Salario_Base,Bono,Estado,Fecha_Baja,Motivo_Baja,Historial\n";
+            // 1. Preparamos los datos en una matriz (Array de Arrays)
+            const datosParaExcel = [];
+            
+            // 2. Insertamos la cabecera real (Agregamos "Inicio Antigüedad")
+            datosParaExcel.push([
+                "ID Lector", "Nombres", "Apellidos", "C.I.", "Sexo", "Celular", "Correo", 
+                "Cargo", "Sucursal", "Sección", "Fecha Ingreso", "Inicio Antigüedad", "Contrato", 
+                "Salario Base", "Bono", "Estado", "Fecha Baja", "Motivo Baja", "Historial de Movimientos"
+            ]);
 
+            // 3. Insertamos los datos fila por fila
             listaFiltrada.forEach(emp => {
-                // Función para limpiar textos de comas y saltos de línea que rompen Excel
-                const limpiar = (str) => str ? `"${str.toString().replace(/"/g, '""').replace(/\n/g, ' ')}"` : '""';
-                
-                const fila = [
-                    emp.bio_id || '', limpiar(emp.nombres), limpiar(emp.apellidos), limpiar(emp.ci),
-                    limpiar(emp.sexo), limpiar(emp.celular), limpiar(emp.correo),
-                    limpiar(emp.cargo), limpiar(emp.sucursal_nombre), limpiar(emp.seccion_nombre),
+                datosParaExcel.push([
+                    emp.bio_id || '', 
+                    emp.nombres, 
+                    emp.apellidos, 
+                    emp.ci,
+                    emp.sexo || '', 
+                    emp.celular || '', 
+                    emp.correo || '',
+                    emp.cargo || '', 
+                    emp.sucursal_nombre || '', 
+                    emp.seccion_nombre || '',
                     emp.fecha_ingreso ? emp.fecha_ingreso.split('T')[0] : '',
-                    limpiar(emp.tipo_contrato), emp.salario_base || 0, emp.bono || 0,
+                    emp.fecha_antiguedad ? emp.fecha_antiguedad.split('T')[0] : '', // ⚡ AQUÍ ESTÁ EL DATO FALTANTE
+                    emp.tipo_contrato || '', 
+                    Number(emp.salario_base) || 0, 
+                    Number(emp.bono) || 0,
                     emp.activo ? 'ACTIVO' : 'INACTIVO',
                     emp.fecha_retiro ? emp.fecha_retiro.split('T')[0] : '',
-                    limpiar(emp.motivo_retiro), limpiar(emp.historial_movimientos)
-                ];
-                csvContent += fila.join(",") + "\n";
+                    emp.motivo_retiro || '', 
+                    emp.historial_movimientos || ''
+                ]);
             });
 
-            // Forzar descarga con formato UTF-8 (Para los acentos en Excel)
-            const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement("a");
-            const url = URL.createObjectURL(blob);
-            link.setAttribute("href", url);
-            link.setAttribute("download", `Planilla_${filtroActual.toUpperCase()}_${new Date().getTime()}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            // 4. Creamos el Libro de Trabajo (Workbook) y la Hoja (Worksheet)
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(datosParaExcel);
+
+            // Ajustamos el ancho de las columnas (Añadimos un espacio más para la nueva fecha)
+            const anchos = [
+                {wch: 10}, {wch: 20}, {wch: 20}, {wch: 15}, {wch: 12}, {wch: 15}, {wch: 25},
+                {wch: 20}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 18}, {wch: 15}, {wch: 12},  // <- Agregado {wch: 18}
+                {wch: 10}, {wch: 10}, {wch: 15}, {wch: 30}, {wch: 50}
+            ];
+            ws['!cols'] = anchos;
+
+            // 5. Añadimos la hoja al libro
+            XLSX.utils.book_append_sheet(wb, ws, "Planilla_Personal");
+
+            // 6. Generamos y descargamos el archivo .xlsx nativo
+            const nombreArchivo = `Planilla_${filtroActual.toUpperCase()}_${new Date().getTime()}.xlsx`;
+            XLSX.writeFile(wb, nombreArchivo);
         }
 
         // 6. Iniciar la pantalla ordenadamente (Añade esta función al final de todo el JS)
