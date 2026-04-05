@@ -760,7 +760,8 @@ async def registrar_empleado(request: Request, usuario = Depends(verificar_token
     try:
         ci = data.get("ci")
         bio_id = data.get("bio_id") or None
-        
+        turno_id_raw = data.get("turno_id")
+        turno_id_final = int(turno_id_raw) if turno_id_raw else None
         # 1. Buscamos si el C.I. existe en cualquier estado (Activo, Inactivo o Eliminado de prueba)
         cur.execute(f"SELECT id, eliminado FROM {schema}.empleados WHERE ci = %s", (ci,))
         existe = cur.fetchone()
@@ -879,8 +880,9 @@ async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depe
                 fecha_ingreso = %s, fecha_antiguedad = %s, tipo_contrato = %s, 
                 salario_base = %s, bono = %s,
                 fecha_retiro = %s, motivo_retiro = %s,
-                historial_movimientos = %s,
-                turno_id = %s
+                turno_id = %s,
+                historial_movimientos = %s
+                
             WHERE id = %s
         """, (
             data.get("bio_id"), data.get("nombres"), data.get("apellidos"), 
