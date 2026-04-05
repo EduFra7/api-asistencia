@@ -242,11 +242,10 @@
                                 </select>
                             </div>
 
-                            <div class="col-span-2">
-                                <label class="block text-sm font-medium text-gray-700">Turno Asignado</label>
-                                <select class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-100">
-                                    <option>Administración (08:00 - 16:00)</option>
-                                    <option>Nocturno (22:00 - 06:00)</option>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Turno / Horario Asignado <span class="text-red-500">*</span></label>
+                                <select id="emp_turno" required class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 bg-white">
+                                    <option value="">Cargando turnos...</option>
                                 </select>
                             </div>
                             <div>
@@ -406,6 +405,7 @@
             document.getElementById('emp_contrato').value = emp.tipo_contrato || 'Eventual';
             document.getElementById('emp_salario').value = emp.salario_base || '';
             document.getElementById('emp_bono').value = emp.bono || '';
+            document.getElementById('emp_turno').value = emp.turno_id || '';
             
             if(emp.sucursal_id) document.getElementById('emp_sucursal').value = emp.sucursal_id;
             if(emp.seccion_id) document.getElementById('emp_seccion').value = emp.seccion_id;
@@ -590,6 +590,22 @@
             }
         }
 
+        // ⚡ CARGAR LOS TURNOS PARA EL DESPLEGABLE
+        async function cargarTurnosParaSelect() {
+            try {
+                const res = await fetch(`${API_URL}/turnos`, { headers: { 'Authorization': `Bearer ${token}` } });
+                const turnos = await res.json();
+                const selectTurno = document.getElementById('emp_turno');
+                
+                selectTurno.innerHTML = '<option value="">Seleccione un turno...</option>';
+                turnos.forEach(t => {
+                    selectTurno.innerHTML += `<option value="${t.id}">${t.nombre} (${t.hora_ingreso.substring(0,5)} a ${t.hora_salida.substring(0,5)})</option>`;
+                });
+            } catch (error) {
+                console.error("Error al cargar turnos:", error);
+            }
+        }
+
         // Dibuja la tabla aplicando los filtros
         function renderizarTabla() {
             const tbody = document.getElementById('cuerpoTabla');
@@ -679,6 +695,7 @@
                 tipo_contrato: document.getElementById('emp_contrato').value,
                 salario_base: parseFloat(document.getElementById('emp_salario').value) || 0.00,
                 bono: parseFloat(document.getElementById('emp_bono').value) || 0.00,
+                turno_id: document.getElementById('emp_turno').value ? parseInt(document.getElementById('emp_turno').value) : null,
                 // --- LOS CAMPOS CRÍTICOS DE BAJA ---
                 fecha_retiro: document.getElementById('emp_fecha_retiro').value || null,
                 motivo_retiro: document.getElementById('emp_motivo_retiro').value.trim(),
@@ -766,9 +783,9 @@
                 const contacto = `Cel: ${emp.celular || '-'}\nCorreo: ${emp.correo || '-'}\nDir: ${emp.direccion || '-'}`;
                 
                 // Bloque 3: Laboral
-                const laboral = `Cargo: ${emp.cargo || '-'}\nSucursal: ${emp.sucursal_nombre || '-'}\nSección: ${emp.seccion_nombre || '-'}\nIngreso: ${emp.fecha_ingreso ? emp.fecha_ingreso.split('T')[0] : '-'}`;
+                const laboral = `Cargo: ${emp.cargo || '-'}\nSucursal: ${emp.sucursal_nombre || '-'}\nSección: ${emp.seccion_nombre || '-'}\nTurno: ${emp.turno_nombre || 'No asignado'}\nIngreso: ${emp.fecha_ingreso ? emp.fecha_ingreso.split('T')[0] : '-'};
                 
-                // Bloque 4: Económico
+                // Bloque 4: Económico`
                 const ingresos = `Contrato: ${emp.tipo_contrato || '-'}\nSalario: Bs. ${emp.salario_base || '0.00'}\nBono: Bs. ${emp.bono || '0.00'}\nInicio Ant.: ${emp.fecha_antiguedad ? emp.fecha_antiguedad.split('T')[0] : '-'}`;
                 
                 // Bloque 5: Estado y Retiro
@@ -847,7 +864,7 @@
             // 2. Insertamos la cabecera real (Agregamos "Inicio Antigüedad")
             datosParaExcel.push([
                 "ID Lector", "Nombres", "Apellidos", "C.I.", "Sexo", "Celular", "Correo", 
-                "Cargo", "Sucursal", "Sección", "Fecha Ingreso", "Inicio Antigüedad", "Contrato", 
+                "Cargo", "Sucursal", "Sección", "Turno", "Fecha Ingreso", "Inicio Antigüedad", "Contrato", 
                 "Salario Base", "Bono", "Estado", "Fecha Baja", "Motivo Baja", "Historial de Movimientos"
             ]);
 
@@ -864,6 +881,7 @@
                     emp.cargo || '', 
                     emp.sucursal_nombre || '', 
                     emp.seccion_nombre || '',
+                    emp.turno_nombre || 'Sin Turno Asignado', // ⚡ EL NUEVO DATO AQUÍ
                     emp.fecha_ingreso ? emp.fecha_ingreso.split('T')[0] : '',
                     emp.fecha_antiguedad ? emp.fecha_antiguedad.split('T')[0] : '', // ⚡ AQUÍ ESTÁ EL DATO FALTANTE
                     emp.tipo_contrato || '', 
@@ -900,6 +918,7 @@
         async function arrancarPantallaPlanilla() {
             await cargarCatalogos();
             await cargarEmpleados();
+            await cargarTurnosParaSelect();
         }
         
         arrancarPantallaPlanilla();
