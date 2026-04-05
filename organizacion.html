@@ -121,7 +121,8 @@
                         
                         <div>
                             <label class="block text-sm font-medium text-gray-700">No. de Sucursal / Código</label>
-                            <input type="text" placeholder="Ej. SUC-03" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <!-- Agregamos id="suc_codigo", lo hacemos readonly y le damos un fondo gris permanente -->
+                            <input type="text" id="suc_codigo" placeholder="Autogenerado" readonly class="mt-1 w-full px-3 py-2 border border-gray-200 bg-gray-100 text-gray-500 cursor-not-allowed rounded-md text-sm font-mono font-semibold focus:outline-none">
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Nombre de la Sucursal <span class="text-red-500">*</span></label>
@@ -254,6 +255,7 @@
             document.getElementById('formSucursal').reset();
             document.getElementById('formSeccion').reset();
             
+            if(document.getElementById('suc_codigo')) document.getElementById('suc_codigo').value = 'Autogenerado';
             document.getElementById('drawerTitle').textContent = tipo === 'sucursal' ? "Nueva Sucursal" : "Nueva Sección";
             document.getElementById('formSucursal').classList.toggle('hidden', tipo !== 'sucursal');
             document.getElementById('formSeccion').classList.toggle('hidden', tipo !== 'seccion');
@@ -286,6 +288,7 @@
 
             if (tipo === 'sucursal') {
                 const item = listaSucursalesGlobal.find(s => s.id === id);
+                document.getElementById('suc_codigo').value = codigo;
                 document.getElementById('suc_nombre').value = item.nombre || '';
                 document.getElementById('suc_direccion').value = item.direccion || '';
                 document.getElementById('suc_telefono').value = item.telefono || '';
@@ -363,7 +366,7 @@
             } catch (e) { alert("Error al guardar"); }
             finally { btn.disabled = false; btn.textContent = "Guardar"; }
         };
-        
+
         async function ejecutarEliminacion() {
             if (!itemEditandoId) return;
             const msg = tipoContextoActual === 'sucursal' ? "esta sucursal" : "esta sección";
