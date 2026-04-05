@@ -467,9 +467,6 @@ def obtener_sucursales(usuario = Depends(verificar_token)):
 async def crear_sucursal(request: Request, usuario = Depends(verificar_token)):
     schema = usuario["schema_name"]
     data = await request.json()
-    nombre = data.get("nombre")
-    direccion = data.get("direccion", "")
-    
     conn = conectar_bd(schema)
     cur = conn.cursor()
     try:
