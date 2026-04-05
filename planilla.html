@@ -602,16 +602,24 @@
         // ⚡ CARGAR LOS TURNOS PARA EL DESPLEGABLE
         async function cargarTurnosParaSelect() {
             try {
-                const res = await fetch(`${API_URL}/turnos`, { headers: { 'Authorization': `Bearer ${token_api}` } });
-                const turnos = await res.json();
+                // Buscamos el elemento select
                 const selectTurno = document.getElementById('emp_turno');
                 
+                // Mientras carga, le ponemos un texto
+                selectTurno.innerHTML = '<option value="">Cargando turnos...</option>';
+                
+                // Traemos los datos de Railway
+                const res = await fetch(`${API_URL}/turnos`, { headers: { 'Authorization': `Bearer ${token_api}` } });
+                const turnos = await res.json();
+                
+                // Dibujamos las opciones DE FORMA PERMANENTE en el HTML
                 selectTurno.innerHTML = '<option value="">Seleccione un turno...</option>';
                 turnos.forEach(t => {
                     selectTurno.innerHTML += `<option value="${t.id}">${t.nombre} (${t.hora_ingreso.substring(0,5)} a ${t.hora_salida.substring(0,5)})</option>`;
                 });
             } catch (error) {
                 console.error("Error al cargar turnos:", error);
+                selectTurno.innerHTML = '<option value="">Error al cargar</option>';
             }
         }
 
@@ -924,9 +932,11 @@
 
         // 6. Iniciar la pantalla ordenadamente (Añade esta función al final de todo el JS)
         async function arrancarPantallaPlanilla() {
-            await cargarCatalogos();
+            await Promise.all([
+                cargarCatalogos(),
+                cargarTurnosParaSelect()
+            ]);
             await cargarEmpleados();
-            await cargarTurnosParaSelect();
         }
         
         arrancarPantallaPlanilla();
