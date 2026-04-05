@@ -210,6 +210,7 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
                 id SERIAL PRIMARY KEY,
                 nombre VARCHAR(100) NOT NULL,
                 direccion TEXT,
+                telefono VARCHAR(50) DEFAULT,
                 creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
@@ -472,16 +473,46 @@ async def crear_sucursal(request: Request, usuario = Depends(verificar_token)):
     conn = conectar_bd(schema)
     cur = conn.cursor()
     try:
-        cur.execute(
-            f"INSERT INTO {schema}.sucursales (nombre, direccion) VALUES (%s, %s) RETURNING id",
-            (nombre, direccion)
-        )
+        cur.execute(f"INSERT INTO {schema}.sucursales (nombre, direccion, telefono) VALUES (%s, %s, %s)", 
+                    (data.get("nombre"), data.get("direccion"), data.get("telefono", "")))
         nuevo_id = cur.fetchone()[0]
         conn.commit()
         return {"mensaje": "Sucursal registrada con éxito", "id": nuevo_id}
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+# --- RUTA PARA ACTUALIZAR SUCURSAL (EDICIÓN) ---
+@app.put("/sucursales/{sucursal_id}")
+async def actualizar_sucursal(sucursal_id: int, data: dict, usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    conn = conectar_bd(schema)
+    cur = conn.cursor()
+    try:
+        # Ejecutamos la actualización de los 3 campos principales
+        cur.execute(f"""
+            UPDATE {schema}.sucursales 
+            SET nombre = %s, direccion = %s, telefono = %s 
+            WHERE id = %s
+        """, (
+            data.get("nombre"), 
+            data.get("direccion"), 
+            data.get("telefono", ""), 
+            sucursal_id
+        ))
+        
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Sucursal no encontrada")
+            
+        conn.commit()
+        return {"mensaje": "Sucursal actualizada correctamente"}
+    except Exception as e:
+        conn.rollback()
+        print(f"Error al actualizar sucursal: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
     finally:
         cur.close()
         conn.close()
@@ -539,6 +570,35 @@ async def crear_seccion(request: Request, usuario = Depends(verificar_token)):
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+# --- RUTA PARA ACTUALIZAR SECCIÓN (EDICIÓN) ---
+@app.put("/secciones/{seccion_id}")
+async def actualizar_seccion(seccion_id: int, data: dict, usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    conn = conectar_bd(schema)
+    cur = conn.cursor()
+    try:
+        cur.execute(f"""
+            UPDATE {schema}.secciones 
+            SET nombre = %s, descripcion = %s 
+            WHERE id = %s
+        """, (
+            data.get("nombre"), 
+            data.get("descripcion"), 
+            seccion_id
+        ))
+        
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Sección no encontrada")
+            
+        conn.commit()
+        return {"mensaje": "Sección actualizada correctamente"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
     finally:
         cur.close()
         conn.close()

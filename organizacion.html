@@ -62,10 +62,10 @@
                 <div class="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col h-full overflow-hidden">
                     <div class="p-5 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
                         <div>
-                            <h3 class="font-bold text-gray-800 text-lg"><i class="fas fa-sitemap text-indigo-600 mr-2"></i>Secciones</h3>
+                            <h3 class="font-bold text-gray-800 text-lg"><i class="fas fa-sitemap text-blue-600 mr-2"></i>Secciones</h3>
                             <p class="text-xs text-gray-500 mt-1">Departamentos y organigrama interno</p>
                         </div>
-                        <button onclick="abrirPanel('seccion')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center">
+                        <button onclick="abrirPanel('seccion')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center">
                             <i class="fas fa-plus mr-2"></i> Nueva Sección
                         </button>
                     </div>
@@ -96,11 +96,20 @@
         
         <div id="panelDerecho" class="fixed inset-y-0 right-0 w-full md:w-[450px] bg-white shadow-2xl z-40 transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col">
             
-            <div class="p-6 border-b border-gray-200 flex justify-between items-center" id="panelHeader">
-                <h3 class="text-xl font-bold text-white" id="drawerTitle">Nuevo Registro</h3>
-                <button onclick="cerrarPanel()" class="text-white hover:text-gray-200 transition-colors">
-                    <i class="fas fa-times text-2xl"></i>
-                </button>
+            <div class="p-6 border-b border-gray-200 flex justify-between items-center bg-white" id="panelHeader">
+                <div>
+                    <h3 class="text-xl font-bold text-gray-800" id="drawerTitle">Nuevo Registro</h3>
+                    <span id="badgeModo" class="hidden mt-1 text-xs font-semibold px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full border border-yellow-200"><i class="fas fa-lock mr-1"></i>Modo Lectura</span>
+                </div>
+                
+                <div class="flex items-center space-x-3">
+                    <button id="btnHabilitarEdicion" onclick="habilitarEdicion()" class="hidden bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-sm font-medium transition-colors border border-gray-300">
+                        <i class="fas fa-edit mr-1"></i> Editar
+                    </button>
+                    <button onclick="cerrarPanel()" class="text-gray-400 hover:text-red-500 transition-colors">
+                        <i class="fas fa-times text-2xl"></i>
+                    </button>
+                </div>
             </div>
             
             <div class="flex-1 overflow-y-auto p-6 bg-gray-50">
@@ -126,7 +135,7 @@
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Número de Contacto / Teléfono</label>
-                            <input type="text" placeholder="Ej. 2-2458963" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <input type="text" id="suc_telefono" placeholder="Ej. 2-2458963" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500">
                         </div>
                     </div>
                 </form>
@@ -134,79 +143,158 @@
                 <!-- ── FORMULARIO SECCIÓN ── -->
                 <form id="formSeccion" class="hidden space-y-5">
                     <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm space-y-4">
-                        <h4 class="font-bold text-indigo-800 border-b pb-2"><i class="fas fa-sitemap mr-2"></i>Datos del Departamento</h4>
+                        <h4 class="font-bold text-blue-800 border-b pb-2"><i class="fas fa-sitemap mr-2"></i>Datos del Departamento</h4>
                         
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Nombre de la Sección <span class="text-red-500">*</span></label>
                             <!-- MODIFICACIÓN: Añadido ID sec_nombre -->
-                            <input type="text" id="sec_nombre" placeholder="Ej. Ventas y Marketing" required class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                            <input type="text" id="sec_nombre" placeholder="Ej. Ventas y Marketing" required class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500">
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Descripción / Detalles</label>
                             <!-- MODIFICACIÓN: Añadido ID sec_descripcion -->
-                            <textarea id="sec_descripcion" rows="3" placeholder="Breve descripción de las funciones de esta área..." class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-indigo-500 focus:border-indigo-500"></textarea>
+                            <textarea id="sec_descripcion" rows="3" placeholder="Breve descripción de las funciones de esta área..." class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"></textarea>
                         </div>
                     </div>
                 </form>
 
             </div>
 
-            <div class="p-6 border-t border-gray-200 bg-white flex justify-end space-x-3">
-                <button onclick="cerrarPanel()" class="bg-white border border-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-50 font-medium text-sm transition-colors">Cancelar</button>
-                <button id="btnGuardarContexto" class="bg-blue-600 text-white px-8 py-2 rounded-lg hover:bg-blue-700 font-medium shadow-sm text-sm transition-colors">Guardar</button>
+            <div class="p-6 border-t border-gray-200 bg-white flex justify-between items-center">
+                <button id="btnEliminarContexto" onclick="ejecutarEliminacion()" class="hidden text-red-500 hover:text-red-700 font-medium text-sm px-3 py-2 rounded transition-colors disabled:opacity-50">
+                    <i class="fas fa-trash-alt mr-1"></i> Eliminar
+                </button>
+                <div class="flex space-x-3 ml-auto">
+                    <button onclick="cerrarPanel()" class="bg-white border border-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-50 font-medium text-sm transition-colors">Cancelar</button>
+                    <button id="btnGuardarContexto" class="hidden bg-blue-600 text-white px-8 py-2 rounded-lg hover:bg-blue-700 font-medium shadow-sm text-sm transition-colors">Guardar</button>
+                </div>
             </div>
         </div>
 
     </main>
 
     <script>
-        // ── VARIABLES GLOBALES PARA LA API ──
+// ── VARIABLES GLOBALES DEL MÓDULO ──
         const API_URL = "https://asistencia-api.up.railway.app";
         const token = localStorage.getItem('token');
-
-        // ── SIMULACIÓN DE SESIÓN ──
         const userDataStr = localStorage.getItem('userData');
         if (!userDataStr) window.location.href = 'index.html';
         const userData = JSON.parse(userDataStr);
-        // Aunque inyectaremos el menú luego, dejamos esto por seguridad si falla algo
+
         if(document.getElementById('empresaNameDisplay')) {
             document.getElementById('empresaNameDisplay').textContent = userData.empresa;
         }
 
-        function cerrarSesion() {
-            localStorage.clear();
-            window.location.href = 'index.html';
-        }
+        let listaSucursalesGlobal = [];
+        let listaSeccionesGlobal = [];
+        let tipoContextoActual = ''; 
+        let itemEditandoId = null;
 
-        // ── LÓGICA DEL PANEL DESLIZABLE DINÁMICO ──
         const panel = document.getElementById('panelDerecho');
         const overlay = document.getElementById('overlayPanel');
-        
-        function abrirPanel(tipoContexto, nombreEdicion = null) {
-            const titulo = document.getElementById('drawerTitle');
-            const cabecera = document.getElementById('panelHeader');
-            const formSucursal = document.getElementById('formSucursal');
-            const formSeccion = document.getElementById('formSeccion');
-            const btnGuardar = document.getElementById('btnGuardarContexto');
+        const inputsFormularios = document.querySelectorAll('#formSucursal input, #formSucursal textarea, #formSeccion input, #formSeccion textarea');
 
-            // Ocultamos y reseteamos ambos formularios primero
-            formSucursal.reset();
-            formSeccion.reset();
-            formSucursal.classList.add('hidden');
-            formSeccion.classList.add('hidden');
+        // 1. CARGA Y DIBUJADO DE TABLAS
+        async function cargarSucursales() {
+            const tbody = document.getElementById('tablaSucursales');
+            try {
+                const res = await fetch(`${API_URL}/sucursales`, { headers: { 'Authorization': `Bearer ${token}` } });
+                listaSucursalesGlobal = await res.json();
+                
+                tbody.innerHTML = '';
+                if(listaSucursalesGlobal.length === 0) return tbody.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-gray-500">No hay sucursales</td></tr>';
+                
+                listaSucursalesGlobal.forEach((suc, index) => {
+                    tbody.innerHTML += `
+                        <tr onclick="abrirPanelLectura('sucursal', ${suc.id})" class="cursor-pointer hover:bg-blue-50 transition-colors group">
+                            <td class="p-4 font-mono text-gray-500 font-semibold">SUC-0${index + 1}</td>
+                            <td class="p-4">
+                                <p class="font-bold text-gray-800 group-hover:text-blue-600">${suc.nombre}</p>
+                                <p class="text-xs text-gray-500"><i class="fas fa-map-marker-alt text-gray-400 mr-1"></i>${suc.direccion || 'Sin dirección'}</p>
+                            </td>
+                            <td class="p-4 text-gray-600"><i class="fas fa-phone-alt text-gray-400 mr-1"></i>${suc.telefono || 'Sin registro'}</td>
+                            <td class="p-4 text-right"><i class="fas fa-chevron-right text-gray-300 group-hover:text-blue-500"></i></td>
+                        </tr>
+                    `;
+                });
+            } catch (error) { tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-red-500">Error de red</td></tr>'; }
+        }
 
+        async function cargarSecciones() {
+            const tbody = document.getElementById('tablaSecciones');
+            try {
+                const res = await fetch(`${API_URL}/secciones`, { headers: { 'Authorization': `Bearer ${token}` } });
+                listaSeccionesGlobal = await res.json();
+                
+                tbody.innerHTML = '';
+                if(listaSeccionesGlobal.length === 0) return tbody.innerHTML = '<tr><td colspan="3" class="p-8 text-center text-gray-500">No hay secciones</td></tr>';
+                
+                listaSeccionesGlobal.forEach(sec => {
+                    tbody.innerHTML += `
+                        <tr onclick="abrirPanelLectura('seccion', ${sec.id})" class="cursor-pointer hover:bg-blue-50 transition-colors group">
+                            <td class="p-4">
+                                <p class="font-bold text-gray-800 group-hover:text-blue-600">${sec.nombre}</p>
+                                <p class="text-xs text-gray-500">${sec.descripcion || 'Sin descripción'}</p>
+                            </td>
+                            <td class="p-4"><span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-semibold border border-green-200">Activo</span></td>
+                            <td class="p-4 text-right"><i class="fas fa-chevron-right text-gray-300 group-hover:text-blue-500"></i></td>
+                        </tr>
+                    `;
+                });
+            } catch (error) { tbody.innerHTML = '<tr><td colspan="3" class="p-4 text-center text-red-500">Error de red</td></tr>'; }
+        }
+
+        // 2. LÓGICA DE PANELES (Modo Nuevo, Lectura y Edición)
+        function configurarFormulario(tipoContexto, nombreTitulo) {
+            tipoContextoActual = tipoContexto;
+            document.getElementById('drawerTitle').textContent = nombreTitulo;
+            document.getElementById('formSucursal').classList.add('hidden');
+            document.getElementById('formSeccion').classList.add('hidden');
+            
+            if (tipoContexto === 'sucursal') document.getElementById('formSucursal').classList.remove('hidden');
+            else document.getElementById('formSeccion').classList.remove('hidden');
+        }
+
+        function abrirPanelNuevo(tipoContexto) {
+            itemEditandoId = null;
+            document.getElementById('formSucursal').reset();
+            document.getElementById('formSeccion').reset();
+            
+            configurarFormulario(tipoContexto, tipoContexto === 'sucursal' ? 'Nueva Sucursal' : 'Nueva Sección');
+            
+            document.getElementById('badgeModo').classList.add('hidden');
+            document.getElementById('btnHabilitarEdicion').classList.add('hidden');
+            document.getElementById('btnEliminarContexto').classList.add('hidden');
+            document.getElementById('btnGuardarContexto').classList.remove('hidden');
+            document.getElementById('btnGuardarContexto').textContent = "Registrar";
+            
+            inputsFormularios.forEach(input => input.disabled = false);
+
+            panel.classList.remove('translate-x-full');
+            overlay.classList.remove('hidden');
+        }
+
+        function abrirPanelLectura(tipoContexto, idItem) {
+            itemEditandoId = idItem;
+            configurarFormulario(tipoContexto, tipoContexto === 'sucursal' ? 'Detalles de Sucursal' : 'Detalles de Sección');
+            
             if (tipoContexto === 'sucursal') {
-                titulo.textContent = nombreEdicion ? `Editar Sucursal: ${nombreEdicion}` : 'Registrar Nueva Sucursal';
-                cabecera.className = "p-6 border-b border-gray-200 flex justify-between items-center bg-blue-600";
-                btnGuardar.className = "bg-blue-600 text-white px-8 py-2 rounded-lg hover:bg-blue-700 font-medium shadow-sm text-sm transition-colors";
-                formSucursal.classList.remove('hidden');
-            } 
-            else if (tipoContexto === 'seccion') {
-                titulo.textContent = nombreEdicion ? `Editar Sección: ${nombreEdicion}` : 'Registrar Nueva Sección';
-                cabecera.className = "p-6 border-b border-gray-200 flex justify-between items-center bg-indigo-600";
-                btnGuardar.className = "bg-indigo-600 text-white px-8 py-2 rounded-lg hover:bg-indigo-700 font-medium shadow-sm text-sm transition-colors";
-                formSeccion.classList.remove('hidden');
+                const item = listaSucursalesGlobal.find(s => s.id === idItem);
+                document.getElementById('suc_nombre').value = item.nombre || '';
+                document.getElementById('suc_direccion').value = item.direccion || '';
+                document.getElementById('suc_telefono').value = item.telefono || ''; 
+            } else {
+                const item = listaSeccionesGlobal.find(s => s.id === idItem);
+                document.getElementById('sec_nombre').value = item.nombre || '';
+                document.getElementById('sec_descripcion').value = item.descripcion || '';
             }
+
+            document.getElementById('badgeModo').classList.remove('hidden');
+            document.getElementById('btnHabilitarEdicion').classList.remove('hidden');
+            document.getElementById('btnGuardarContexto').classList.add('hidden');
+            document.getElementById('btnEliminarContexto').classList.add('hidden');
+            
+            inputsFormularios.forEach(input => input.disabled = true);
 
             panel.classList.remove('translate-x-full');
             overlay.classList.remove('hidden');
@@ -217,175 +305,85 @@
             overlay.classList.add('hidden');
         }
 
-        // ==============================================================================
-        // ── MOTOR DE DATOS: COMUNICACIÓN CON EL BACKEND (main.py) ──
-        // ==============================================================================
-
-// 1. CARGAR SUCURSALES DESDE LA API
-        async function cargarSucursales() {
-            const tbody = document.getElementById('tablaSucursales');
-            try {
-                const res = await fetch(`${API_URL}/sucursales`, { headers: { 'Authorization': `Bearer ${token}` } });
-                const data = await res.json();
-                
-                tbody.innerHTML = '';
-                if(data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-gray-500">No hay sucursales registradas</td></tr>';
-                    return;
-                }
-                
-                data.forEach((suc, index) => {
-                    tbody.innerHTML += `
-                        <tr class="hover:bg-blue-50 transition-colors group">
-                            <td class="p-4 font-mono text-gray-500 font-semibold">SUC-0${index + 1}</td>
-                            <td class="p-4">
-                                <p class="font-bold text-gray-800">${suc.nombre}</p>
-                                <p class="text-xs text-gray-500"><i class="fas fa-map-marker-alt text-gray-400 mr-1"></i>${suc.direccion || 'Sin dirección registrada'}</p>
-                            </td>
-                            <td class="p-4 text-gray-600"><i class="fas fa-phone-alt text-gray-400 mr-1"></i>-</td>
-                            <td class="p-4 text-right flex justify-end space-x-2">
-                                <button class="text-blue-500 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 p-2 rounded transition-colors" title="Editar">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <!-- NUEVO BOTÓN ELIMINAR -->
-                                <button onclick="eliminarSucursal(${suc.id}, '${suc.nombre}')" class="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 p-2 rounded transition-colors" title="Eliminar">
-                                    <i class="fas fa-trash-alt"></i>
-                                </button>
-                            </td>
-                        </tr>
-                    `;
-                });
-            } catch (error) {
-                tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-red-500">Error de conexión</td></tr>';
-            }
-        }
-
-        // 2. CARGAR SECCIONES DESDE LA API
-        async function cargarSecciones() {
-            const tbody = document.getElementById('tablaSecciones');
-            try {
-                const res = await fetch(`${API_URL}/secciones`, { headers: { 'Authorization': `Bearer ${token}` } });
-                const data = await res.json();
-                
-                tbody.innerHTML = '';
-                if(data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="3" class="p-8 text-center text-gray-500">No hay secciones registradas</td></tr>';
-                    return;
-                }
-                
-                data.forEach(sec => {
-                    tbody.innerHTML += `
-                        <tr class="hover:bg-indigo-50 transition-colors group">
-                            <td class="p-4">
-                                <p class="font-bold text-gray-800">${sec.nombre}</p>
-                                <p class="text-xs text-gray-500">${sec.descripcion || 'Sin descripción'}</p>
-                            </td>
-                            <td class="p-4">
-                                <span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-semibold border border-green-200">Activo</span>
-                            </td>
-                            <td class="p-4 text-right flex justify-end space-x-2">
-                                <button class="text-indigo-500 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100 p-2 rounded transition-colors" title="Editar">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <!-- NUEVO BOTÓN ELIMINAR -->
-                                <button onclick="eliminarSeccion(${sec.id}, '${sec.nombre}')" class="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 p-2 rounded transition-colors" title="Eliminar">
-                                    <i class="fas fa-trash-alt"></i>
-                                </button>
-                            </td>
-                        </tr>
-                    `;
-                });
-            } catch (error) {
-                tbody.innerHTML = '<tr><td colspan="3" class="p-4 text-center text-red-500">Error de conexión</td></tr>';
-            }
-        }
-
-        // 3. FUNCIONES DE ELIMINACIÓN (Con confirmación UI)
-        async function eliminarSucursal(id, nombre) {
-            if (!confirm(`⚠️ ALERTA:\n¿Estás seguro que deseas eliminar la sucursal "${nombre}"?`)) return;
+        function habilitarEdicion() {
+            document.getElementById('badgeModo').classList.add('hidden');
+            document.getElementById('btnHabilitarEdicion').classList.add('hidden');
             
-            try {
-                const res = await fetch(`${API_URL}/sucursales/${id}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                const data = await res.json();
-                
-                if (!res.ok) throw new Error(data.detail || "Error desconocido al eliminar");
-                
-                alert(`✅ ${data.mensaje}`);
-                cargarSucursales(); // Refrescamos la tabla instantáneamente
-            } catch (error) {
-                alert(`❌ No se pudo eliminar:\n${error.message}`);
-            }
-        }
-
-        async function eliminarSeccion(id, nombre) {
-            if (!confirm(`⚠️ ALERTA:\n¿Estás seguro que deseas eliminar el departamento "${nombre}"?`)) return;
+            document.getElementById('btnGuardarContexto').classList.remove('hidden');
+            document.getElementById('btnGuardarContexto').textContent = "Guardar Cambios";
+            document.getElementById('btnEliminarContexto').classList.remove('hidden');
             
-            try {
-                const res = await fetch(`${API_URL}/secciones/${id}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                const data = await res.json();
-                
-                if (!res.ok) throw new Error(data.detail || "Error desconocido al eliminar");
-                
-                alert(`✅ ${data.mensaje}`);
-                cargarSecciones(); // Refrescamos la tabla instantáneamente
-            } catch (error) {
-                alert(`❌ No se pudo eliminar:\n${error.message}`);
-            }
+            inputsFormularios.forEach(input => input.disabled = false);
         }
 
-        // 4. GUARDAR DATOS (Detecta automáticamente qué formulario enviar)
+        // 3. GUARDAR Y ELIMINAR 
         document.getElementById('btnGuardarContexto').addEventListener('click', async () => {
-            const isSucursal = !document.getElementById('formSucursal').classList.contains('hidden');
             const btn = document.getElementById('btnGuardarContexto');
-            
             btn.disabled = true;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Procesando...';
+
+            let payload = {};
+            let endpoint = '';
+            
+            if (tipoContextoActual === 'sucursal') {
+                payload = {
+                    nombre: document.getElementById('suc_nombre').value,
+                    direccion: document.getElementById('suc_direccion').value,
+                    telefono: document.getElementById('suc_telefono').value 
+                };
+                endpoint = '/sucursales';
+            } else {
+                payload = {
+                    nombre: document.getElementById('sec_nombre').value,
+                    descripcion: document.getElementById('sec_descripcion').value
+                };
+                endpoint = '/secciones';
+            }
+
+            const urlFinal = itemEditandoId ? `${API_URL}${endpoint}/${itemEditandoId}` : `${API_URL}${endpoint}`;
+            const metodoHTTP = itemEditandoId ? 'PUT' : 'POST';
 
             try {
-                if (isSucursal) {
-                    const payload = {
-                        nombre: document.getElementById('suc_nombre').value,
-                        direccion: document.getElementById('suc_direccion').value
-                    };
-                    const res = await fetch(`${API_URL}/sucursales`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                        body: JSON.stringify(payload)
-                    });
-                    if(!res.ok) throw new Error("Error al guardar sucursal");
-                    cargarSucursales(); 
-                } else {
-                    const payload = {
-                        nombre: document.getElementById('sec_nombre').value,
-                        descripcion: document.getElementById('sec_descripcion').value
-                    };
-                    const res = await fetch(`${API_URL}/secciones`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                        body: JSON.stringify(payload)
-                    });
-                    if(!res.ok) throw new Error("Error al guardar sección");
-                    cargarSecciones(); 
-                }
+                const res = await fetch(urlFinal, {
+                    method: metodoHTTP,
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify(payload)
+                });
+                if(!res.ok) throw new Error("Error en la base de datos");
+                
+                tipoContextoActual === 'sucursal' ? cargarSucursales() : cargarSecciones(); 
                 cerrarPanel();
-            } catch (error) {
-                alert(error.message);
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = 'Guardar';
-            }
+            } catch (error) { alert(error.message); } 
+            finally { btn.disabled = false; btn.innerHTML = itemEditandoId ? "Guardar Cambios" : "Registrar"; }
         });
 
-        // 4. INICIAR CARGA DE TABLAS (SECUENCIAL PARA EVITAR COLISIÓN EN EL SERVIDOR)
+        async function ejecutarEliminacion() {
+            if (!itemEditandoId) return;
+            const msg = tipoContextoActual === 'sucursal' ? "esta sucursal" : "esta sección";
+            if (!confirm(`⚠️ ALERTA CRÍTICA:\n¿Seguro que deseas eliminar ${msg} de la base de datos?\n(No podrás eliminarlo si tiene personal asignado)`)) return;
+            
+            const btn = document.getElementById('btnEliminarContexto');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Eliminando...';
+
+            try {
+                const endpoint = tipoContextoActual === 'sucursal' ? '/sucursales' : '/secciones';
+                const res = await fetch(`${API_URL}${endpoint}/${itemEditandoId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (!res.ok) throw new Error("No se pudo eliminar. Verifica que no haya empleados asignados a este registro.");
+                
+                tipoContextoActual === 'sucursal' ? cargarSucursales() : cargarSecciones();
+                cerrarPanel();
+            } catch (error) { alert(`❌ Error:\n${error.message}`); }
+            finally { btn.disabled = false; btn.innerHTML = '<i class="fas fa-trash-alt mr-1"></i> Eliminar'; }
+        }
+
         async function iniciarPantallaOrdenada() {
-            await cargarSucursales(); // Primero esperamos que carguen las sucursales
-            await cargarSecciones();  // Cuando termine, cargamos las secciones
+            await cargarSucursales(); 
+            await cargarSecciones();  
         }
         
         iniciarPantallaOrdenada();

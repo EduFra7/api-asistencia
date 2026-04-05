@@ -31,7 +31,7 @@ function renderizarMenu(pantallaActiva) {
             <nav class="space-y-1 px-3">
                 
                 <!-- ── SECCIÓN: ASISTENCIA ── -->
-                <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-4 px-3">Control de Asistencia</div>
+                <div class="text-xs font-semibold uppercase tracking-wider mb-2 mt-4 px-3 uppercase tracking-wider mb-2 mt-6 px-3 ${pantallaActiva === 'dashboard' ? 'text-blue-400' : 'text-slate-500'}">Control de Asistencia</div>
                 <a href="dashboard_cliente.html" class="${pantallaActiva === 'dashboard' ? claseActiva : claseInactiva}">
                     <i class="fas fa-chart-pie w-5 mr-2"></i> Dashboard
                 </a>
@@ -43,7 +43,7 @@ function renderizarMenu(pantallaActiva) {
                 </a>
 
                 <!-- ── SECCIÓN: PLANILLA ── -->
-                <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-6 px-3">Gestión de Planilla</div>
+                <div class="text-xs font-semibold uppercase tracking-wider mb-2 mt-6 px-3 ${pantallaActiva === 'planilla' ? 'text-blue-400' : 'text-slate-500'}">Gestión de Planilla</div>
                 <a href="planilla.html" class="${pantallaActiva === 'planilla' ? claseActiva : claseInactiva}">
                     <i class="fas fa-users w-5 mr-2"></i> Personal
                 </a>
