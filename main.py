@@ -234,8 +234,10 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
                 almuerzo_min INTEGER DEFAULT 0,
                 tolerancia BOOLEAN DEFAULT FALSE,
                 tolerancia_min INTEGER DEFAULT 0,
+                tolerancia_mensual_min INTEGER DEFAULT 0,
                 descuento BOOLEAN DEFAULT TRUE,
-                horas_extras BOOLEAN DEFAULT FALSE
+                horas_extras BOOLEAN DEFAULT FALSE,
+                medio_tiempo_fines BOOLEAN DEFAULT FALSE
             )
 
             -- ==========================================
@@ -951,14 +953,17 @@ async def crear_turno(data: dict, usuario = Depends(verificar_token)):
     try:
         cur.execute(f"""
             INSERT INTO {schema}.turnos 
-            (nombre, hora_ingreso, hora_salida, dias, almuerzo, almuerzo_min, tolerancia, tolerancia_min, descuento, horas_extras) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            (nombre, hora_ingreso, hora_salida, dias, almuerzo, almuerzo_min, 
+             tolerancia, tolerancia_min, tolerancia_mensual_min, descuento, horas_extras, medio_tiempo_fines) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             data.get("nombre"), data.get("hora_ingreso"), data.get("hora_salida"),
-            json.dumps(data.get("dias")), # Convertimos el dict de JS a JSON para Postgres
+            json.dumps(data.get("dias")),
             data.get("almuerzo", False), data.get("almuerzo_min", 0),
             data.get("tolerancia", False), data.get("tolerancia_min", 0),
-            data.get("descuento", True), data.get("horas_extras", False)
+            data.get("tolerancia_mensual_min", 0), # ⚡ NUEVO
+            data.get("descuento", True), data.get("horas_extras", False),
+            data.get("medio_tiempo_fines", False) # ⚡ NUEVO
         ))
         conn.commit()
         return {"mensaje": "Turno creado exitosamente"}
@@ -978,15 +983,18 @@ async def actualizar_turno(turno_id: int, data: dict, usuario = Depends(verifica
         cur.execute(f"""
             UPDATE {schema}.turnos SET 
                 nombre=%s, hora_ingreso=%s, hora_salida=%s, dias=%s, 
-                almuerzo=%s, almuerzo_min=%s, tolerancia=%s, tolerancia_min=%s, 
-                descuento=%s, horas_extras=%s
+                almuerzo=%s, almuerzo_min=%s, 
+                tolerancia=%s, tolerancia_min=%s, tolerancia_mensual_min=%s, 
+                descuento=%s, horas_extras=%s, medio_tiempo_fines=%s
             WHERE id=%s
         """, (
             data.get("nombre"), data.get("hora_ingreso"), data.get("hora_salida"),
             json.dumps(data.get("dias")),
             data.get("almuerzo", False), data.get("almuerzo_min", 0),
             data.get("tolerancia", False), data.get("tolerancia_min", 0),
+            data.get("tolerancia_mensual_min", 0), # ⚡ NUEVO
             data.get("descuento", True), data.get("horas_extras", False),
+            data.get("medio_tiempo_fines", False), # ⚡ NUEVO
             turno_id
         ))
         conn.commit()

@@ -6,13 +6,6 @@
     <title>Horarios y Turnos - C.A Lector</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <style>
-        /* Estilos para el interruptor (Toggle) tipo iOS */
-        .toggle-checkbox:checked { right: 0; border-color: #3b82f6; }
-        .toggle-checkbox:checked + .toggle-label { background-color: #3b82f6; }
-        .toggle-checkbox { right: 0; z-index: 1; border-color: #e5e7eb; transition: all 0.3s; }
-        .toggle-label { width: 3rem; height: 1.5rem; background-color: #e5e7eb; transition: all 0.3s; }
-    </style>
 </head>
 <body class="bg-gray-50 font-sans flex h-screen overflow-hidden text-gray-800">
 
@@ -91,9 +84,19 @@
 
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-2">Días Laborables</label>
-                        <div class="flex justify-between" id="contenedorDias">
-                            <!-- JS inyectará los botones aquí -->
+                        <div class="flex justify-between" id="contenedorDias"></div>
+                    </div>
+
+                    <!-- ⚡ NUEVO: Solo aparece si hay fines de semana seleccionados -->
+                    <div id="caja_fines_semana" class="hidden pt-3 border-t border-gray-100 flex items-center justify-between transition-all">
+                        <div>
+                            <p class="text-sm font-medium text-gray-700 text-blue-700"><i class="fas fa-sun mr-1"></i>Fines de semana 1/2 Jornada</p>
+                            <p class="text-xs text-gray-500">Sábados y/o Domingos se calcularán al 50%</p>
                         </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="t_medio_tiempo_fines" class="sr-only peer">
+                            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
                     </div>
                 </div>
 
@@ -107,10 +110,10 @@
                             <p class="text-sm font-medium text-gray-700">Tiempo de Almuerzo</p>
                             <p class="text-xs text-gray-500">Se descuenta de las horas trabajadas</p>
                         </div>
-                        <div class="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
-                            <input type="checkbox" id="t_almuerzo" onchange="toggleInputs(); calcularHoras()" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"/>
-                            <label for="t_almuerzo" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
-                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="t_almuerzo" onchange="toggleInputs(); calcularHoras()" class="sr-only peer">
+                            <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
                     </div>
                     <div id="caja_almuerzo" class="hidden pl-4 border-l-2 border-indigo-200">
                         <label class="block text-xs font-medium text-gray-600">Minutos otorgados</label>
@@ -118,29 +121,42 @@
                     </div>
 
                     <!-- Tolerancia -->
-                    <div class="flex items-center justify-between pt-2 border-t border-gray-100">
+                    <div class="flex items-center justify-between pt-3 border-t border-gray-100">
                         <div>
-                            <p class="text-sm font-medium text-gray-700">Tolerancia Diaria</p>
-                            <p class="text-xs text-gray-500">Minutos de gracia antes de marcar retraso</p>
+                            <p class="text-sm font-medium text-gray-700">Tolerancia de Retraso</p>
+                            <p class="text-xs text-gray-500">Minutos de gracia diarios y mensuales</p>
                         </div>
-                        <div class="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
-                            <input type="checkbox" id="t_tolerancia" onchange="toggleInputs()" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"/>
-                            <label for="t_tolerancia" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
-                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="t_tolerancia" onchange="toggleInputs()" class="sr-only peer">
+                            <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
                     </div>
-                    <div id="caja_tolerancia" class="hidden pl-4 border-l-2 border-indigo-200">
-                        <label class="block text-xs font-medium text-gray-600">Minutos de gracia</label>
-                        <input type="number" id="t_tolerancia_min" value="10" class="mt-1 w-24 px-2 py-1 border border-gray-300 rounded text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    <!-- ⚡ NUEVO: Dual Inputs para Tolerancia -->
+                    <div id="caja_tolerancia" class="hidden pl-4 border-l-2 border-indigo-200 grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600">Máx. Diario (min)</label>
+                            <input type="number" id="t_tolerancia_min" value="10" class="mt-1 w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600">Máx. Mensual (min)</label>
+                            <input type="number" id="t_tolerancia_mensual" value="30" class="mt-1 w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                        </div>
                     </div>
 
                     <!-- Descuentos y Extras -->
-                    <div class="flex items-center justify-between pt-2 border-t border-gray-100">
+                    <div class="flex items-center justify-between pt-3 border-t border-gray-100">
                         <p class="text-sm font-medium text-gray-700">Descuento Monetario por Retraso</p>
-                        <input type="checkbox" id="t_descuento" class="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500" checked>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="t_descuento" class="sr-only peer" checked>
+                            <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+                        </label>
                     </div>
-                    <div class="flex items-center justify-between pt-2 border-t border-gray-100">
+                    <div class="flex items-center justify-between pt-3 border-t border-gray-100">
                         <p class="text-sm font-medium text-gray-700">Habilitar Horas Extras</p>
-                        <input type="checkbox" id="t_extras" class="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="t_extras" class="sr-only peer">
+                            <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
                     </div>
                 </div>
 
@@ -179,14 +195,21 @@
         function renderizarDias() {
             const cont = document.getElementById('contenedorDias');
             cont.innerHTML = '';
+            let tieneFinDeSemana = false;
+
             diasEstructura.forEach(d => {
                 const activo = diasSeleccionados[d];
+                if (activo && (d === 'S' || d === 'D')) tieneFinDeSemana = true;
+
                 const btn = document.createElement('button');
                 btn.className = `w-10 h-10 rounded-full font-bold text-sm transition-all shadow-sm ${activo ? 'bg-blue-600 text-white border border-blue-700' : 'bg-gray-100 text-gray-400 border border-gray-200 hover:bg-gray-200'}`;
-                btn.innerText = d === 'X' ? 'M' : d; // Visualmente mostramos 'M'
+                btn.innerText = d === 'X' ? 'M' : d;
                 btn.onclick = () => toggleDia(d);
                 cont.appendChild(btn);
             });
+
+            // Lógica visual: Mostrar opción de medio tiempo solo si S o D están activos
+            document.getElementById('caja_fines_semana').classList.toggle('hidden', !tieneFinDeSemana);
         }
 
         function toggleDia(dia) {
@@ -256,7 +279,7 @@
         }
 
         function bloquearCampos(estado) {
-            const campos = ['t_nombre', 't_ingreso', 't_salida', 't_almuerzo', 't_almuerzo_min', 't_tolerancia', 't_tolerancia_min', 't_descuento', 't_extras'];
+            const campos = ['t_nombre', 't_ingreso', 't_salida', 't_almuerzo', 't_almuerzo_min', 't_tolerancia', 't_tolerancia_min', 't_tolerancia_mensual', 't_medio_tiempo_fines', 't_descuento', 't_extras'];
             campos.forEach(id => {
                 document.getElementById(id).disabled = estado;
                 if(document.getElementById(id).type === 'text' || document.getElementById(id).type === 'time' || document.getElementById(id).type === 'number') {
@@ -304,9 +327,12 @@
             document.getElementById('t_almuerzo').checked = t.almuerzo;
             document.getElementById('t_almuerzo_min').value = t.almuerzo_min;
             document.getElementById('t_tolerancia').checked = t.tolerancia;
-            document.getElementById('t_tolerancia_min').value = t.tolerancia_min;
+            document.getElementById('t_tolerancia_min').value = t.tolerancia_min || 0;
+            document.getElementById('t_tolerancia_mensual').value = t.tolerancia_mensual_min || 0; // ⚡ NUEVO
+            document.getElementById('t_medio_tiempo_fines').checked = t.medio_tiempo_fines || false; // ⚡ NUEVO
             document.getElementById('t_descuento').checked = t.descuento;
             document.getElementById('t_extras').checked = t.horas_extras;
+            
             
             diasSeleccionados = t.dias;
 
@@ -347,8 +373,10 @@
                 almuerzo_min: parseInt(document.getElementById('t_almuerzo_min').value || 0),
                 tolerancia: document.getElementById('t_tolerancia').checked,
                 tolerancia_min: parseInt(document.getElementById('t_tolerancia_min').value || 0),
+                tolerancia_mensual_min: parseInt(document.getElementById('t_tolerancia_mensual').value || 0), // ⚡ NUEVO
                 descuento: document.getElementById('t_descuento').checked,
-                horas_extras: document.getElementById('t_extras').checked
+                horas_extras: document.getElementById('t_extras').checked,
+                medio_tiempo_fines: document.getElementById('t_medio_tiempo_fines').checked // ⚡ NUEVO
             };
 
             const url = itemEditandoId ? `${API_URL}/turnos/${itemEditandoId}` : `${API_URL}/turnos`;
