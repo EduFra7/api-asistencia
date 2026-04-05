@@ -735,12 +735,14 @@ async def obtener_empleados(usuario = Depends(verificar_token)):
         cur.execute(f"""
             SELECT e.*, 
                    s.nombre as sucursal_nombre, 
-                   sec.nombre as seccion_nombre
+                   sec.nombre as seccion_nombre,
+                   t.nombre as turno_nombre  -- ⚡ EXTRAEMOS EL NOMBRE DEL TURNO
             FROM {schema}.empleados e
             LEFT JOIN {schema}.sucursales s ON e.sucursal_id = s.id
             LEFT JOIN {schema}.secciones sec ON e.seccion_id = sec.id
+            LEFT JOIN {schema}.turnos t ON e.turno_id = t.id
             WHERE e.eliminado = FALSE
-            ORDER BY e.nombres ASC
+            ORDER BY e.id ASC
         """)
         empleados = cur.fetchall()
         return empleados
@@ -773,25 +775,25 @@ async def registrar_empleado(request: Request, usuario = Depends(verificar_token
                 cur.execute(f"""
                     UPDATE {schema}.empleados 
                     SET bio_id = %s, nombres = %s, apellidos = %s, 
-                        sucursal_id = %s, seccion_id = %s, cargo = %s,
+                        sucursal_id = %s, seccion_id = %s, cargo = %s, turno_id = %s,
                         eliminado = FALSE, activo = TRUE
                     WHERE id = %s
                 """, (bio_id, data.get("nombres"), data.get("apellidos"), 
-                      data.get("sucursal_id"), data.get("seccion_id"), data.get("cargo"), id_db))
+                      data.get("sucursal_id"), data.get("seccion_id"), data.get("cargo"), data.get("turno_id"), id_db))
                 msg = "Empleado reactivado correctamente."
         else:
             # 2. CASO: Es 100% nuevo, no hay rastro de él.
             cur.execute(f"""
             INSERT INTO {schema}.empleados 
-            (bio_id, nombres, apellidos, ci, sucursal_id, seccion_id, cargo, activo,
+            (bio_id, nombres, apellidos, ci, sucursal_id, seccion_id, cargo, turno_id, activo,
              sexo, celular, correo, direccion, fecha_ingreso, fecha_antiguedad, tipo_contrato, salario_base, bono) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             bio_id, data.get("nombres"), data.get("apellidos"), ci, 
             data.get("sucursal_id"), data.get("seccion_id"), data.get("cargo"), True,
             data.get("sexo"), data.get("celular"), data.get("correo"), data.get("direccion"),
             data.get("fecha_ingreso"), data.get("fecha_antiguedad"), data.get("tipo_contrato"),
-            data.get("salario_base", 0), data.get("bono", 0)
+            data.get("salario_base", 0), data.get("bono", 0), data.get("turno_id")
         ))
             msg = "Personal registrado con éxito."
 
@@ -877,7 +879,8 @@ async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depe
                 fecha_ingreso = %s, fecha_antiguedad = %s, tipo_contrato = %s, 
                 salario_base = %s, bono = %s,
                 fecha_retiro = %s, motivo_retiro = %s,
-                historial_movimientos = %s  -- ¡Guardamos la caja negra!
+                historial_movimientos = %s,
+                turno_id = %s
             WHERE id = %s
         """, (
             data.get("bio_id"), data.get("nombres"), data.get("apellidos"), 
@@ -887,6 +890,7 @@ async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depe
             data.get("fecha_ingreso"), data.get("fecha_antiguedad"), data.get("tipo_contrato"),
             data.get("salario_base", 0), data.get("bono", 0),
             fecha_retiro_final, motivo_retiro_final,
+            data.get("turno_id"),
             nuevo_historial,
             empleado_id
         ))

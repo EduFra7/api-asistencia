@@ -346,7 +346,7 @@
         // Ahora estas variables se crearán correctamente
         const panel = document.getElementById('panelDerecho');
         const overlay = document.getElementById('overlayPanel');
-        const inputsFormulario = document.querySelectorAll('.form-input');
+        const inputsFormulario = document.querySelectorAll('.form-input, select');
 
         //VARIABLES PÁRA CONEXIÓN CON SERVIDOR Y EDICIÓN DE PERESONAL
         const API_URL = "https://asistencia-api.up.railway.app";
@@ -371,6 +371,7 @@
             document.getElementById('btnEliminar').classList.add('hidden');
             document.getElementById('badgeModo').classList.add('hidden');
             document.getElementById('btnHabilitarEdicion').classList.add('hidden');
+            
             
             document.getElementById('empleadoForm').reset();
             
@@ -407,9 +408,17 @@
             document.getElementById('emp_bono').value = emp.bono || '';
             document.getElementById('emp_turno').value = emp.turno_id || '';
             
+            
+            
             if(emp.sucursal_id) document.getElementById('emp_sucursal').value = emp.sucursal_id;
             if(emp.seccion_id) document.getElementById('emp_seccion').value = emp.seccion_id;
 
+            if (emp.turno_id) {
+                document.getElementById('emp_turno').value = emp.turno_id;
+            } else {
+                document.getElementById('emp_turno').value = "";
+            }
+            
             // ⚡ SINCRONIZACIÓN PERFECTA DEL BOTÓN
             const toggle = document.getElementById('toggleEstado');
             toggle.checked = emp.activo;
@@ -593,7 +602,7 @@
         // ⚡ CARGAR LOS TURNOS PARA EL DESPLEGABLE
         async function cargarTurnosParaSelect() {
             try {
-                const res = await fetch(`${API_URL}/turnos`, { headers: { 'Authorization': `Bearer ${token}` } });
+                const res = await fetch(`${API_URL}/turnos`, { headers: { 'Authorization': `Bearer ${token_api}` } });
                 const turnos = await res.json();
                 const selectTurno = document.getElementById('emp_turno');
                 
@@ -684,7 +693,7 @@
                 sucursal_id: parseInt(document.getElementById('emp_sucursal').value),
                 seccion_id: parseInt(document.getElementById('emp_seccion').value),
                 activo: document.getElementById('toggleEstado').checked,
-                
+                turno_id: document.getElementById('emp_turno').value ? parseInt(document.getElementById('emp_turno').value) : null,
                 // --- LOS CAMPOS NUEVOS CONECTADOS ---
                 sexo: document.getElementById('emp_sexo').value,
                 celular: document.getElementById('emp_celular').value.trim(),
@@ -695,7 +704,6 @@
                 tipo_contrato: document.getElementById('emp_contrato').value,
                 salario_base: parseFloat(document.getElementById('emp_salario').value) || 0.00,
                 bono: parseFloat(document.getElementById('emp_bono').value) || 0.00,
-                turno_id: document.getElementById('emp_turno').value ? parseInt(document.getElementById('emp_turno').value) : null,
                 // --- LOS CAMPOS CRÍTICOS DE BAJA ---
                 fecha_retiro: document.getElementById('emp_fecha_retiro').value || null,
                 motivo_retiro: document.getElementById('emp_motivo_retiro').value.trim(),
@@ -783,9 +791,9 @@
                 const contacto = `Cel: ${emp.celular || '-'}\nCorreo: ${emp.correo || '-'}\nDir: ${emp.direccion || '-'}`;
                 
                 // Bloque 3: Laboral
-                const laboral = `Cargo: ${emp.cargo || '-'}\nSucursal: ${emp.sucursal_nombre || '-'}\nSección: ${emp.seccion_nombre || '-'}\nTurno: ${emp.turno_nombre || 'No asignado'}\nIngreso: ${emp.fecha_ingreso ? emp.fecha_ingreso.split('T')[0] : '-'};
+                const laboral = `Cargo: ${emp.cargo || '-'}\nSucursal: ${emp.sucursal_nombre || '-'}\nSección: ${emp.seccion_nombre || '-'}\nTurno: ${emp.turno_nombre || 'No asignado'}\nIngreso: ${emp.fecha_ingreso ? emp.fecha_ingreso.split('T')[0] : '-'}`;
                 
-                // Bloque 4: Económico`
+                // Bloque 4: Económico
                 const ingresos = `Contrato: ${emp.tipo_contrato || '-'}\nSalario: Bs. ${emp.salario_base || '0.00'}\nBono: Bs. ${emp.bono || '0.00'}\nInicio Ant.: ${emp.fecha_antiguedad ? emp.fecha_antiguedad.split('T')[0] : '-'}`;
                 
                 // Bloque 5: Estado y Retiro
