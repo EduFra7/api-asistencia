@@ -36,7 +36,7 @@
                             <h3 class="font-bold text-gray-800 text-lg"><i class="fas fa-building text-blue-600 mr-2"></i>Sucursales</h3>
                             <p class="text-xs text-gray-500 mt-1">Ubicaciones físicas y centros de trabajo</p>
                         </div>
-                        <button onclick="abrirPanel('sucursal')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center">
+                        <button onclick="abrirPanelNuevo('sucursal')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center">
                             <i class="fas fa-plus mr-2"></i> Nueva Sucursal
                         </button>
                     </div>
@@ -65,7 +65,7 @@
                             <h3 class="font-bold text-gray-800 text-lg"><i class="fas fa-sitemap text-blue-600 mr-2"></i>Secciones</h3>
                             <p class="text-xs text-gray-500 mt-1">Departamentos y organigrama interno</p>
                         </div>
-                        <button onclick="abrirPanel('seccion')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center">
+                        <button onclick="abrirPanelNuevo('seccion')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center">
                             <i class="fas fa-plus mr-2"></i> Nueva Sección
                         </button>
                     </div>
@@ -200,24 +200,21 @@
             try {
                 const res = await fetch(`${API_URL}/sucursales`, { headers: { 'Authorization': `Bearer ${token}` } });
                 listaSucursalesGlobal = await res.json();
-                
                 tbody.innerHTML = '';
-                if(listaSucursalesGlobal.length === 0) return tbody.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-gray-500">No hay sucursales</td></tr>';
-                
                 listaSucursalesGlobal.forEach((suc, index) => {
+                    const codigo = `SUC-0${index + 1}`;
                     tbody.innerHTML += `
-                        <tr onclick="abrirPanelLectura('sucursal', ${suc.id})" class="cursor-pointer hover:bg-blue-50 transition-colors group">
-                            <td class="p-4 font-mono text-gray-500 font-semibold">SUC-0${index + 1}</td>
+                        <tr onclick="abrirPanelLectura('sucursal', ${suc.id}, '${codigo}')" class="cursor-pointer hover:bg-blue-50 transition-colors group">
+                            <td class="p-4 font-mono text-gray-500 font-semibold">${codigo}</td>
                             <td class="p-4">
                                 <p class="font-bold text-gray-800 group-hover:text-blue-600">${suc.nombre}</p>
-                                <p class="text-xs text-gray-500"><i class="fas fa-map-marker-alt text-gray-400 mr-1"></i>${suc.direccion || 'Sin dirección'}</p>
+                                <p class="text-xs text-gray-500">${suc.direccion || 'Sin dirección'}</p>
                             </td>
-                            <td class="p-4 text-gray-600"><i class="fas fa-phone-alt text-gray-400 mr-1"></i>${suc.telefono || 'Sin registro'}</td>
-                            <td class="p-4 text-right"><i class="fas fa-chevron-right text-gray-300 group-hover:text-blue-500"></i></td>
-                        </tr>
-                    `;
+                            <td class="p-4 text-gray-600">${suc.telefono || 'Sin registro'}</td>
+                            <td class="p-4 text-right"><i class="fas fa-chevron-right text-gray-300"></i></td>
+                        </tr>`;
                 });
-            } catch (error) { tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-red-500">Error de red</td></tr>'; }
+            } catch (e) { console.error(e); }
         }
 
         async function cargarSecciones() {
@@ -225,23 +222,19 @@
             try {
                 const res = await fetch(`${API_URL}/secciones`, { headers: { 'Authorization': `Bearer ${token}` } });
                 listaSeccionesGlobal = await res.json();
-                
                 tbody.innerHTML = '';
-                if(listaSeccionesGlobal.length === 0) return tbody.innerHTML = '<tr><td colspan="3" class="p-8 text-center text-gray-500">No hay secciones</td></tr>';
-                
                 listaSeccionesGlobal.forEach(sec => {
                     tbody.innerHTML += `
-                        <tr onclick="abrirPanelLectura('seccion', ${sec.id})" class="cursor-pointer hover:bg-blue-50 transition-colors group">
+                        <tr onclick="abrirPanelLectura('seccion', ${sec.id}, 'SEC')" class="cursor-pointer hover:bg-blue-50 transition-colors group">
                             <td class="p-4">
                                 <p class="font-bold text-gray-800 group-hover:text-blue-600">${sec.nombre}</p>
                                 <p class="text-xs text-gray-500">${sec.descripcion || 'Sin descripción'}</p>
                             </td>
                             <td class="p-4"><span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-semibold border border-green-200">Activo</span></td>
-                            <td class="p-4 text-right"><i class="fas fa-chevron-right text-gray-300 group-hover:text-blue-500"></i></td>
-                        </tr>
-                    `;
+                            <td class="p-4 text-right"><i class="fas fa-chevron-right text-gray-300"></i></td>
+                        </tr>`;
                 });
-            } catch (error) { tbody.innerHTML = '<tr><td colspan="3" class="p-4 text-center text-red-500">Error de red</td></tr>'; }
+            } catch (e) { console.error(e); }
         }
 
         // 2. LÓGICA DE PANELES (Modo Nuevo, Lectura y Edición)
@@ -255,46 +248,65 @@
             else document.getElementById('formSeccion').classList.remove('hidden');
         }
 
-        function abrirPanelNuevo(tipoContexto) {
+        function abrirPanelNuevo(tipo) {
             itemEditandoId = null;
+            tipoContextoActual = tipo;
             document.getElementById('formSucursal').reset();
             document.getElementById('formSeccion').reset();
             
-            configurarFormulario(tipoContexto, tipoContexto === 'sucursal' ? 'Nueva Sucursal' : 'Nueva Sección');
-            
+            document.getElementById('drawerTitle').textContent = tipo === 'sucursal' ? "Nueva Sucursal" : "Nueva Sección";
+            document.getElementById('formSucursal').classList.toggle('hidden', tipo !== 'sucursal');
+            document.getElementById('formSeccion').classList.toggle('hidden', tipo !== 'seccion');
+
+            // UI Reset
             document.getElementById('badgeModo').classList.add('hidden');
             document.getElementById('btnHabilitarEdicion').classList.add('hidden');
-            document.getElementById('btnEliminarContexto').classList.add('hidden');
             document.getElementById('btnGuardarContexto').classList.remove('hidden');
             document.getElementById('btnGuardarContexto').textContent = "Registrar";
-            
-            inputsFormularios.forEach(input => input.disabled = false);
+            document.getElementById('btnEliminarContexto').classList.add('hidden');
+
+            // Habilitar y poner fondo blanco
+            inputsFormularios.forEach(input => {
+                input.disabled = false;
+                input.classList.remove('bg-gray-100');
+                input.classList.add('bg-white');
+            });
 
             panel.classList.remove('translate-x-full');
             overlay.classList.remove('hidden');
         }
 
-        function abrirPanelLectura(tipoContexto, idItem) {
-            itemEditandoId = idItem;
-            configurarFormulario(tipoContexto, tipoContexto === 'sucursal' ? 'Detalles de Sucursal' : 'Detalles de Sección');
+        function abrirPanelLectura(tipo, id, codigo) {
+            itemEditandoId = id;
+            tipoContextoActual = tipo;
             
-            if (tipoContexto === 'sucursal') {
-                const item = listaSucursalesGlobal.find(s => s.id === idItem);
+            document.getElementById('drawerTitle').innerHTML = `${tipo === 'sucursal' ? 'Sucursal' : 'Sección'} <span class="text-blue-600 ml-2">${codigo}</span>`;
+            document.getElementById('formSucursal').classList.toggle('hidden', tipo !== 'sucursal');
+            document.getElementById('formSeccion').classList.toggle('hidden', tipo !== 'seccion');
+
+            if (tipo === 'sucursal') {
+                const item = listaSucursalesGlobal.find(s => s.id === id);
                 document.getElementById('suc_nombre').value = item.nombre || '';
                 document.getElementById('suc_direccion').value = item.direccion || '';
-                document.getElementById('suc_telefono').value = item.telefono || ''; 
+                document.getElementById('suc_telefono').value = item.telefono || '';
             } else {
-                const item = listaSeccionesGlobal.find(s => s.id === idItem);
+                const item = listaSeccionesGlobal.find(s => s.id === id);
                 document.getElementById('sec_nombre').value = item.nombre || '';
                 document.getElementById('sec_descripcion').value = item.descripcion || '';
             }
 
+            // Modo Lectura UI
             document.getElementById('badgeModo').classList.remove('hidden');
             document.getElementById('btnHabilitarEdicion').classList.remove('hidden');
             document.getElementById('btnGuardarContexto').classList.add('hidden');
             document.getElementById('btnEliminarContexto').classList.add('hidden');
-            
-            inputsFormularios.forEach(input => input.disabled = true);
+
+            // Bloquear y poner fondo gris
+            inputsFormularios.forEach(input => {
+                input.disabled = true;
+                input.classList.remove('bg-white');
+                input.classList.add('bg-gray-100');
+            });
 
             panel.classList.remove('translate-x-full');
             overlay.classList.remove('hidden');
@@ -308,55 +320,50 @@
         function habilitarEdicion() {
             document.getElementById('badgeModo').classList.add('hidden');
             document.getElementById('btnHabilitarEdicion').classList.add('hidden');
-            
             document.getElementById('btnGuardarContexto').classList.remove('hidden');
-            document.getElementById('btnGuardarContexto').textContent = "Guardar Cambios";
             document.getElementById('btnEliminarContexto').classList.remove('hidden');
-            
-            inputsFormularios.forEach(input => input.disabled = false);
+
+            // Desbloquear y poner fondo blanco
+            inputsFormularios.forEach(input => {
+                input.disabled = false;
+                input.classList.remove('bg-gray-100');
+                input.classList.add('bg-white');
+            });
         }
 
         // 3. GUARDAR Y ELIMINAR 
-        document.getElementById('btnGuardarContexto').addEventListener('click', async () => {
-            const btn = document.getElementById('btnGuardarContexto');
+        document.getElementById('btnGuardarContexto').onclick = async function() {
+            const btn = this;
             btn.disabled = true;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Procesando...';
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
-            let payload = {};
-            let endpoint = '';
-            
-            if (tipoContextoActual === 'sucursal') {
-                payload = {
-                    nombre: document.getElementById('suc_nombre').value,
-                    direccion: document.getElementById('suc_direccion').value,
-                    telefono: document.getElementById('suc_telefono').value 
-                };
-                endpoint = '/sucursales';
-            } else {
-                payload = {
-                    nombre: document.getElementById('sec_nombre').value,
-                    descripcion: document.getElementById('sec_descripcion').value
-                };
-                endpoint = '/secciones';
-            }
+            let payload = tipoContextoActual === 'sucursal' ? {
+                nombre: document.getElementById('suc_nombre').value,
+                direccion: document.getElementById('suc_direccion').value,
+                telefono: document.getElementById('suc_telefono').value
+            } : {
+                nombre: document.getElementById('sec_nombre').value,
+                descripcion: document.getElementById('sec_descripcion').value
+            };
 
-            const urlFinal = itemEditandoId ? `${API_URL}${endpoint}/${itemEditandoId}` : `${API_URL}${endpoint}`;
-            const metodoHTTP = itemEditandoId ? 'PUT' : 'POST';
+            const endpoint = tipoContextoActual === 'sucursal' ? '/sucursales' : '/secciones';
+            const url = itemEditandoId ? `${API_URL}${endpoint}/${itemEditandoId}` : `${API_URL}${endpoint}`;
+            const method = itemEditandoId ? 'PUT' : 'POST';
 
             try {
-                const res = await fetch(urlFinal, {
-                    method: metodoHTTP,
+                const res = await fetch(url, {
+                    method: method,
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                     body: JSON.stringify(payload)
                 });
-                if(!res.ok) throw new Error("Error en la base de datos");
-                
-                tipoContextoActual === 'sucursal' ? cargarSucursales() : cargarSecciones(); 
-                cerrarPanel();
-            } catch (error) { alert(error.message); } 
-            finally { btn.disabled = false; btn.innerHTML = itemEditandoId ? "Guardar Cambios" : "Registrar"; }
-        });
-
+                if(res.ok) {
+                    tipoContextoActual === 'sucursal' ? cargarSucursales() : cargarSecciones();
+                    cerrarPanel();
+                }
+            } catch (e) { alert("Error al guardar"); }
+            finally { btn.disabled = false; btn.textContent = "Guardar"; }
+        };
+        
         async function ejecutarEliminacion() {
             if (!itemEditandoId) return;
             const msg = tipoContextoActual === 'sucursal' ? "esta sucursal" : "esta sección";

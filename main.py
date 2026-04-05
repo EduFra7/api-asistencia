@@ -210,7 +210,7 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
                 id SERIAL PRIMARY KEY,
                 nombre VARCHAR(100) NOT NULL,
                 direccion TEXT,
-                telefono VARCHAR(50) DEFAULT,
+                telefono VARCHAR(50) DEFAULT '',
                 creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
 
@@ -473,13 +473,20 @@ async def crear_sucursal(request: Request, usuario = Depends(verificar_token)):
     conn = conectar_bd(schema)
     cur = conn.cursor()
     try:
-        cur.execute(f"INSERT INTO {schema}.sucursales (nombre, direccion, telefono) VALUES (%s, %s, %s)", 
-                    (data.get("nombre"), data.get("direccion"), data.get("telefono", "")))
+        cur.execute(f"""
+            INSERT INTO {schema}.sucursales (nombre, direccion, telefono) 
+            VALUES (%s, %s, %s)
+        """, (
+            data.get("nombre"), 
+            data.get("direccion"), 
+            data.get("telefono", "") # Capturamos el teléfono
+        ))
         nuevo_id = cur.fetchone()[0]
         conn.commit()
         return {"mensaje": "Sucursal registrada con éxito", "id": nuevo_id}
     except Exception as e:
         conn.rollback()
+        print(f"ERROR CRÍTICO EN POST SUCURSALES: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
