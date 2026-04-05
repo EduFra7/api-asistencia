@@ -15,6 +15,7 @@ import bcrypt            # Librería para encriptar contraseñas
 import jwt               # Librería para generar "Tokens" de sesión
 import os                # Librería para leer variables del sistema operativo
 import re                # Librería para buscar y limpiar textos (Expresiones regulares)
+import json              # Asegúrate de que esto esté al inicio de tu main.py
 
 # ==============================================================================
 # 2. CONFIGURACIÓN INICIAL DE LA APLICACIÓN
@@ -222,15 +223,20 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
                 estado BOOLEAN DEFAULT TRUE,
                 creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
-
-            CREATE TABLE {schema}.horarios (
+             
+            CREATE TABLE {schema}.turnos (
                 id SERIAL PRIMARY KEY,
-                nombre VARCHAR(50) NOT NULL,
-                hora_entrada TIME NOT NULL,
+                nombre VARCHAR(100) NOT NULL,
+                hora_ingreso TIME NOT NULL,
                 hora_salida TIME NOT NULL,
-                tolerancia_minutos INT DEFAULT 0, -- Minutos de gracia antes de marcar retraso
-                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
+                dias JSONB NOT NULL,
+                almuerzo BOOLEAN DEFAULT FALSE,
+                almuerzo_min INTEGER DEFAULT 0,
+                tolerancia BOOLEAN DEFAULT FALSE,
+                tolerancia_min INTEGER DEFAULT 0,
+                descuento BOOLEAN DEFAULT TRUE,
+                horas_extras BOOLEAN DEFAULT FALSE
+            )
 
             -- ==========================================
             -- 2. TABLA PRINCIPAL DE EMPLEADOS (Planilla)
@@ -251,7 +257,7 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
                 sucursal_id INT REFERENCES {schema}.sucursales(id), -- Conexión Física
                 seccion_id INT REFERENCES {schema}.secciones(id),   -- ¡NUEVA! Conexión Lógica
                 tipo_contrato VARCHAR(50),
-                turno_id INT REFERENCES {schema}.horarios(id),      -- Conexión a su horario
+                turno_id INT REFERENCES {schema}.turnos(id),      -- Conexión a su horario
                 salario_base NUMERIC(10, 2) DEFAULT 0.00,           -- Permite decimales (Ej. 2500.50)
                 bono NUMERIC(10, 2) DEFAULT 0.00,
                 
@@ -917,6 +923,93 @@ async def eliminar_empleado(empleado_id: int, request: Request, usuario = Depend
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+# ==========================================
+# 9. MÓDULO: TURNOS Y HORARIOS
+# ==========================================
+
+@app.get("/turnos")
+async def obtener_turnos(usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    conn = conectar_bd(schema)
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute(f"SELECT * FROM {schema}.turnos ORDER BY id ASC")
+        return cur.fetchall()
+    finally:
+        cur.close()
+        conn.close()
+
+@app.post("/turnos")
+async def crear_turno(data: dict, usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    conn = conectar_bd(schema)
+    cur = conn.cursor()
+    try:
+        cur.execute(f"""
+            INSERT INTO {schema}.turnos 
+            (nombre, hora_ingreso, hora_salida, dias, almuerzo, almuerzo_min, tolerancia, tolerancia_min, descuento, horas_extras) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (
+            data.get("nombre"), data.get("hora_ingreso"), data.get("hora_salida"),
+            json.dumps(data.get("dias")), # Convertimos el dict de JS a JSON para Postgres
+            data.get("almuerzo", False), data.get("almuerzo_min", 0),
+            data.get("tolerancia", False), data.get("tolerancia_min", 0),
+            data.get("descuento", True), data.get("horas_extras", False)
+        ))
+        conn.commit()
+        return {"mensaje": "Turno creado exitosamente"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+@app.put("/turnos/{turno_id}")
+async def actualizar_turno(turno_id: int, data: dict, usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    conn = conectar_bd(schema)
+    cur = conn.cursor()
+    try:
+        cur.execute(f"""
+            UPDATE {schema}.turnos SET 
+                nombre=%s, hora_ingreso=%s, hora_salida=%s, dias=%s, 
+                almuerzo=%s, almuerzo_min=%s, tolerancia=%s, tolerancia_min=%s, 
+                descuento=%s, horas_extras=%s
+            WHERE id=%s
+        """, (
+            data.get("nombre"), data.get("hora_ingreso"), data.get("hora_salida"),
+            json.dumps(data.get("dias")),
+            data.get("almuerzo", False), data.get("almuerzo_min", 0),
+            data.get("tolerancia", False), data.get("tolerancia_min", 0),
+            data.get("descuento", True), data.get("horas_extras", False),
+            turno_id
+        ))
+        conn.commit()
+        return {"mensaje": "Turno actualizado exitosamente"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+@app.delete("/turnos/{turno_id}")
+async def eliminar_turno(turno_id: int, usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    conn = conectar_bd(schema)
+    cur = conn.cursor()
+    try:
+        cur.execute(f"DELETE FROM {schema}.turnos WHERE id = %s", (turno_id,))
+        conn.commit()
+        return {"mensaje": "Turno eliminado"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail="No se pudo eliminar el turno")
     finally:
         cur.close()
         conn.close()

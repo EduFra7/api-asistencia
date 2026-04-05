@@ -52,9 +52,12 @@ function renderizarMenu(pantallaActiva) {
                 </a>
 
                 <!-- ── SECCIÓN: ORGANIZACIÓN ── -->
-                <div class="text-xs font-semibold uppercase tracking-wider mb-2 mt-6 px-3 ${pantallaActiva === 'organizacion' ? 'text-blue-400' : 'text-slate-500'}">Organización</div>
+                <div class="text-xs font-semibold uppercase tracking-wider mb-2 mt-6 px-3 ${(pantallaActiva === 'organizacion' || pantallaActiva === 'turnos')? 'text-blue-400' : 'text-slate-500'}">Organización</div>
                 <a href="organizacion.html" class="${pantallaActiva === 'organizacion' ? claseActiva : claseInactiva}">
                     <i class="fas fa-sitemap w-5 mr-2"></i> Sucursales y Secciones
+                </a>
+                <a href="turnos.html" class="${pantallaActiva === 'turnos' ? claseActiva : claseInactiva}">
+                    <i class="fas fa-clock w-5 mr-3 text-center"></i> Horarios y Turnos
                 </a>
 
                 <!-- ── SECCIÓN: AJUSTES ── -->
@@ -62,9 +65,7 @@ function renderizarMenu(pantallaActiva) {
                 <a href="ajustes.html" class="${pantallaActiva === 'ajustes' ? claseActiva : claseInactiva}">
                     <i class="fas fa-cogs w-5 mr-2"></i> Configuraciones
                 </a>
-                <a href="#" class="${claseInactiva}">
-                    <i class="fas fa-clock w-5 mr-2"></i> Horarios y Turnos
-                </a>
+                
                 <a href="#" class="${claseInactiva}">
                     <i class="fas fa-fingerprint w-5 mr-2"></i> Lectores Biométricos
                 </a>

@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Horarios y Turnos - C.A Lector</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        /* Estilos para el interruptor (Toggle) tipo iOS */
+        .toggle-checkbox:checked { right: 0; border-color: #3b82f6; }
+        .toggle-checkbox:checked + .toggle-label { background-color: #3b82f6; }
+        .toggle-checkbox { right: 0; z-index: 1; border-color: #e5e7eb; transition: all 0.3s; }
+        .toggle-label { width: 3rem; height: 1.5rem; background-color: #e5e7eb; transition: all 0.3s; }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans flex h-screen overflow-hidden text-gray-800">
+
+    <aside id="menu-lateral" class="w-64 bg-slate-900 text-white flex flex-col h-full shadow-xl z-20"></aside>
+
+    <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
+        <header class="bg-white shadow-sm border-b border-gray-200 p-4 flex justify-between items-center z-10">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-800">Gestión de Turnos</h1>
+                <p class="text-sm text-gray-500">Configuración de horarios, almuerzos y reglas de asistencia</p>
+            </div>
+            <button onclick="abrirPanelNuevo()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center">
+                <i class="fas fa-plus mr-2"></i> Crear Turno
+            </button>
+        </header>
+
+        <div class="flex-1 overflow-y-auto p-6">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <table class="w-full text-left border-collapse">
+                    <thead class="bg-gray-50 border-b border-gray-200 text-xs uppercase text-gray-500 tracking-wider">
+                        <tr>
+                            <th class="p-4 font-semibold">Nombre del Turno</th>
+                            <th class="p-4 font-semibold">Horario</th>
+                            <th class="p-4 font-semibold">Días Laborales</th>
+                            <th class="p-4 font-semibold text-center">Reglas</th>
+                            <th class="p-4 font-semibold text-right">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaTurnos" class="text-sm divide-y divide-gray-100">
+                        <tr><td colspan="5" class="p-8 text-center text-gray-500">Cargando datos...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- PANEL DERECHO -->
+        <div id="overlayPanel" class="fixed inset-0 bg-gray-900 bg-opacity-40 z-30 hidden transition-opacity backdrop-blur-sm" onclick="cerrarPanel()"></div>
+        
+        <div id="panelDerecho" class="fixed inset-y-0 right-0 w-full md:w-[500px] bg-white shadow-2xl z-40 transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col">
+            
+            <div class="p-6 border-b border-gray-200 flex justify-between items-center bg-white">
+                <div>
+                    <h3 class="text-xl font-bold text-gray-800" id="drawerTitle">Nuevo Turno</h3>
+                    <span id="badgeModo" class="hidden mt-1 text-xs font-semibold px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full border border-yellow-200"><i class="fas fa-lock mr-1"></i>Modo Lectura</span>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <button id="btnHabilitarEdicion" onclick="habilitarEdicion()" class="hidden bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded text-sm font-medium transition-colors border border-gray-300"><i class="fas fa-edit mr-1"></i> Editar</button>
+                    <button onclick="cerrarPanel()" class="text-gray-400 hover:text-red-500 transition-colors"><i class="fas fa-times text-2xl"></i></button>
+                </div>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto p-6 bg-gray-50 space-y-5" id="formTurno">
+                
+                <!-- Tarjeta 1: Básico -->
+                <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Nombre del Turno</label>
+                        <input type="text" id="t_nombre" placeholder="Ej. Turno Mañana Oficina" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                </div>
+
+                <!-- Tarjeta 2: Tiempos y Días -->
+                <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm space-y-4">
+                    <h4 class="font-bold text-blue-800 border-b pb-2"><i class="fas fa-clock mr-2"></i>Jornada Laboral</h4>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Hora Ingreso</label>
+                            <input type="time" id="t_ingreso" onchange="calcularHoras()" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Hora Salida</label>
+                            <input type="time" id="t_salida" onchange="calcularHoras()" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Días Laborables</label>
+                        <div class="flex justify-between" id="contenedorDias">
+                            <!-- JS inyectará los botones aquí -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tarjeta 3: Reglas -->
+                <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm space-y-4">
+                    <h4 class="font-bold text-indigo-800 border-b pb-2"><i class="fas fa-gavel mr-2"></i>Reglas de Asistencia</h4>
+                    
+                    <!-- Almuerzo -->
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-700">Tiempo de Almuerzo</p>
+                            <p class="text-xs text-gray-500">Se descuenta de las horas trabajadas</p>
+                        </div>
+                        <div class="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
+                            <input type="checkbox" id="t_almuerzo" onchange="toggleInputs(); calcularHoras()" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"/>
+                            <label for="t_almuerzo" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
+                        </div>
+                    </div>
+                    <div id="caja_almuerzo" class="hidden pl-4 border-l-2 border-indigo-200">
+                        <label class="block text-xs font-medium text-gray-600">Minutos otorgados</label>
+                        <input type="number" id="t_almuerzo_min" value="60" onchange="calcularHoras()" class="mt-1 w-24 px-2 py-1 border border-gray-300 rounded text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+
+                    <!-- Tolerancia -->
+                    <div class="flex items-center justify-between pt-2 border-t border-gray-100">
+                        <div>
+                            <p class="text-sm font-medium text-gray-700">Tolerancia Diaria</p>
+                            <p class="text-xs text-gray-500">Minutos de gracia antes de marcar retraso</p>
+                        </div>
+                        <div class="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
+                            <input type="checkbox" id="t_tolerancia" onchange="toggleInputs()" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer"/>
+                            <label for="t_tolerancia" class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-300 cursor-pointer"></label>
+                        </div>
+                    </div>
+                    <div id="caja_tolerancia" class="hidden pl-4 border-l-2 border-indigo-200">
+                        <label class="block text-xs font-medium text-gray-600">Minutos de gracia</label>
+                        <input type="number" id="t_tolerancia_min" value="10" class="mt-1 w-24 px-2 py-1 border border-gray-300 rounded text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+
+                    <!-- Descuentos y Extras -->
+                    <div class="flex items-center justify-between pt-2 border-t border-gray-100">
+                        <p class="text-sm font-medium text-gray-700">Descuento Monetario por Retraso</p>
+                        <input type="checkbox" id="t_descuento" class="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500" checked>
+                    </div>
+                    <div class="flex items-center justify-between pt-2 border-t border-gray-100">
+                        <p class="text-sm font-medium text-gray-700">Habilitar Horas Extras</p>
+                        <input type="checkbox" id="t_extras" class="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                    </div>
+                </div>
+
+                <!-- Resumen Financiero -->
+                <div class="bg-slate-900 p-4 rounded-xl shadow-inner text-white flex justify-between items-center">
+                    <div>
+                        <p class="text-xs text-slate-300 uppercase tracking-wide">Cálculo de Jornada Efectiva</p>
+                        <p class="text-2xl font-bold font-mono" id="horas_calculadas">0.00 hrs/día</p>
+                    </div>
+                    <i class="fas fa-calculator text-3xl text-slate-600"></i>
+                </div>
+
+            </div>
+
+            <div class="p-6 border-t border-gray-200 bg-white flex justify-between items-center">
+                <button id="btnEliminar" onclick="eliminarTurno()" class="hidden text-red-500 hover:text-red-700 font-medium text-sm px-3 py-2 rounded transition-colors"><i class="fas fa-trash-alt mr-1"></i> Eliminar</button>
+                <div class="flex space-x-3 ml-auto">
+                    <button onclick="cerrarPanel()" class="bg-white border border-gray-300 text-gray-700 px-6 py-2 rounded-lg hover:bg-gray-50 font-medium text-sm transition-colors">Cancelar</button>
+                    <button id="btnGuardar" class="bg-blue-600 text-white px-8 py-2 rounded-lg hover:bg-blue-700 font-medium shadow-sm text-sm transition-colors">Guardar</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const API_URL = "https://asistencia-api.up.railway.app";
+        const token = localStorage.getItem('token');
+        let listaTurnos = [];
+        let itemEditandoId = null;
+
+        // Días de la semana
+        const diasEstructura = ['L', 'M', 'X', 'J', 'V', 'S', 'D']; // Usamos X para Miércoles
+        let diasSeleccionados = { L: true, M: true, X: true, J: true, V: true, S: false, D: false };
+
+        // 1. GENERAR BOTONES DE DÍAS
+        function renderizarDias() {
+            const cont = document.getElementById('contenedorDias');
+            cont.innerHTML = '';
+            diasEstructura.forEach(d => {
+                const activo = diasSeleccionados[d];
+                const btn = document.createElement('button');
+                btn.className = `w-10 h-10 rounded-full font-bold text-sm transition-all shadow-sm ${activo ? 'bg-blue-600 text-white border border-blue-700' : 'bg-gray-100 text-gray-400 border border-gray-200 hover:bg-gray-200'}`;
+                btn.innerText = d === 'X' ? 'M' : d; // Visualmente mostramos 'M'
+                btn.onclick = () => toggleDia(d);
+                cont.appendChild(btn);
+            });
+        }
+
+        function toggleDia(dia) {
+            if(document.getElementById('t_nombre').disabled) return; // Si está en modo lectura, no hacer nada
+            diasSeleccionados[dia] = !diasSeleccionados[dia];
+            renderizarDias();
+        }
+
+        // 2. CALCULAR HORAS (CON CRUCE DE MEDIANOCHE)
+        function calcularHoras() {
+            const ing = document.getElementById('t_ingreso').value;
+            const sal = document.getElementById('t_salida').value;
+            const almMins = document.getElementById('t_almuerzo').checked ? parseInt(document.getElementById('t_almuerzo_min').value || 0) : 0;
+            
+            if(!ing || !sal) return document.getElementById('horas_calculadas').innerText = "0.00 hrs/día";
+
+            let [inH, inM] = ing.split(':').map(Number);
+            let [outH, outM] = sal.split(':').map(Number);
+            
+            let minTotalIngreso = (inH * 60) + inM;
+            let minTotalSalida = (outH * 60) + outM;
+
+            // Lógica de cruce de medianoche (Turno nocturno)
+            if(minTotalSalida < minTotalIngreso) {
+                minTotalSalida += (24 * 60);
+            }
+
+            let minsTrabajados = (minTotalSalida - minTotalIngreso) - almMins;
+            let horasFinales = Math.max(0, minsTrabajados / 60).toFixed(2);
+            document.getElementById('horas_calculadas').innerText = `${horasFinales} hrs/día`;
+        }
+
+        // 3. UI DINÁMICA
+        function toggleInputs() {
+            document.getElementById('caja_almuerzo').classList.toggle('hidden', !document.getElementById('t_almuerzo').checked);
+            document.getElementById('caja_tolerancia').classList.toggle('hidden', !document.getElementById('t_tolerancia').checked);
+        }
+
+        // 4. CRUD Y PANELES
+        async function cargarTurnos() {
+            try {
+                const res = await fetch(`${API_URL}/turnos`, { headers: { 'Authorization': `Bearer ${token}` } });
+                listaTurnos = await res.json();
+                const tbody = document.getElementById('tablaTurnos');
+                tbody.innerHTML = '';
+                
+                if(listaTurnos.length === 0) return tbody.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-gray-500">No hay turnos creados</td></tr>';
+                
+                listaTurnos.forEach(t => {
+                    // Limpiar visualización de días
+                    let diasStr = Object.entries(t.dias).filter(([k, v]) => v).map(([k]) => k === 'X' ? 'M' : k).join(' - ');
+                    
+                    tbody.innerHTML += `
+                        <tr onclick="abrirPanelLectura(${t.id})" class="cursor-pointer hover:bg-blue-50 transition-colors group">
+                            <td class="p-4"><p class="font-bold text-gray-800">${t.nombre}</p></td>
+                            <td class="p-4 font-mono text-sm text-gray-600">${t.hora_ingreso.substring(0,5)} a ${t.hora_salida.substring(0,5)}</td>
+                            <td class="p-4 text-xs font-semibold text-blue-600">${diasStr}</td>
+                            <td class="p-4 text-center space-x-2">
+                                ${t.almuerzo ? '<i class="fas fa-utensils text-orange-400" title="Almuerzo"></i>' : ''}
+                                ${t.horas_extras ? '<i class="fas fa-clock text-green-500" title="Extras"></i>' : ''}
+                            </td>
+                            <td class="p-4 text-right"><i class="fas fa-chevron-right text-gray-300"></i></td>
+                        </tr>
+                    `;
+                });
+            } catch (e) { console.error(e); }
+        }
+
+        function bloquearCampos(estado) {
+            const campos = ['t_nombre', 't_ingreso', 't_salida', 't_almuerzo', 't_almuerzo_min', 't_tolerancia', 't_tolerancia_min', 't_descuento', 't_extras'];
+            campos.forEach(id => {
+                document.getElementById(id).disabled = estado;
+                if(document.getElementById(id).type === 'text' || document.getElementById(id).type === 'time' || document.getElementById(id).type === 'number') {
+                    document.getElementById(id).classList.toggle('bg-gray-100', estado);
+                }
+            });
+        }
+
+        function abrirPanelNuevo() {
+            itemEditandoId = null;
+            document.getElementById('drawerTitle').textContent = "Nuevo Turno";
+            document.getElementById('t_nombre').value = '';
+            document.getElementById('t_ingreso').value = '08:00';
+            document.getElementById('t_salida').value = '16:00';
+            document.getElementById('t_almuerzo').checked = false;
+            document.getElementById('t_tolerancia').checked = false;
+            document.getElementById('t_descuento').checked = true;
+            document.getElementById('t_extras').checked = false;
+            
+            diasSeleccionados = { L: true, M: true, X: true, J: true, V: true, S: false, D: false };
+            
+            bloquearCampos(false);
+            toggleInputs();
+            renderizarDias();
+            calcularHoras();
+
+            document.getElementById('badgeModo').classList.add('hidden');
+            document.getElementById('btnHabilitarEdicion').classList.add('hidden');
+            document.getElementById('btnEliminar').classList.add('hidden');
+            document.getElementById('btnGuardar').classList.remove('hidden');
+
+            document.getElementById('panelDerecho').classList.remove('translate-x-full');
+            document.getElementById('overlayPanel').classList.remove('hidden');
+        }
+
+        function abrirPanelLectura(id) {
+            itemEditandoId = id;
+            const t = listaTurnos.find(x => x.id === id);
+            
+            document.getElementById('drawerTitle').textContent = "Detalles del Turno";
+            document.getElementById('t_nombre').value = t.nombre;
+            document.getElementById('t_ingreso').value = t.hora_ingreso.substring(0,5);
+            document.getElementById('t_salida').value = t.hora_salida.substring(0,5);
+            
+            document.getElementById('t_almuerzo').checked = t.almuerzo;
+            document.getElementById('t_almuerzo_min').value = t.almuerzo_min;
+            document.getElementById('t_tolerancia').checked = t.tolerancia;
+            document.getElementById('t_tolerancia_min').value = t.tolerancia_min;
+            document.getElementById('t_descuento').checked = t.descuento;
+            document.getElementById('t_extras').checked = t.horas_extras;
+            
+            diasSeleccionados = t.dias;
+
+            bloquearCampos(true);
+            toggleInputs();
+            renderizarDias();
+            calcularHoras();
+
+            document.getElementById('badgeModo').classList.remove('hidden');
+            document.getElementById('btnHabilitarEdicion').classList.remove('hidden');
+            document.getElementById('btnEliminar').classList.add('hidden');
+            document.getElementById('btnGuardar').classList.add('hidden');
+
+            document.getElementById('panelDerecho').classList.remove('translate-x-full');
+            document.getElementById('overlayPanel').classList.remove('hidden');
+        }
+
+        function habilitarEdicion() {
+            bloquearCampos(false);
+            document.getElementById('badgeModo').classList.add('hidden');
+            document.getElementById('btnHabilitarEdicion').classList.add('hidden');
+            document.getElementById('btnEliminar').classList.remove('hidden');
+            document.getElementById('btnGuardar').classList.remove('hidden');
+        }
+
+        function cerrarPanel() {
+            document.getElementById('panelDerecho').classList.add('translate-x-full');
+            document.getElementById('overlayPanel').classList.add('hidden');
+        }
+
+        document.getElementById('btnGuardar').onclick = async () => {
+            const payload = {
+                nombre: document.getElementById('t_nombre').value,
+                hora_ingreso: document.getElementById('t_ingreso').value,
+                hora_salida: document.getElementById('t_salida').value,
+                dias: diasSeleccionados,
+                almuerzo: document.getElementById('t_almuerzo').checked,
+                almuerzo_min: parseInt(document.getElementById('t_almuerzo_min').value || 0),
+                tolerancia: document.getElementById('t_tolerancia').checked,
+                tolerancia_min: parseInt(document.getElementById('t_tolerancia_min').value || 0),
+                descuento: document.getElementById('t_descuento').checked,
+                horas_extras: document.getElementById('t_extras').checked
+            };
+
+            const url = itemEditandoId ? `${API_URL}/turnos/${itemEditandoId}` : `${API_URL}/turnos`;
+            const method = itemEditandoId ? 'PUT' : 'POST';
+
+            try {
+                const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(payload) });
+                if(res.ok) { cerrarPanel(); cargarTurnos(); }
+            } catch (e) { alert("Error al guardar"); }
+        };
+
+        async function eliminarTurno() {
+            if(!confirm("¿Seguro que deseas eliminar este turno?")) return;
+            try {
+                const res = await fetch(`${API_URL}/turnos/${itemEditandoId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+                if(res.ok) { cerrarPanel(); cargarTurnos(); }
+            } catch (e) { alert("Error al eliminar"); }
+        }
+
+        renderizarDias();
+        cargarTurnos();
+    </script>
+    <script src="menu.js"></script>
+    <script>renderizarMenu('turnos');</script>
+</body>
+</html>
