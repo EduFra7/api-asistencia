@@ -464,12 +464,12 @@ def obtener_sucursales(usuario = Depends(verificar_token)):
     return list(sucursales)
 
 @app.post("/sucursales")
-async def crear_sucursal(request: Request, usuario = Depends(verificar_token)):
+async def crear_sucursal(data: dict, usuario = Depends(verificar_token)):
     schema = usuario["schema_name"]
-    data = await request.json()
     conn = conectar_bd(schema)
     cur = conn.cursor()
     try:
+        # Asegúrate de que el query tenga 3 campos y 3 %s
         cur.execute(f"""
             INSERT INTO {schema}.sucursales (nombre, direccion, telefono) 
             VALUES (%s, %s, %s)
@@ -478,13 +478,13 @@ async def crear_sucursal(request: Request, usuario = Depends(verificar_token)):
             data.get("direccion"), 
             data.get("telefono", "") # Capturamos el teléfono
         ))
-        nuevo_id = cur.fetchone()[0]
         conn.commit()
-        return {"mensaje": "Sucursal registrada con éxito", "id": nuevo_id}
+        return {"mensaje": "Sucursal creada exitosamente"}
     except Exception as e:
         conn.rollback()
-        print(f"ERROR CRÍTICO EN POST SUCURSALES: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # Esto imprimirá el error real en los logs de Railway
+        print(f"ERROR CRÍTICO EN POST SUCURSALES: {e}") 
+        raise HTTPException(status_code=400, detail=str(e))
     finally:
         cur.close()
         conn.close()
