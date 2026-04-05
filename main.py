@@ -213,6 +213,7 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
                 direccion TEXT,
                 telefono VARCHAR(50) DEFAULT '',
                 creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                eliminado BOOLEAN DEFAULT FALSE
             );
 
             -- ¡NUEVA TABLA DE SECCIONES!
@@ -222,6 +223,7 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
                 descripcion TEXT,
                 estado BOOLEAN DEFAULT TRUE,
                 creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                eliminado BOOLEAN DEFAULT FALSE
             );
              
             CREATE TABLE {schema}.turnos (
@@ -238,6 +240,7 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
                 descuento BOOLEAN DEFAULT TRUE,
                 horas_extras BOOLEAN DEFAULT FALSE,
                 medio_tiempo_fines BOOLEAN DEFAULT FALSE
+                eliminado BOOLEAN DEFAULT FALSE
             )
 
             -- ==========================================
@@ -465,7 +468,7 @@ def obtener_sucursales(usuario = Depends(verificar_token)):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute(f"SELECT * FROM {schema}.sucursales ORDER BY nombre")
+    cur.execute(f"SELECT * FROM {schema}.sucursales WHERE eliminado = FALSE ORDER BY nombre")
     sucursales = cur.fetchall()
     cur.close()
     conn.close()
@@ -535,12 +538,14 @@ def eliminar_sucursal(sucursal_id: int, usuario = Depends(verificar_token)):
     conn = conectar_bd(schema)
     cur = conn.cursor()
     try:
-        cur.execute(f"DELETE FROM {schema}.sucursales WHERE id = %s", (sucursal_id,))
+        # Soft Delete: En lugar de borrar la fila, la ocultamos de la interfaz
+        cur.execute(f"UPDATE {schema}.sucursales SET eliminado = TRUE WHERE id = %s", (sucursal_id,))
         conn.commit()
         return {"mensaje": "Sucursal eliminada correctamente"}
     except psycopg2.IntegrityError:
+        # PROTECCIÓN ANTI-DESASTRES
         conn.rollback()
-        raise HTTPException(status_code=400, detail="No puedes eliminar esta sucursal porque hay personal asignado a ella.")
+        raise HTTPException(status_code=400, detail="No puedes eliminar esta sucursal porque hay personal o relojes biométricos asignados a ella.")
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -556,7 +561,7 @@ def obtener_secciones(usuario = Depends(verificar_token)):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute(f"SELECT * FROM {schema}.secciones ORDER BY nombre")
+    cur.execute(f"SELECT * FROM {schema}.secciones WHERE eliminado = FALSE ORDER BY nombre")
     secciones = cur.fetchall()
     cur.close()
     conn.close()
@@ -621,96 +626,10 @@ def eliminar_seccion(seccion_id: int, usuario = Depends(verificar_token)):
     conn = conectar_bd(schema)
     cur = conn.cursor()
     try:
-        cur.execute(f"DELETE FROM {schema}.secciones WHERE id = %s", (seccion_id,))
+        cur.execute(f"UPDATE {schema}.secciones SET eliminado = TRUE WHERE id = %s", (seccion_id,))
         conn.commit()
         return {"mensaje": "Sección eliminada correctamente"}
     except psycopg2.IntegrityError:
-        conn.rollback()
-        raise HTTPException(status_code=400, detail="No puedes eliminar este departamento porque tienes personal asignado a él.")
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cur.close()
-        conn.close()
-
-# ------------------------------------------------------------------------------
-# C. HORARIOS Y TURNOS (Nivel Temporal)
-# ------------------------------------------------------------------------------
-@app.get("/horarios")
-def obtener_horarios(usuario = Depends(verificar_token)):
-    conn = conectar_bd(usuario["schema_name"])
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    # Formateamos las horas en SQL para que JSON las envíe limpio como "08:00"
-    cur.execute("""
-        SELECT id, nombre, 
-               TO_CHAR(hora_entrada, 'HH24:MI') as hora_entrada, 
-               TO_CHAR(hora_salida, 'HH24:MI') as hora_salida, 
-               tolerancia_minutos 
-        FROM horarios ORDER BY nombre
-    """)
-    horarios = cur.fetchall()
-    cur.close()
-    conn.close()
-    return list(horarios)
-
-@app.post("/horarios")
-async def crear_horario(request: Request, usuario = Depends(verificar_token)):
-    data = await request.json()
-    nombre = data.get("nombre")
-    hora_entrada = data.get("hora_entrada")
-    hora_salida = data.get("hora_salida")
-    tolerancia = data.get("tolerancia_minutos", 0) # Si no envían tolerancia, es 0
-    
-    conn = conectar_bd(usuario["schema_name"])
-    cur = conn.cursor()
-    try:
-        cur.execute(
-            "INSERT INTO horarios (nombre, hora_entrada, hora_salida, tolerancia_minutos) VALUES (%s, %s, %s, %s) RETURNING id",
-            (nombre, hora_entrada, hora_salida, tolerancia)
-        )
-        nuevo_id = cur.fetchone()[0]
-        conn.commit()
-        return {"mensaje": "Horario registrado con éxito", "id": nuevo_id}
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cur.close()
-        conn.close()
-
-# ------------------------------------------------------------------------------
-# D. RUTAS DE ELIMINACIÓN (SUCURSALES Y SECCIONES)
-# ------------------------------------------------------------------------------
-@app.delete("/sucursales/{sucursal_id}")
-def eliminar_sucursal(sucursal_id: int, usuario = Depends(verificar_token)):
-    conn = conectar_bd(usuario["schema_name"])
-    cur = conn.cursor()
-    try:
-        cur.execute("DELETE FROM sucursales WHERE id = %s", (sucursal_id,))
-        conn.commit()
-        return {"mensaje": "Sucursal eliminada correctamente"}
-    except psycopg2.IntegrityError:
-        # PROTECCIÓN ANTI-DESASTRES: Se activa si hay empleados en esta sucursal
-        conn.rollback()
-        raise HTTPException(status_code=400, detail="No puedes eliminar esta sucursal porque hay personal o relojes biométricos asignados a ella.")
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cur.close()
-        conn.close()
-
-@app.delete("/secciones/{seccion_id}")
-def eliminar_seccion(seccion_id: int, usuario = Depends(verificar_token)):
-    conn = conectar_bd(usuario["schema_name"])
-    cur = conn.cursor()
-    try:
-        cur.execute("DELETE FROM secciones WHERE id = %s", (seccion_id,))
-        conn.commit()
-        return {"mensaje": "Sección eliminada correctamente"}
-    except psycopg2.IntegrityError:
-        # PROTECCIÓN ANTI-DESASTRES: Se activa si hay empleados en esta sección
         conn.rollback()
         raise HTTPException(status_code=400, detail="No puedes eliminar este departamento porque tienes personal asignado a él.")
     except Exception as e:
@@ -945,7 +864,7 @@ async def obtener_turnos(usuario = Depends(verificar_token)):
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        cur.execute(f"SELECT * FROM {schema}.turnos ORDER BY id ASC")
+        cur.execute(f"SELECT * FROM {schema}.turnos WHERE eliminado = FALSE ORDER BY id ASC")
         return cur.fetchall()
     finally:
         cur.close()
@@ -1018,7 +937,7 @@ async def eliminar_turno(turno_id: int, usuario = Depends(verificar_token)):
     conn = conectar_bd(schema)
     cur = conn.cursor()
     try:
-        cur.execute(f"DELETE FROM {schema}.turnos WHERE id = %s", (turno_id,))
+        cur.execute(f"UPDATE {schema}.turnos SET eliminado = TRUE WHERE id = %s", (turno_id,))
         conn.commit()
         return {"mensaje": "Turno eliminado"}
     except Exception as e:
