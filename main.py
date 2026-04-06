@@ -954,16 +954,20 @@ async def eliminar_turno(turno_id: int, usuario = Depends(verificar_token)):
         cur.close()
         conn.close()
 
-# ==========================================
+# ==============================================================================
 # 10. MÓDULO: VACACIONES Y PERMISOS
-# ==========================================
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. KARDEX (Calcula los días disponibles matemáticamente)
+# ------------------------------------------------------------------------------
 @app.get("/empleados/{empleado_id}/kardex_vacaciones")
 async def calcular_vacaciones(empleado_id: int, usuario = Depends(verificar_token)):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        # 1. Traer datos del empleado
+        # Traer datos del empleado
         cur.execute(f"SELECT fecha_antiguedad, saldo_vacaciones_inicial FROM {schema}.empleados WHERE id = %s", (empleado_id,))
         emp = cur.fetchone()
         
@@ -974,12 +978,12 @@ async def calcular_vacaciones(empleado_id: int, usuario = Depends(verificar_toke
         saldo_inicial = float(emp["saldo_vacaciones_inicial"] or 0)
         hoy = date.today()
 
-        # 2. Calcular tiempo de servicio
+        # Calcular tiempo de servicio
         diferencia = relativedelta(hoy, fecha_ant)
         anios_totales = diferencia.years
         meses_extra = diferencia.months
 
-        # 3. Escala Laboral
+        # Escala Laboral
         if anios_totales < 5:
             dias_por_anio = 15
         elif anios_totales < 10:
@@ -987,12 +991,12 @@ async def calcular_vacaciones(empleado_id: int, usuario = Depends(verificar_toke
         else:
             dias_por_anio = 30
 
-        # 4. Cálculo Progresivo (Devengo mensual)
+        # Cálculo Progresivo (Devengo mensual)
         dias_ganados_por_anios = anios_totales * dias_por_anio
         dias_ganados_por_meses = (dias_por_anio / 12) * meses_extra
         total_acumulado = saldo_inicial + dias_ganados_por_anios + dias_ganados_por_meses
 
-        # 5. Restar los días ya tomados
+        # Restar los días ya tomados
         cur.execute(f"""
             SELECT SUM(dias_descontados) as tomados 
             FROM {schema}.ausencias 
@@ -1013,6 +1017,12 @@ async def calcular_vacaciones(empleado_id: int, usuario = Depends(verificar_toke
     finally:
         cur.close()
         conn.close()
+
+# ------------------------------------------------------------------------------
+# 2. HISTORIAL DE AUSENCIAS (Trae la lista de vacaciones/permisos tomados)
+# ------------------------------------------------------------------------------
+# ⚡ AQUÍ ESTABA EL ERROR 404: Faltaba esta línea exacta de @app.get
+@app.get("/empleados/{empleado_id}/ausencias")
 async def obtener_historial_ausencias(empleado_id: int, usuario = Depends(verificar_token)):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
@@ -1030,11 +1040,56 @@ async def obtener_historial_ausencias(empleado_id: int, usuario = Depends(verifi
         cur.close()
         conn.close()
 
+# ------------------------------------------------------------------------------
+# 3. SEGURIDAD: AJUSTAR SALDO INICIAL (Requiere Contraseña de Admin)
+# ------------------------------------------------------------------------------
+# ⚡ ESTA ES LA NUEVA RUTA QUE FALTABA PARA QUE FUNCIONE EL BOTÓN DEL FRONTEND
+@app.put("/empleados/{empleado_id}/saldo_inicial")
+async def actualizar_saldo_inicial(empleado_id: int, data: dict, usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    nuevo_saldo = data.get("saldo_inicial")
+    admin_password = data.get("admin_password")
+
+    if nuevo_saldo is None or not admin_password:
+        raise HTTPException(status_code=400, detail="El saldo y la contraseña son obligatorios.")
+
+    # Verificación de Seguridad (Contraseña en Base Maestra)
+    conn_pub = conectar_bd("public")
+    cur_pub = conn_pub.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur_pub.execute("SELECT password_hash FROM usuarios WHERE id = %s", (usuario["id"],))
+    user_db = cur_pub.fetchone()
+    cur_pub.close()
+    conn_pub.close()
+
+    # Comparamos la contraseña digitada
+    if not user_db or not bcrypt.checkpw(admin_password.encode(), user_db["password_hash"].encode()):
+        raise HTTPException(status_code=401, detail="Contraseña de Administrador incorrecta. Operación denegada.")
+
+    # Guardar el nuevo saldo
+    conn = conectar_bd(schema)
+    cur = conn.cursor()
+    try:
+        cur.execute(f"""
+            UPDATE {schema}.empleados 
+            SET saldo_vacaciones_inicial = %s 
+            WHERE id = %s
+        """, (nuevo_saldo, empleado_id))
+        conn.commit()
+        return {"mensaje": "Saldo inicial ajustado correctamente."}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+# ------------------------------------------------------------------------------
+# 4. REGISTRAR UNA NUEVA AUSENCIA (Motor de Guardado Inteligente)
+# ------------------------------------------------------------------------------
 @app.post("/ausencias")
 async def registrar_ausencia(data: dict, usuario = Depends(verificar_token)):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
-    # Usamos RealDictCursor para poder leer los datos del turno por su nombre de columna
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) 
     try:
         empleado_id = data.get("empleado_id")
@@ -1052,7 +1107,7 @@ async def registrar_ausencia(data: dict, usuario = Depends(verificar_token)):
             f_inicio = datetime.strptime(fecha_inicio, "%Y-%m-%d")
             f_fin = datetime.strptime(fecha_fin, "%Y-%m-%d")
             
-            # ⚡ 1. TRAEMOS LAS REGLAS DEL TURNO DEL EMPLEADO
+            # Traemos reglas del turno
             cur.execute(f"""
                 SELECT t.dias, t.medio_tiempo_fines 
                 FROM {schema}.empleados e
@@ -1064,32 +1119,30 @@ async def registrar_ausencia(data: dict, usuario = Depends(verificar_token)):
             if not turno_emp:
                 raise HTTPException(status_code=400, detail="El empleado no tiene un turno asignado para calcular los días.")
 
-            dias_laborales_json = turno_emp["dias"] # Ej: {"L": true, "M": true, "S": true, "D": false}
+            dias_laborales_json = turno_emp["dias"] 
             es_medio_tiempo_fines = turno_emp["medio_tiempo_fines"]
 
-            # ⚡ 2. MOTOR MATEMÁTICO: Recorremos día por día
+            # Recorremos día por día saltando días no laborales
             mapa_dias = {0: 'L', 1: 'M', 2: 'X', 3: 'J', 4: 'V', 5: 'S', 6: 'D'}
             dia_actual = f_inicio
             
             while dia_actual <= f_fin:
-                num_dia = dia_actual.weekday() # 0 = Lunes, 6 = Domingo
+                num_dia = dia_actual.weekday() 
                 letra_dia = mapa_dias[num_dia]
                 
-                # Verificamos si en su turno ese día se trabaja
                 if dias_laborales_json.get(letra_dia, False) == True:
-                    # Si es fin de semana y su turno dice que es medio tiempo
                     if letra_dia in ['S', 'D'] and es_medio_tiempo_fines:
                         dias_descontados += 0.5
                     else:
                         dias_descontados += 1.0
                 
-                dia_actual += timedelta(days=1) # Avanzamos al siguiente día
+                dia_actual += timedelta(days=1) 
 
             if dias_descontados == 0:
                 raise HTTPException(status_code=400, detail="El rango seleccionado no contiene días laborales para este empleado.")
 
         else:
-            # ⚡ Lógica de Permiso por Horas (Se mantiene igual)
+            # Lógica de Permiso por Horas
             hora_inicio = data.get("hora_inicio")
             hora_fin = data.get("hora_fin")
             h_ini = datetime.strptime(hora_inicio, "%H:%M")
@@ -1100,7 +1153,6 @@ async def registrar_ausencia(data: dict, usuario = Depends(verificar_token)):
                 diferencia_segundos += 86400 
             horas_totales = round(diferencia_segundos / 3600.0, 2)
 
-        # 3. Guardamos en Base de Datos
         cur.execute(f"""
             INSERT INTO {schema}.ausencias 
             (empleado_id, tipo, fecha_inicio, fecha_fin, hora_inicio, hora_fin, horas_totales, dias_descontados, motivo)
@@ -1116,26 +1168,25 @@ async def registrar_ausencia(data: dict, usuario = Depends(verificar_token)):
         cur.close()
         conn.close()
 
+# ------------------------------------------------------------------------------
+# 5. ANULAR AUSENCIA (Soft Delete con Protección de Auditoría)
+# ------------------------------------------------------------------------------
 @app.delete("/ausencias/{ausencia_id}")
 async def anular_ausencia(ausencia_id: int, usuario = Depends(verificar_token)):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        # 1. Buscamos la ausencia
         cur.execute(f"SELECT fecha_inicio FROM {schema}.ausencias WHERE id = %s", (ausencia_id,))
         ausencia = cur.fetchone()
         
         if not ausencia:
             raise HTTPException(status_code=404, detail="Registro no encontrado.")
             
-        # 2. AUDITORÍA: Validar si la vacación ya empezó/pasó
         hoy = date.today()
-        # Si la fecha ya pasó y el usuario no es superadmin, bloqueamos la anulación.
         if ausencia["fecha_inicio"] <= hoy and usuario["rol"] != "superadmin":
              raise HTTPException(status_code=403, detail="No puedes borrar ausencias pasadas o en curso. Solo el SuperAdministrador tiene este privilegio.")
 
-        # 3. EJECUTAR SOFT DELETE (Esto devolverá el saldo automáticamente al Kardex)
         cur.execute(f"UPDATE {schema}.ausencias SET eliminado = TRUE, estado = 'anulado' WHERE id = %s", (ausencia_id,))
         
         conn.commit()
@@ -1147,15 +1198,15 @@ async def anular_ausencia(ausencia_id: int, usuario = Depends(verificar_token)):
         cur.close()
         conn.close()
 
-# RUTA PARA EDITAR MOTIVO O ESTADO (Sin afectar las fechas para proteger la matemática)
+# ------------------------------------------------------------------------------
+# 6. EDITAR OBSERVACIONES DE AUSENCIA
+# ------------------------------------------------------------------------------
 @app.put("/ausencias/{ausencia_id}")
 async def editar_ausencia(ausencia_id: int, data: dict, usuario = Depends(verificar_token)):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor()
     try:
-        # Por seguridad contable, la edición suele limitarse a observaciones o estado.
-        # Si se equivocaron de fechas, la buena práctica ERP es: Anular y crear una nueva.
         nuevo_motivo = data.get("motivo")
         
         cur.execute(f"""
