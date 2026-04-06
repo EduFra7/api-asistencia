@@ -1063,7 +1063,7 @@ async def actualizar_saldo_inicial(empleado_id: int, data: dict, usuario = Depen
 
     # Comparamos la contraseña digitada
     if not user_db or not bcrypt.checkpw(admin_password.encode(), user_db["password_hash"].encode()):
-        raise HTTPException(status_code=401, detail="Contraseña de Administrador incorrecta. Operación denegada.")
+        raise HTTPException(status_code=403, detail="Contraseña de Administrador incorrecta. Operación denegada.")
 
     # Guardar el nuevo saldo
     conn = conectar_bd(schema)

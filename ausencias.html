@@ -192,7 +192,12 @@
 
                     <!-- TABLA HISTÓRICA -->
                     <div class="mt-8 bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
-                        <h4 class="font-bold text-gray-800 mb-3 border-b pb-2 text-sm uppercase"><i class="fas fa-history mr-2 text-gray-400"></i>Historial del Empleado</h4>
+                        <div class="flex justify-between items-center mb-3 border-b pb-2">
+                            <h4 class="font-bold text-gray-800 text-sm uppercase"><i class="fas fa-history mr-2 text-gray-400"></i>Historial del Empleado</h4>
+                            <button onclick="generarReporteHistorialPDF()" class="text-xs bg-red-50 text-red-600 hover:bg-red-100 px-3 py-1.5 rounded border border-red-200 transition-colors font-bold shadow-sm">
+                                <i class="fas fa-file-pdf mr-1"></i>Descargar Historial
+                            </button>
+                        </div>
                         <div class="overflow-x-auto">
                             <table class="w-full text-left text-sm">
                                 <thead class="bg-gray-50 text-gray-500 uppercase text-xs">
@@ -254,6 +259,8 @@
         let empleadoSeleccionadoId = null;
         let tipoRegistroActual = 'vacacion';
         let calendarioInstancia = null;
+        let historialGlobal = [];
+        
 
         // ==========================================
         // UI: CONTROL DE PANELES Y ESTILOS
@@ -332,6 +339,7 @@
                 const data = await res.json();
                 empleadosGlobal = data;
                 renderizarTablaPrincipal();
+                cargarTodosLosKardexEnFondo();
             } catch (error) {
                 console.error("Error cargando empleados");
             }
@@ -348,6 +356,8 @@
             // Desbloqueamos la interfaz
             document.getElementById('tarjetaKardex').classList.remove('opacity-50', 'pointer-events-none');
             document.getElementById('cajaControles').classList.remove('opacity-50', 'pointer-events-none');
+            // ⚡ MEJORA UX: Mostramos un spinner mientras piensa
+            document.getElementById('kardex_disponibles').innerHTML = '<i class="fas fa-spinner fa-spin text-3xl"></i>';
             
             try {
                 // ⚡ LLAMADA AL MOTOR MATEMÁTICO EN PYTHON
@@ -400,8 +410,8 @@
                             <p>${emp.sucursal_nombre || '-'}</p>
                             <p class="text-xs text-gray-400">${emp.seccion_nombre || '-'}</p>
                         </td>
-                        <td class="p-4 text-center font-mono font-bold text-blue-700 text-lg">
-                            -- --
+                        <td id="celda_kardex_${emp.id}" class="p-4 text-center font-mono font-bold text-blue-700 text-lg">
+                            <span class="text-xs text-gray-400"><i class="fas fa-spinner fa-spin"></i></span>
                         </td>
                         <td class="p-4">${badgeEstado}</td>
                     </tr>`;
@@ -413,18 +423,20 @@
                 return alert("⚠️ Debes seleccionar un empleado primero.");
             }
 
-            // 1. Extraer las fechas del Flatpickr
+            // 1. Extraer las fechas del Flatpickr (SOPORTE MULTILINGÜE)
             const rango = document.getElementById('rango_fechas').value;
             if (!rango) return alert("⚠️ Selecciona el rango de fechas.");
 
             let fecha_inicio = rango;
             let fecha_fin = rango;
             
-            // Flatpickr usa " to " cuando son varios días (ej: 2026-05-01 to 2026-05-05)
-            if (rango.includes(" to ")) {
-                const partes = rango.split(" to ");
-                fecha_inicio = partes[0];
-                fecha_fin = partes[1];
+            // Verificamos si usa " a " (Español) o " to " (Inglés)
+            let separador = rango.includes(" a ") ? " a " : (rango.includes(" to ") ? " to " : null);
+            
+            if (separador) {
+                const partes = rango.split(separador);
+                fecha_inicio = partes[0].trim();
+                fecha_fin = partes[1].trim();
             }
 
             // 2. Armar el paquete de datos
@@ -477,7 +489,7 @@
         }
 
         // ⚡ CARGAR Y DIBUJAR EL HISTÓRICO CON LOS COMENTARIOS
-        async function cargarHistorialAusencias(idEmpleado) {
+ async function cargarHistorialAusencias(idEmpleado) {
             const tbody = document.getElementById('tabla_historial_empleado');
             tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-500 text-xs"><i class="fas fa-spinner fa-spin mr-2"></i>Cargando historial...</td></tr>';
             
@@ -489,6 +501,7 @@
                 if (!res.ok) throw new Error("Error al cargar historial");
                 const historial = await res.json();
                 
+                historialGlobal = historial; // ⚡ GUARDAMOS EN MEMORIA PARA EL PDF
                 tbody.innerHTML = '';
                 
                 if (historial.length === 0) {
@@ -496,22 +509,18 @@
                     return;
                 }
                 
-                historial.forEach(reg => {
-                    // Formateamos las fechas
+                historial.forEach((reg, index) => { // ⚡ AGREGAMOS EL INDEX AQUÍ
                     let fechasStr = `${reg.fecha_inicio} al ${reg.fecha_fin}`;
                     
-                    // Diseño condicional: Vacación (Azul) o Permiso (Naranja)
                     let tipoStr = reg.tipo === 'vacacion' ? 
                         '<span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold"><i class="fas fa-plane mr-1"></i>Vacación</span>' : 
                         '<span class="bg-orange-100 text-orange-700 px-2 py-1 rounded text-xs font-bold"><i class="fas fa-clock mr-1"></i>Permiso</span>';
                     
-                    // Mostramos días u horas según corresponda
                     let descuentoStr = reg.tipo === 'vacacion' ? 
                         `<span class="font-bold text-gray-800">${reg.dias_descontados} días</span>` : 
                         `<span class="font-bold text-gray-800">${reg.horas_totales} hrs</span> <span class="text-xs text-gray-500">(${reg.hora_inicio.substring(0,5)} a ${reg.hora_fin.substring(0,5)})</span>`;
                     
-                    // ⚡ AQUÍ ESTÁ EL COMENTARIO SOLICITADO
-                    let motivoStr = reg.motivo ? `<p class="text-xs text-gray-500 italic mt-1 break-words leading-tight"><i class="fas fa-comment-alt text-gray-300 mr-1"></i>"${reg.motivo}"</p>` : '';
+                    let motivoStr = reg.motivo ? `<p class="text-xs text-gray-500 italic mt-1 break-words leading-tight">"${reg.motivo}"</p>` : '';
 
                     tbody.innerHTML += `
                         <tr class="hover:bg-gray-50 transition-colors border-b border-gray-100">
@@ -522,7 +531,8 @@
                                 ${motivoStr}
                             </td>
                             <td class="p-3 text-center space-x-2">
-                                <button onclick="alert('Función Boleta PDF en desarrollo')" class="text-blue-500 hover:text-blue-700 transition-colors" title="Imprimir Boleta">
+                                <!-- ⚡ CONECTAMOS EL BOTÓN AL MOTOR PDF -->
+                                <button onclick="generarBoletaPDF(${index})" class="text-blue-500 hover:text-blue-700 transition-colors" title="Imprimir Boleta">
                                     <i class="fas fa-file-pdf"></i>
                                 </button>
                                 <button onclick="alert('Función Eliminar en desarrollo')" class="text-red-400 hover:text-red-600 transition-colors" title="Anular Ausencia">
@@ -533,8 +543,8 @@
                     `;
                 });
             } catch (error) {
-                console.error("Error cargando historial:", error);
-                tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-red-500 text-xs"><i class="fas fa-exclamation-triangle mr-1"></i>Error de conexión al cargar historial.</td></tr>';
+                console.error(error);
+                tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-red-500 text-xs">Error de conexión al cargar historial.</td></tr>';
             }
         }
 
@@ -585,7 +595,8 @@
                 cerrarModalSaldoInicial();
                 
                 // Recargamos el Kardex para que se refleje la matemática al instante
-                cargarKardexEmpleado(empleadoSeleccionadoId);
+                await cargarKardexEmpleado(empleadoSeleccionadoId);
+                cargarTodosLosKardexEnFondo();
                 
             } catch (error) {
                 alert("❌ " + error.message);
@@ -593,6 +604,153 @@
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fas fa-save mr-2"></i> Confirmar Ajuste';
             }
+        }
+        
+        // ⚡ TRABAJADOR EN SEGUNDO PLANO PARA LA TABLA PRINCIPAL
+        async function cargarTodosLosKardexEnFondo() {
+            for (const emp of empleadosGlobal) {
+                try {
+                    const res = await fetch(`${API_URL}/empleados/${emp.id}/kardex_vacaciones`, { headers: { 'Authorization': `Bearer ${token_api}` } });
+                    if(res.ok) {
+                        const kardex = await res.json();
+                        const celda = document.getElementById(`celda_kardex_${emp.id}`);
+                        if (celda) {
+                            celda.textContent = kardex.dias_disponibles !== undefined ? kardex.dias_disponibles.toFixed(2) : "0.00";
+                        }
+                    }
+                } catch (e) {
+                    console.error(`Error calculando kardex en fondo para ID ${emp.id}`);
+                }
+            }
+        }
+
+        // ==========================================
+        // EXPORTACIÓN A PDF (BOLETA Y REPORTE)
+        // ==========================================
+
+        function generarBoletaPDF(index) {
+            // Extraemos los datos del empleado y del registro específico
+            const reg = historialGlobal[index];
+            const emp = empleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
+            
+            if(!reg || !emp) return alert("Error al leer los datos para el PDF.");
+
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('p', 'mm', 'a5'); // Tamaño A5 para boletas es más estético
+            
+            // --- ESTILOS Y CABECERA ---
+            doc.setFillColor(30, 58, 138); // Color Azul Corporativo
+            doc.rect(0, 0, 150, 20, 'F');
+            
+            doc.setTextColor(255, 255, 255);
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(14);
+            doc.text("BOLETA DE AUTORIZACIÓN", 74, 13, { align: "center" });
+
+            // --- DATOS DEL EMPLEADO ---
+            doc.setTextColor(50, 50, 50);
+            doc.setFontSize(10);
+            doc.text(`Empleado: ${emp.nombres} ${emp.apellidos}`, 15, 35);
+            doc.setFont("helvetica", "normal");
+            doc.text(`C.I.: ${emp.ci}    |    ID Reloj: ${emp.bio_id || 'N/A'}`, 15, 42);
+            doc.text(`Cargo: ${emp.cargo || 'No especificado'}`, 15, 49);
+            
+            doc.line(15, 54, 133, 54); // Línea separadora
+
+            // --- DETALLES DE LA AUSENCIA ---
+            doc.setFont("helvetica", "bold");
+            doc.text("Detalle de la Solicitud:", 15, 62);
+            
+            doc.setFont("helvetica", "normal");
+            doc.text(`Tipo de Registro: ${reg.tipo.toUpperCase()}`, 15, 70);
+            doc.text(`Fecha Inicio: ${reg.fecha_inicio}`, 15, 77);
+            doc.text(`Fecha Retorno: ${reg.fecha_fin}`, 80, 77);
+            
+            if (reg.tipo === 'permiso') {
+                doc.text(`Hora Salida: ${reg.hora_inicio.substring(0,5)}`, 15, 84);
+                doc.text(`Hora Retorno: ${reg.hora_fin.substring(0,5)}`, 80, 84);
+                doc.setFont("helvetica", "bold");
+                doc.text(`Total Horas: ${reg.horas_totales}`, 15, 91);
+            } else {
+                doc.setFont("helvetica", "bold");
+                doc.text(`Total Días Descontados: ${reg.dias_descontados}`, 15, 84);
+            }
+
+            // --- MOTIVO / OBSERVACIONES ---
+            doc.setFont("helvetica", "normal");
+            doc.text("Observaciones:", 15, 102);
+            
+            // Manejo de texto largo en el motivo (Word Wrap)
+            const motivoTexto = reg.motivo || "Sin observaciones registradas.";
+            const lineasMotivo = doc.splitTextToSize(motivoTexto, 118);
+            doc.setFont("helvetica", "italic");
+            doc.setTextColor(100, 100, 100);
+            doc.text(lineasMotivo, 15, 108);
+
+            // --- ZONA DE FIRMAS ---
+            doc.setTextColor(50, 50, 50);
+            doc.line(20, 160, 65, 160);
+            doc.text("Firma del Empleado", 42, 165, { align: "center" });
+
+            doc.line(83, 160, 128, 160);
+            doc.text("Autorizado por (RRHH)", 105, 165, { align: "center" });
+
+            doc.setFontSize(8);
+            doc.text(`Generado el: ${new Date().toLocaleDateString()}`, 74, 185, { align: "center" });
+
+            // Generar y descargar
+            doc.save(`Boleta_${reg.tipo}_${emp.ci}_${reg.fecha_inicio}.pdf`);
+        }
+
+        function generarReporteHistorialPDF() {
+            if (historialGlobal.length === 0) return alert("No hay datos para exportar.");
+            
+            const emp = empleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('p', 'pt', 'letter'); // Tamaño Carta en Puntos
+
+            // Cabecera del Documento
+            doc.setFontSize(16);
+            doc.setFont("helvetica", "bold");
+            doc.text("REPORTE KARDEX DE AUSENCIAS", 40, 50);
+            
+            doc.setFontSize(10);
+            doc.setFont("helvetica", "normal");
+            doc.text(`Empleado: ${emp.nombres} ${emp.apellidos} (${emp.ci})`, 40, 70);
+            doc.text(`Cargo: ${emp.cargo || 'N/A'}`, 40, 85);
+            doc.text(`Fecha de Emisión: ${new Date().toLocaleDateString()}`, 40, 100);
+
+            // Preparar datos para la tabla AutoTable
+            const dataTabla = historialGlobal.map(reg => {
+                let tiempo = reg.tipo === 'vacacion' ? `${reg.dias_descontados} Días` : `${reg.horas_totales} Hrs`;
+                let fechas = reg.tipo === 'vacacion' ? `${reg.fecha_inicio} al ${reg.fecha_fin}` : `${reg.fecha_inicio}\n(${reg.hora_inicio.substring(0,5)} a ${reg.hora_fin.substring(0,5)})`;
+                return [
+                    reg.tipo.toUpperCase(),
+                    fechas,
+                    tiempo,
+                    reg.estado.toUpperCase(),
+                    reg.motivo || 'Ninguna'
+                ];
+            });
+
+            // Dibujar la Tabla Automática
+            doc.autoTable({
+                startY: 120,
+                head: [['TIPO', 'FECHA / HORARIO', 'DESCUENTO', 'ESTADO', 'OBSERVACIONES']],
+                body: dataTabla,
+                theme: 'striped',
+                headStyles: { fillColor: [30, 58, 138] }, // Azul corporativo
+                styles: { fontSize: 8, cellPadding: 4 },
+                columnStyles: {
+                    0: { cellWidth: 60, fontStyle: 'bold' },
+                    1: { cellWidth: 100 },
+                    2: { cellWidth: 70, halign: 'center' },
+                    3: { cellWidth: 60 },
+                    4: { cellWidth: 'auto' } // El motivo toma el resto del espacio
+                }
+            });
+
+            doc.save(`Kardex_Ausencias_${emp.ci}.pdf`);
         }
 
         // ==========================================
