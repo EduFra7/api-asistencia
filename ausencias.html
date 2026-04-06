@@ -411,28 +411,37 @@
             const tbody = document.getElementById('cuerpoTablaAusencias');
             tbody.innerHTML = '';
             
-            // Simulación visual por ahora (conectaremos el backend después)
             empleadosGlobal.forEach(emp => {
                 const iniciales = (emp.nombres.charAt(0) + emp.apellidos.charAt(0)).toUpperCase();
                 
-                // Estado visual simulado (Verde = Trabajo)
-                const badgeEstado = '<span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold border border-green-200"><i class="fas fa-briefcase mr-1"></i>Trabajando</span>';
+                // ⚡ LÓGICA DINÁMICA DE ESTADOS (Adiós al dato simulado)
+                let badgeEstado = '';
+                if (emp.estado_ausencia === 'vacacion') {
+                    // Si está de vacación, pintamos de Azul
+                    badgeEstado = '<span class="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold border border-blue-200 shadow-sm"><i class="fas fa-plane mr-1"></i>De Vacación</span>';
+                } else if (emp.estado_ausencia === 'permiso') {
+                    // Si tiene permiso, pintamos de Naranja
+                    badgeEstado = '<span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-bold border border-orange-200 shadow-sm"><i class="fas fa-user-clock mr-1"></i>Con Permiso</span>';
+                } else {
+                    // Si no tiene nada activo HOY, pintamos Verde
+                    badgeEstado = '<span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold border border-green-200 shadow-sm"><i class="fas fa-briefcase mr-1"></i>Trabajando</span>';
+                }
 
                 tbody.innerHTML += `
-                    <tr onclick="abrirPanelCaso2(${emp.id})" class="hover:bg-blue-50 transition-colors cursor-pointer group">
-                        <td class="p-4 font-mono text-gray-500">${emp.bio_id || '-'}</td>
+                    <tr onclick="abrirPanelCaso2(${emp.id})" class="hover:bg-blue-50 transition-colors cursor-pointer group border-b border-gray-100">
+                        <td class="p-4 font-mono text-gray-500 text-xs">${emp.bio_id || '-'}</td>
                         <td class="p-4">
                             <div class="flex items-center">
                                 <div class="h-8 w-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold mr-3 shadow-inner">${iniciales}</div>
                                 <div>
-                                    <p class="font-bold text-gray-800 group-hover:text-blue-600">${emp.nombres} ${emp.apellidos}</p>
+                                    <p class="font-bold text-gray-800 group-hover:text-blue-600 transition-colors">${emp.nombres} ${emp.apellidos}</p>
                                     <p class="text-xs text-gray-500">${emp.cargo || 'Sin cargo'}</p>
                                 </div>
                             </div>
                         </td>
-                        <td class="p-4 text-gray-600">${emp.ci}</td>
-                        <td class="p-4 text-gray-600">
-                            <p>${emp.sucursal_nombre || '-'}</p>
+                        <td class="p-4 text-gray-600 text-sm">${emp.ci}</td>
+                        <td class="p-4 text-gray-600 text-sm">
+                            <p class="font-medium">${emp.sucursal_nombre || '-'}</p>
                             <p class="text-xs text-gray-400">${emp.seccion_nombre || '-'}</p>
                         </td>
                         <td id="celda_kardex_${emp.id}" class="p-4 text-center font-mono font-bold text-blue-700 text-lg">

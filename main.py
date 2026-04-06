@@ -654,15 +654,21 @@ def eliminar_seccion(seccion_id: int, usuario = Depends(verificar_token)):
 async def obtener_empleados(usuario = Depends(verificar_token)):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
-    # Usamos RealDictCursor para que JavaScript entienda los nombres de las columnas fácilmente
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        # ⚡ IMPORTANTE: Agregamos fecha_retiro y motivo_retiro al SELECT
+        # ⚡ MAGIA ENTERPRISE: Agregamos una subconsulta para saber el estado EXACTO de HOY
         cur.execute(f"""
             SELECT e.*, 
                    s.nombre as sucursal_nombre, 
                    sec.nombre as seccion_nombre,
-                   t.nombre as turno_nombre  -- ⚡ EXTRAEMOS EL NOMBRE DEL TURNO
+                   t.nombre as turno_nombre,
+                   (SELECT tipo 
+                    FROM {schema}.ausencias a 
+                    WHERE a.empleado_id = e.id 
+                      AND a.estado = 'aprobado' 
+                      AND a.eliminado = FALSE 
+                      AND CURRENT_DATE BETWEEN a.fecha_inicio AND a.fecha_fin 
+                    LIMIT 1) as estado_ausencia
             FROM {schema}.empleados e
             LEFT JOIN {schema}.sucursales s ON e.sucursal_id = s.id
             LEFT JOIN {schema}.secciones sec ON e.seccion_id = sec.id
