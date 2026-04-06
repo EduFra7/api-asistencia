@@ -331,6 +331,9 @@
 
     </main>
 
+    <!-- Conectamos nuestro archivo JS maestro -->
+    <script src="menu.js"></script>
+
     <script>
         const userDataStr = localStorage.getItem('userData');
         if (!userDataStr) window.location.href = 'index.html';
@@ -940,12 +943,6 @@
         }
         
         arrancarPantallaPlanilla();
-
-    </script>
-<!-- Conectamos nuestro archivo JS maestro -->
-    <script src="menu.js"></script>
-    <script>
-        // ... (Aquí van tus otros scripts de la página, como cargar el panel lateral derecho) ...
 
         // Llamamos al creador del menú indicando que estamos en "planilla"
         renderizarMenu('planilla');

@@ -181,6 +181,8 @@
         </div>
     </main>
 
+    <script src="menu.js"></script>
+
     <script>
         const API_URL = "https://asistencia-api.up.railway.app";
         const token = localStorage.getItem('token');
@@ -259,8 +261,11 @@
                 if(listaTurnos.length === 0) return tbody.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-gray-500">No hay turnos creados</td></tr>';
                 
                 listaTurnos.forEach(t => {
-                    // Limpiar visualización de días
-                    let diasStr = Object.entries(t.dias).filter(([k, v]) => v).map(([k]) => k === 'X' ? 'M' : k).join(' - ');
+                    // Usamos la estructura ordenada L-M-X-J-V-S-D como molde principal
+                    let diasStr = diasEstructura
+                        .filter(d => t.dias[d] === true) // Verificamos si el día está activo en la BD
+                        .map(d => d === 'X' ? 'M' : d)   // Cambiamos visualmente la X por M
+                        .join(' - ');
                     
                     tbody.innerHTML += `
                         <tr onclick="abrirPanelLectura(${t.id})" class="cursor-pointer hover:bg-blue-50 transition-colors group">
@@ -398,8 +403,8 @@
 
         renderizarDias();
         cargarTurnos();
+
+        renderizarMenu('turnos');
     </script>
-    <script src="menu.js"></script>
-    <script>renderizarMenu('turnos');</script>
 </body>
 </html>

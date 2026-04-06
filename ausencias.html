@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vacaciones y Permisos - ERP</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <!-- Librerías de Exportación PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    
+    <!-- ⚡ Flatpickr: El Calendario Premium -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link rel="stylesheet" type="text/css" href="https://npmcdn.com/flatpickr/dist/themes/airbnb.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://npmcdn.com/flatpickr/dist/l10n/es.js"></script>
+</head>
+<body class="bg-gray-50 font-sans flex h-screen overflow-hidden text-gray-800">
+
+    <!-- Menú Lateral -->
+    <aside id="menu-lateral" class="w-64 bg-slate-900 text-white flex flex-col h-full shadow-xl z-20"></aside>
+
+    <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
+        
+        <!-- HEADER -->
+        <header class="bg-white shadow-sm border-b border-gray-200 p-4 flex justify-between items-center z-10">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-800">Control de Ausencias</h1>
+                <p class="text-sm text-gray-500">Gestión de Vacaciones y Permisos por Horas</p>
+            </div>
+            <button onclick="abrirPanelCaso1()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium shadow-md transition-colors flex items-center">
+                <i class="fas fa-calendar-plus mr-2"></i> Registrar Ausencia
+            </button>
+        </header>
+
+        <!-- ZONA DE TRABAJO -->
+        <div class="flex-1 overflow-y-auto p-6 flex flex-col">
+            
+            <!-- PANEL DE FILTROS -->
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6">
+                <div class="flex justify-between items-center mb-4 border-b border-gray-100 pb-4">
+                    <div class="flex space-x-2">
+                        <button onclick="cambiarFiltro('todos', this)" class="filtro-btn px-4 py-2 bg-blue-50 text-blue-700 font-semibold rounded-lg text-sm border border-blue-200 transition-colors">
+                            <i class="fas fa-users mr-2"></i>Todos
+                        </button>
+                        <button onclick="cambiarFiltro('vacaciones', this)" class="filtro-btn px-4 py-2 bg-white text-gray-600 font-medium rounded-lg text-sm border border-gray-200 hover:bg-gray-50 transition-colors">
+                            <i class="fas fa-plane mr-2 text-blue-500"></i>De Vacación
+                        </button>
+                        <button onclick="cambiarFiltro('permisos', this)" class="filtro-btn px-4 py-2 bg-white text-gray-600 font-medium rounded-lg text-sm border border-gray-200 hover:bg-gray-50 transition-colors">
+                            <i class="fas fa-user-clock mr-2 text-orange-500"></i>Con Permiso
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                        <label class="text-xs font-semibold text-gray-500 uppercase">Buscar Personal</label>
+                        <div class="relative mt-1">
+                            <i class="fas fa-search absolute left-3 top-2.5 text-gray-400"></i>
+                            <input type="text" id="filtro_busqueda" placeholder="Nombre, C.I. o ID..." class="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-xs font-semibold text-gray-500 uppercase">Sucursal</label>
+                        <select id="filtro_sucursal" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500">
+                            <option value="">Todas las sucursales</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs font-semibold text-gray-500 uppercase">Sección</label>
+                        <select id="filtro_seccion" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500">
+                            <option value="">Todas las secciones</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs font-semibold text-gray-500 uppercase">Cargo</label>
+                        <select id="filtro_cargo" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500">
+                            <option value="">Todos los cargos</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TABLA PRINCIPAL -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 flex-1 overflow-hidden flex flex-col">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider border-b border-gray-200">
+                                <th class="p-4 font-semibold">ID</th>
+                                <th class="p-4 font-semibold">Empleado</th>
+                                <th class="p-4 font-semibold">C.I.</th>
+                                <th class="p-4 font-semibold">Ubicación</th>
+                                <th class="p-4 font-semibold text-center">Días Disponibles</th>
+                                <th class="p-4 font-semibold">Estado Actual</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cuerpoTablaAusencias" class="text-sm divide-y divide-gray-100">
+                            <tr><td colspan="6" class="p-8 text-center text-gray-500">Cargando datos...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- OVERLAY Y PANEL DERECHO (DRAWER) -->
+        <div id="overlayPanel" class="fixed inset-0 bg-gray-900 bg-opacity-40 z-30 hidden backdrop-blur-sm transition-opacity" onclick="cerrarPanel()"></div>
+        
+        <div id="panelDerecho" class="fixed inset-y-0 right-0 w-full md:w-[550px] bg-white shadow-2xl z-40 transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col">
+            
+            <div class="p-6 border-b border-gray-200 flex justify-between items-center bg-white">
+                <h3 class="text-xl font-bold text-gray-800" id="drawerTitle">Gestión de Ausencia</h3>
+                <button onclick="cerrarPanel()" class="text-gray-400 hover:text-red-500 transition-colors"><i class="fas fa-times text-2xl"></i></button>
+            </div>
+            
+            <div class="flex-1 overflow-y-auto p-6 bg-gray-50 space-y-6">
+                
+                <!-- CASO 1: Selector de Empleado -->
+                <div id="cajaBuscadorEmpleado" class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hidden">
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Seleccionar Empleado a Procesar</label>
+                    <select id="selector_empleado" onchange="cargarKardexEmpleado(this.value)" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 text-sm font-medium">
+                        <option value="">Seleccione o busque empleado...</option>
+                        <!-- Opciones llenadas por JS -->
+                    </select>
+                </div>
+
+                <!-- EL KARDEX FINANCIERO -->
+                <div id="tarjetaKardex" class="bg-gradient-to-r from-blue-900 to-indigo-800 text-white p-5 rounded-xl shadow-md flex justify-between items-center opacity-50 pointer-events-none transition-opacity duration-300">
+                    <div>
+                        <p class="text-xs text-blue-200 uppercase tracking-wider mb-1"><i class="fas fa-coins mr-1"></i>Días Disponibles</p>
+                        <h2 class="text-4xl font-bold font-mono" id="kardex_disponibles">0.00</h2>
+                    </div>
+                    <div class="text-right text-xs text-blue-100 space-y-1">
+                        <p id="kardex_tasa"><i class="fas fa-chart-line mr-1"></i> Tasa: -- días/año</p>
+                        <p id="kardex_antiguedad"><i class="fas fa-calendar-alt mr-1"></i> Antigüedad: --</p>
+                        <button onclick="abrirModalSaldoInicial()" class="mt-2 bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded text-white transition-colors border border-white/30 backdrop-blur-sm">
+                            <i class="fas fa-sliders-h mr-1"></i> Ajustar Saldo Inicial
+                        </button>
+                    </div>
+                </div>
+
+                <!-- SELECTOR: VACACIÓN VS PERMISO -->
+                <div id="cajaControles" class="opacity-50 pointer-events-none transition-opacity duration-300">
+                    <div class="flex space-x-2 bg-gray-200 p-1 rounded-lg mb-6 shadow-inner">
+                        <button id="btnTabVacacion" onclick="cambiarTipoRegistro('vacacion')" class="flex-1 py-2 bg-white text-blue-700 font-bold rounded-md shadow transition-all transform scale-100">
+                            <i class="fas fa-plane-departure mr-2"></i>Tomar Vacación
+                        </button>
+                        <button id="btnTabPermiso" onclick="cambiarTipoRegistro('permiso')" class="flex-1 py-2 text-gray-500 font-medium rounded-md hover:bg-gray-300 transition-all transform scale-95">
+                            <i class="fas fa-user-clock mr-2"></i>Permiso / Horas
+                        </button>
+                    </div>
+
+                    <!-- FORMULARIO DE REGISTRO -->
+                    <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm space-y-4">
+                        <h4 class="font-bold text-gray-800 border-b pb-2 text-sm uppercase"><i class="far fa-calendar-check mr-2"></i>Detalles de la Solicitud</h4>
+                        
+                        <div class="grid grid-cols-2 gap-4">
+                            <!-- Calendario Flatpickr -->
+                            <div class="col-span-2 relative">
+                                <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Rango de Fechas</label>
+                                <div class="absolute right-3 top-8 text-gray-400 pointer-events-none"><i class="far fa-calendar-alt"></i></div>
+                                <input type="text" id="rango_fechas" placeholder="Seleccione inicio y fin..." class="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 font-medium bg-white cursor-pointer" readonly>
+                            </div>
+
+                            <!-- ZONA PERMISOS (Horas) -->
+                            <div id="zona_horas" class="col-span-2 grid grid-cols-2 gap-4 hidden bg-orange-50 p-4 rounded-lg border border-orange-200">
+                                <div class="col-span-2">
+                                    <p class="text-xs text-orange-800 font-medium mb-2"><i class="fas fa-info-circle mr-1"></i>Indique la hora exacta de salida y retorno para calcular las horas descontadas.</p>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-orange-700 uppercase">Hora Salida</label>
+                                    <input type="time" id="hora_inicio" class="w-full mt-1 px-3 py-2 border border-orange-300 rounded-md shadow-sm focus:ring-orange-500 bg-white">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-orange-700 uppercase">Hora Retorno</label>
+                                    <input type="time" id="hora_fin" class="w-full mt-1 px-3 py-2 border border-orange-300 rounded-md shadow-sm focus:ring-orange-500 bg-white">
+                                </div>
+                            </div>
+                            
+                            <div class="col-span-2">
+                                <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Motivo / Observaciones</label>
+                                <textarea id="motivo_ausencia" rows="2" placeholder="Describa brevemente el motivo..." class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 text-sm"></textarea>
+                            </div>
+                        </div>
+
+                        <button id="btnGuardarAusencia" onclick="guardarAusencia()" class="w-full mt-4 bg-green-600 hover:bg-green-700 text-white py-3 rounded-lg font-bold shadow-md transition-colors">
+                            <i class="fas fa-save mr-2"></i>Registrar en Sistema
+                        </button>
+                    </div>
+
+                    <!-- TABLA HISTÓRICA -->
+                    <div class="mt-8 bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+                        <h4 class="font-bold text-gray-800 mb-3 border-b pb-2 text-sm uppercase"><i class="fas fa-history mr-2 text-gray-400"></i>Historial del Empleado</h4>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-sm">
+                                <thead class="bg-gray-50 text-gray-500 uppercase text-xs">
+                                    <tr>
+                                        <th class="p-2">Fechas</th>
+                                        <th class="p-2">Tipo</th>
+                                        <th class="p-2">Descuento</th>
+                                        <th class="p-2 text-center">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabla_historial_empleado" class="divide-y divide-gray-100">
+                                    <tr><td colspan="4" class="p-4 text-center text-gray-400 text-xs">Seleccione un empleado para ver su historial</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 🛡️ PASO 1: EL ESCUDO DE SEGURIDAD (INTERCEPTOR) SE CARGA PRIMERO -->
+    <script src="menu.js"></script>
+
+    <!-- ⚙️ PASO 2: LÓGICA DE LA PÁGINA -->
+    <script>
+        const API_URL = "https://asistencia-api.up.railway.app";
+        const token_api = localStorage.getItem('token');
+        
+        let empleadosGlobal = [];
+        let empleadoSeleccionadoId = null;
+        let tipoRegistroActual = 'vacacion';
+        let calendarioInstancia = null;
+
+        // ==========================================
+        // UI: CONTROL DE PANELES Y ESTILOS
+        // ==========================================
+        
+        function abrirPanelCaso1() {
+            // Caso 1: Nuevo desde cero (Abre el buscador)
+            empleadoSeleccionadoId = null;
+            document.getElementById('drawerTitle').textContent = "Nueva Ausencia";
+            document.getElementById('cajaBuscadorEmpleado').classList.remove('hidden');
+            
+            // Bloqueamos la interfaz hasta que elija a alguien
+            document.getElementById('tarjetaKardex').classList.add('opacity-50', 'pointer-events-none');
+            document.getElementById('cajaControles').classList.add('opacity-50', 'pointer-events-none');
+            
+            // Llenamos el select
+            const select = document.getElementById('selector_empleado');
+            select.innerHTML = '<option value="">Seleccione o busque empleado...</option>';
+            empleadosGlobal.forEach(e => {
+                select.innerHTML += `<option value="${e.id}">${e.nombres} ${e.apellidos} (CI: ${e.ci})</option>`;
+            });
+
+            limpiarFormulario();
+            mostrarPanel();
+        }
+
+        function abrirPanelCaso2(idEmpleado) {
+            // Caso 2: Clic directo en la tabla
+            document.getElementById('cajaBuscadorEmpleado').classList.add('hidden'); // Ocultamos buscador
+            cargarKardexEmpleado(idEmpleado); // Carga directa
+            mostrarPanel();
+        }
+
+        function mostrarPanel() {
+            document.getElementById('panelDerecho').classList.remove('translate-x-full');
+            document.getElementById('overlayPanel').classList.remove('hidden');
+        }
+
+        function cerrarPanel() {
+            document.getElementById('panelDerecho').classList.add('translate-x-full');
+            document.getElementById('overlayPanel').classList.add('hidden');
+        }
+
+        function limpiarFormulario() {
+            calendarioInstancia.clear();
+            document.getElementById('hora_inicio').value = '';
+            document.getElementById('hora_fin').value = '';
+            document.getElementById('motivo_ausencia').value = '';
+            cambiarTipoRegistro('vacacion');
+        }
+
+        function cambiarTipoRegistro(tipo) {
+            tipoRegistroActual = tipo;
+            const btnV = document.getElementById('btnTabVacacion');
+            const btnP = document.getElementById('btnTabPermiso');
+            const zonaHoras = document.getElementById('zona_horas');
+
+            if (tipo === 'vacacion') {
+                btnV.className = "flex-1 py-2 bg-white text-blue-700 font-bold rounded-md shadow transition-all transform scale-100";
+                btnP.className = "flex-1 py-2 text-gray-500 font-medium rounded-md hover:bg-gray-300 transition-all transform scale-95";
+                zonaHoras.classList.add('hidden');
+            } else {
+                btnP.className = "flex-1 py-2 bg-white text-orange-600 font-bold rounded-md shadow transition-all transform scale-100";
+                btnV.className = "flex-1 py-2 text-gray-500 font-medium rounded-md hover:bg-gray-300 transition-all transform scale-95";
+                zonaHoras.classList.remove('hidden');
+            }
+        }
+
+        // ==========================================
+        // CORE: CARGA DE DATOS Y MATEMÁTICA
+        // ==========================================
+
+        async function cargarEmpleados() {
+            try {
+                const res = await fetch(`${API_URL}/empleados`, { headers: { 'Authorization': `Bearer ${token_api}` } });
+                const data = await res.json();
+                empleadosGlobal = data;
+                renderizarTablaPrincipal();
+            } catch (error) {
+                console.error("Error cargando empleados");
+            }
+        }
+
+        async function cargarKardexEmpleado(idStr) {
+            if(!idStr) return;
+            const id = parseInt(idStr);
+            empleadoSeleccionadoId = id;
+            const emp = empleadosGlobal.find(e => e.id === id);
+            
+            document.getElementById('drawerTitle').textContent = `Ausencias: ${emp.nombres}`;
+            
+            // Desbloqueamos la interfaz
+            document.getElementById('tarjetaKardex').classList.remove('opacity-50', 'pointer-events-none');
+            document.getElementById('cajaControles').classList.remove('opacity-50', 'pointer-events-none');
+            
+            try {
+                // ⚡ LLAMADA AL MOTOR MATEMÁTICO EN PYTHON
+                const res = await fetch(`${API_URL}/empleados/${id}/kardex_vacaciones`, { headers: { 'Authorization': `Bearer ${token_api}` } });
+                const kardex = await res.json();
+
+                if (kardex.dias_disponibles !== undefined) {
+                    document.getElementById('kardex_disponibles').textContent = kardex.dias_disponibles.toFixed(2);
+                    document.getElementById('kardex_tasa').innerHTML = `<i class="fas fa-chart-line mr-1"></i> Tasa: ${kardex.tasa_actual}`;
+                    document.getElementById('kardex_antiguedad').innerHTML = `<i class="fas fa-calendar-alt mr-1"></i> Antigüedad: ${kardex.antiguedad}`;
+                } else {
+                    document.getElementById('kardex_disponibles').textContent = "0.00";
+                    document.getElementById('kardex_antiguedad').textContent = "Requiere fecha antigüedad";
+                }
+
+                // Aquí luego programaremos cargarHistorial(id);
+                document.getElementById('tabla_historial_empleado').innerHTML = `<tr><td colspan="4" class="p-4 text-center text-gray-500 text-xs"><i class="fas fa-sync fa-spin mr-2"></i>Cargando historial...</td></tr>`;
+
+            } catch (error) {
+                console.error("Error al calcular kardex:", error);
+            }
+            await cargarHistorialAusencias(id);
+        }
+
+        function renderizarTablaPrincipal() {
+            const tbody = document.getElementById('cuerpoTablaAusencias');
+            tbody.innerHTML = '';
+            
+            // Simulación visual por ahora (conectaremos el backend después)
+            empleadosGlobal.forEach(emp => {
+                const iniciales = (emp.nombres.charAt(0) + emp.apellidos.charAt(0)).toUpperCase();
+                
+                // Estado visual simulado (Verde = Trabajo)
+                const badgeEstado = '<span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold border border-green-200"><i class="fas fa-briefcase mr-1"></i>Trabajando</span>';
+
+                tbody.innerHTML += `
+                    <tr onclick="abrirPanelCaso2(${emp.id})" class="hover:bg-blue-50 transition-colors cursor-pointer group">
+                        <td class="p-4 font-mono text-gray-500">${emp.bio_id || '-'}</td>
+                        <td class="p-4">
+                            <div class="flex items-center">
+                                <div class="h-8 w-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold mr-3 shadow-inner">${iniciales}</div>
+                                <div>
+                                    <p class="font-bold text-gray-800 group-hover:text-blue-600">${emp.nombres} ${emp.apellidos}</p>
+                                    <p class="text-xs text-gray-500">${emp.cargo || 'Sin cargo'}</p>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="p-4 text-gray-600">${emp.ci}</td>
+                        <td class="p-4 text-gray-600">
+                            <p>${emp.sucursal_nombre || '-'}</p>
+                            <p class="text-xs text-gray-400">${emp.seccion_nombre || '-'}</p>
+                        </td>
+                        <td class="p-4 text-center font-mono font-bold text-blue-700 text-lg">
+                            -- --
+                        </td>
+                        <td class="p-4">${badgeEstado}</td>
+                    </tr>`;
+            });
+        }
+
+        async function guardarAusencia() {
+            if (!empleadoSeleccionadoId) {
+                return alert("⚠️ Debes seleccionar un empleado primero.");
+            }
+
+            // 1. Extraer las fechas del Flatpickr
+            const rango = document.getElementById('rango_fechas').value;
+            if (!rango) return alert("⚠️ Selecciona el rango de fechas.");
+
+            let fecha_inicio = rango;
+            let fecha_fin = rango;
+            
+            // Flatpickr usa " to " cuando son varios días (ej: 2026-05-01 to 2026-05-05)
+            if (rango.includes(" to ")) {
+                const partes = rango.split(" to ");
+                fecha_inicio = partes[0];
+                fecha_fin = partes[1];
+            }
+
+            // 2. Armar el paquete de datos
+            const payload = {
+                empleado_id: empleadoSeleccionadoId,
+                tipo: tipoRegistroActual,
+                fecha_inicio: fecha_inicio,
+                fecha_fin: fecha_fin,
+                motivo: document.getElementById('motivo_ausencia').value
+            };
+
+            // 3. Validar horas si es un permiso
+            if (tipoRegistroActual === 'permiso') {
+                const h_ini = document.getElementById('hora_inicio').value;
+                const h_fin = document.getElementById('hora_fin').value;
+                if (!h_ini || !h_fin) {
+                    return alert("⚠️ Para permisos, debes indicar hora de salida y retorno.");
+                }
+                payload.hora_inicio = h_ini;
+                payload.hora_fin = h_fin;
+            }
+
+            // 4. Enviar a la Base de Datos
+            const btn = document.getElementById('btnGuardarAusencia');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Procesando...';
+
+            try {
+                const res = await fetch(`${API_URL}/ausencias`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token_api}` },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || "Error en el servidor");
+
+                alert("✅ " + data.mensaje);
+                cerrarPanel();
+                
+                // Recargamos el kardex para ver cómo baja el saldo en tiempo real
+                cargarKardexEmpleado(empleadoSeleccionadoId); 
+                
+            } catch (error) {
+                alert("❌ Error: " + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-save mr-2"></i>Registrar en Sistema';
+            }
+        }
+
+        // ⚡ CARGAR Y DIBUJAR EL HISTÓRICO CON LOS COMENTARIOS
+        async function cargarHistorialAusencias(idEmpleado) {
+            const tbody = document.getElementById('tabla_historial_empleado');
+            tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-500 text-xs"><i class="fas fa-spinner fa-spin mr-2"></i>Cargando historial...</td></tr>';
+            
+            try {
+                const res = await fetch(`${API_URL}/empleados/${idEmpleado}/ausencias`, {
+                    headers: { 'Authorization': `Bearer ${token_api}` }
+                });
+                
+                if (!res.ok) throw new Error("Error al cargar historial");
+                const historial = await res.json();
+                
+                tbody.innerHTML = '';
+                
+                if (historial.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-500 text-xs">El empleado no tiene registros de ausencias.</td></tr>';
+                    return;
+                }
+                
+                historial.forEach(reg => {
+                    // Formateamos las fechas
+                    let fechasStr = `${reg.fecha_inicio} al ${reg.fecha_fin}`;
+                    
+                    // Diseño condicional: Vacación (Azul) o Permiso (Naranja)
+                    let tipoStr = reg.tipo === 'vacacion' ? 
+                        '<span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold"><i class="fas fa-plane mr-1"></i>Vacación</span>' : 
+                        '<span class="bg-orange-100 text-orange-700 px-2 py-1 rounded text-xs font-bold"><i class="fas fa-clock mr-1"></i>Permiso</span>';
+                    
+                    // Mostramos días u horas según corresponda
+                    let descuentoStr = reg.tipo === 'vacacion' ? 
+                        `<span class="font-bold text-gray-800">${reg.dias_descontados} días</span>` : 
+                        `<span class="font-bold text-gray-800">${reg.horas_totales} hrs</span> <span class="text-xs text-gray-500">(${reg.hora_inicio.substring(0,5)} a ${reg.hora_fin.substring(0,5)})</span>`;
+                    
+                    // ⚡ AQUÍ ESTÁ EL COMENTARIO SOLICITADO
+                    let motivoStr = reg.motivo ? `<p class="text-xs text-gray-500 italic mt-1 break-words leading-tight"><i class="fas fa-comment-alt text-gray-300 mr-1"></i>"${reg.motivo}"</p>` : '';
+
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-gray-50 transition-colors border-b border-gray-100">
+                            <td class="p-3 text-xs text-gray-600 font-medium">${fechasStr}</td>
+                            <td class="p-3">${tipoStr}</td>
+                            <td class="p-3 text-sm">
+                                ${descuentoStr}
+                                ${motivoStr}
+                            </td>
+                            <td class="p-3 text-center space-x-2">
+                                <button onclick="alert('Función Boleta PDF en desarrollo')" class="text-blue-500 hover:text-blue-700 transition-colors" title="Imprimir Boleta">
+                                    <i class="fas fa-file-pdf"></i>
+                                </button>
+                                <button onclick="alert('Función Eliminar en desarrollo')" class="text-red-400 hover:text-red-600 transition-colors" title="Anular Ausencia">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            } catch (error) {
+                console.error("Error cargando historial:", error);
+                tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-red-500 text-xs"><i class="fas fa-exclamation-triangle mr-1"></i>Error de conexión al cargar historial.</td></tr>';
+            }
+        }
+
+        // ==========================================
+        // ARRANQUE DEL SISTEMA Y LIBRERÍAS
+        // ==========================================
+        
+        async function inicializarModulo() {
+            // 1. Instanciar el Calendario Enterprise (Flatpickr)
+            calendarioInstancia = flatpickr("#rango_fechas", {
+                mode: "range",
+                dateFormat: "Y-m-d",
+                locale: "es", // Español
+                minDate: "today", // Bloquea fechas en el pasado por auditoría
+                disable: [
+                    function(date) {
+                        // Opcional: Bloquear domingos visualmente (return date.getDay() === 0;)
+                        return false; 
+                    }
+                ]
+            });
+
+            // 2. Cargar Datos
+            await cargarEmpleados();
+        }
+
+        inicializarModulo();
+        renderizarMenu('ausencias'); // Pinta el sidebar lateral
+
+    </script>
+</body>
+</html>

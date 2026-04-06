@@ -1,4 +1,38 @@
 // ==============================================================================
+// 🛡️ INTERCEPTOR GLOBAL DE PETICIONES (SEGURIDAD ANTI-CADUCIDAD)
+// ==============================================================================
+const originalFetch = window.fetch;
+
+window.fetch = async function() {
+    try {
+        // Ejecutamos la petición original como si nada pasara
+        const response = await originalFetch.apply(this, arguments);
+        
+        // ⚡ EL GUARDIAS: Si el servidor devuelve 401 (Token Expirado/Inválido)
+        if (response.status === 401) {
+            console.warn("⚠️ [SEGURIDAD] Sesión expirada o token inválido. Expulsando usuario...");
+            
+            // Limpiamos los datos muertos
+            localStorage.removeItem('token');
+            localStorage.removeItem('userData');
+            
+            // Redirigimos al login
+            window.location.href = 'index.html'; 
+            
+            // Detenemos la ejecución devolviendo una promesa que nunca se resuelve
+            // Esto evita que el resto del código intente leer .json() y colapse
+            return new Promise(() => {}); 
+        }
+        
+        return response; // Si todo está bien, devolvemos la respuesta normal
+    } catch (error) {
+        // Si hay un error de red (servidor caído, sin internet), lo dejamos pasar
+        throw error;
+    }
+};
+// ==============================================================================
+
+// ==============================================================================
 // COMPONENTE: MENÚ LATERAL DINÁMICO
 // Este archivo inyecta el menú en todas las pantallas y gestiona la pestaña activa.
 // ==============================================================================
@@ -43,11 +77,11 @@ function renderizarMenu(pantallaActiva) {
                 </a>
 
                 <!-- ── SECCIÓN: PLANILLA ── -->
-                <div class="text-xs font-semibold uppercase tracking-wider mb-2 mt-6 px-3 ${pantallaActiva === 'planilla' ? 'text-blue-400' : 'text-slate-500'}">Gestión de Planilla</div>
+                <div class="text-xs font-semibold uppercase tracking-wider mb-2 mt-6 px-3 ${(pantallaActiva === 'planilla' || pantallaActiva === 'ausencias')? 'text-blue-400' : 'text-slate-500'}">Gestión de Planilla</div>
                 <a href="planilla.html" class="${pantallaActiva === 'planilla' ? claseActiva : claseInactiva}">
                     <i class="fas fa-users w-5 mr-2"></i> Personal
                 </a>
-                <a href="#" class="${claseInactiva}">
+                <a href="ausencias.html" class="${pantallaActiva === 'ausencias' ? claseActiva : claseInactiva}">
                     <i class="fas fa-plane-departure w-5 mr-2"></i> Vacaciones y Permisos
                 </a>
 

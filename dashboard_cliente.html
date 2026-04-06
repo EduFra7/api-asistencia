@@ -148,6 +148,9 @@
 
     </main>
 
+<!-- Conectamos nuestro archivo JS maestro -->
+    <script src="menu.js"></script>
+
     <script>
         // ── A. SEGURIDAD DEL FRONTEND ──
         const userDataStr = localStorage.getItem('userData');
@@ -192,14 +195,9 @@
             }
         }
 
-    </script>
-<!-- Conectamos nuestro archivo JS maestro -->
-    <script src="menu.js"></script>
-    <script>
-        // ... (Aquí van tus otros scripts de la página, como cargar el panel lateral derecho) ...
-
         // Llamamos al creador del menú indicando que estamos en "dashboard_cliente"
         renderizarMenu('dashboard');
+
     </script>
 </body>
 </html>
