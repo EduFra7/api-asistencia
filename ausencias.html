@@ -305,10 +305,15 @@
         }
 
         function limpiarFormulario() {
-            calendarioInstancia.clear();
+            // 1. Limpiamos el calendario profesional (Flatpickr)
+            if (calendarioInstancia) {
+                calendarioInstancia.clear();
+            }
+            // 2. Limpiamos las horas y el texto
             document.getElementById('hora_inicio').value = '';
             document.getElementById('hora_fin').value = '';
             document.getElementById('motivo_ausencia').value = '';
+            // 3. Devolvemos el selector a "Vacación" por defecto
             cambiarTipoRegistro('vacacion');
         }
 
@@ -348,6 +353,12 @@
         async function cargarKardexEmpleado(idStr) {
             if(!idStr) return;
             const id = parseInt(idStr);
+
+            // ⚡ ANTI-GHOST DATA: Si el empleado seleccionado es diferente al que estábamos viendo, limpiamos la pizarra.
+            if (empleadoSeleccionadoId !== id) {
+                limpiarFormulario();
+            }
+
             empleadoSeleccionadoId = id;
             const emp = empleadosGlobal.find(e => e.id === id);
             
@@ -356,30 +367,44 @@
             // Desbloqueamos la interfaz
             document.getElementById('tarjetaKardex').classList.remove('opacity-50', 'pointer-events-none');
             document.getElementById('cajaControles').classList.remove('opacity-50', 'pointer-events-none');
-            // ⚡ MEJORA UX: Mostramos un spinner mientras piensa
+            
+            // ⚡ 1. LIMPIEZA INSTANTÁNEA (Anti-Ghost Data)
             document.getElementById('kardex_disponibles').innerHTML = '<i class="fas fa-spinner fa-spin text-3xl"></i>';
+            document.getElementById('kardex_tasa').innerHTML = 'Calculando...';
+            document.getElementById('kardex_antiguedad').innerHTML = 'Calculando...';
+            document.getElementById('tabla_historial_empleado').innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-500 text-xs"><i class="fas fa-spinner fa-spin mr-2"></i>Cargando historial...</td></tr>';
             
             try {
-                // ⚡ LLAMADA AL MOTOR MATEMÁTICO EN PYTHON
+                // Llamada al motor matemático
                 const res = await fetch(`${API_URL}/empleados/${id}/kardex_vacaciones`, { headers: { 'Authorization': `Bearer ${token_api}` } });
                 const kardex = await res.json();
 
                 if (kardex.dias_disponibles !== undefined) {
-                    document.getElementById('kardex_disponibles').textContent = kardex.dias_disponibles.toFixed(2);
+                    const disponiblesTexto = kardex.dias_disponibles.toFixed(2);
+                    
+                    // Actualizamos el panel derecho
+                    document.getElementById('kardex_disponibles').textContent = disponiblesTexto;
                     document.getElementById('kardex_tasa').innerHTML = `<i class="fas fa-chart-line mr-1"></i> Tasa: ${kardex.tasa_actual}`;
                     document.getElementById('kardex_antiguedad').innerHTML = `<i class="fas fa-calendar-alt mr-1"></i> Antigüedad: ${kardex.antiguedad}`;
+                    
+                    // ⚡ 2. SINCRONIZACIÓN MÁGICA CON LA TABLA PRINCIPAL
+                    const celdaPrincipal = document.getElementById(`celda_kardex_${id}`);
+                    if (celdaPrincipal) {
+                        celdaPrincipal.textContent = disponiblesTexto;
+                    }
+
                 } else {
                     document.getElementById('kardex_disponibles').textContent = "0.00";
                     document.getElementById('kardex_antiguedad').textContent = "Requiere fecha antigüedad";
                 }
 
-                // Aquí luego programaremos cargarHistorial(id);
-                document.getElementById('tabla_historial_empleado').innerHTML = `<tr><td colspan="4" class="p-4 text-center text-gray-500 text-xs"><i class="fas fa-sync fa-spin mr-2"></i>Cargando historial...</td></tr>`;
+                // Cargamos el historial del nuevo empleado
+                await cargarHistorialAusencias(id);
 
             } catch (error) {
                 console.error("Error al calcular kardex:", error);
+                document.getElementById('kardex_disponibles').innerHTML = '<i class="fas fa-exclamation-triangle text-red-500 text-3xl"></i>';
             }
-            await cargarHistorialAusencias(id);
         }
 
         function renderizarTablaPrincipal() {
@@ -475,10 +500,13 @@
                 if (!res.ok) throw new Error(data.detail || "Error en el servidor");
 
                 alert("✅ " + data.mensaje);
+                // ⚡ LA MAGIA: Borramos la pizarra después de guardar exitosamente
+                limpiarFormulario();
                 cerrarPanel();
                 
                 // Recargamos el kardex para ver cómo baja el saldo en tiempo real
                 cargarKardexEmpleado(empleadoSeleccionadoId); 
+                cargarTodosLosKardexEnFondo();
                 
             } catch (error) {
                 alert("❌ Error: " + error.message);
@@ -489,7 +517,7 @@
         }
 
         // ⚡ CARGAR Y DIBUJAR EL HISTÓRICO CON LOS COMENTARIOS
- async function cargarHistorialAusencias(idEmpleado) {
+        async function cargarHistorialAusencias(idEmpleado) {
             const tbody = document.getElementById('tabla_historial_empleado');
             tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-500 text-xs"><i class="fas fa-spinner fa-spin mr-2"></i>Cargando historial...</td></tr>';
             
@@ -535,7 +563,12 @@
                                 <button onclick="generarBoletaPDF(${index})" class="text-blue-500 hover:text-blue-700 transition-colors" title="Imprimir Boleta">
                                     <i class="fas fa-file-pdf"></i>
                                 </button>
-                                <button onclick="alert('Función Eliminar en desarrollo')" class="text-red-400 hover:text-red-600 transition-colors" title="Anular Ausencia">
+                                <!-- ⚡ Editar Motivo -->
+                                <button onclick="editarMotivoAusencia(${reg.id}, '${reg.motivo || ''}')" class="text-amber-500 hover:text-amber-700 transition-colors" title="Editar Observaciones">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <!-- ⚡ Anular Registro -->
+                                <button onclick="anularAusencia(${reg.id})" class="text-red-400 hover:text-red-600 transition-colors" title="Anular Ausencia">
                                     <i class="fas fa-trash-alt"></i>
                                 </button>
                             </td>
@@ -621,6 +654,61 @@
                 } catch (e) {
                     console.error(`Error calculando kardex en fondo para ID ${emp.id}`);
                 }
+            }
+        }
+
+        // ==========================================
+        // AUDITORÍA: EDICIÓN Y ANULACIÓN (SOFT DELETE)
+        // ==========================================
+
+        async function anularAusencia(ausenciaId) {
+            // Confirmación de seguridad
+            if (!confirm("⚠️ ¿Estás seguro de que deseas anular este registro?\n\nEl saldo descontado será devuelto automáticamente al empleado.")) return;
+
+            try {
+                const res = await fetch(`${API_URL}/ausencias/${ausenciaId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token_api}` }
+                });
+                
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || "Error al anular el registro");
+                
+                alert("✅ " + data.mensaje);
+                
+                // Recargamos todo el Kardex para que la matemática se actualice en pantalla
+                cargarKardexEmpleado(empleadoSeleccionadoId);
+                
+            } catch (error) {
+                alert("❌ Error: " + error.message);
+            }
+        }
+
+        async function editarMotivoAusencia(ausenciaId, motivoActual) {
+            // Usamos un prompt nativo por simplicidad y rapidez
+            const nuevoMotivo = prompt("Editar motivo / observaciones:", motivoActual);
+            
+            // Si el usuario cancela o no cambia nada, no hacemos peticiones al servidor
+            if (nuevoMotivo === null || nuevoMotivo.trim() === motivoActual) return;
+
+            try {
+                const res = await fetch(`${API_URL}/ausencias/${ausenciaId}`, {
+                    method: 'PUT',
+                    headers: { 
+                        'Content-Type': 'application/json', 
+                        'Authorization': `Bearer ${token_api}` 
+                    },
+                    body: JSON.stringify({ motivo: nuevoMotivo.trim() })
+                });
+                
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || "Error al actualizar las observaciones");
+                
+                // Solo necesitamos recargar la tabla del historial
+                cargarHistorialAusencias(empleadoSeleccionadoId);
+                
+            } catch (error) {
+                alert("❌ Error: " + error.message);
             }
         }
 
