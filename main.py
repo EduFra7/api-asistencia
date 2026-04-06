@@ -1018,7 +1018,6 @@ async def obtener_historial_ausencias(empleado_id: int, usuario = Depends(verifi
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        # Traemos todo el historial, ordenado por fecha de inicio descendente
         cur.execute(f"""
             SELECT id, tipo, fecha_inicio, fecha_fin, hora_inicio, hora_fin, 
                    horas_totales, dias_descontados, motivo, estado
@@ -1026,8 +1025,7 @@ async def obtener_historial_ausencias(empleado_id: int, usuario = Depends(verifi
             WHERE empleado_id = %s AND eliminado = FALSE
             ORDER BY fecha_inicio DESC
         """, (empleado_id,))
-        historial = cur.fetchall()
-        return historial
+        return cur.fetchall()
     finally:
         cur.close()
         conn.close()
