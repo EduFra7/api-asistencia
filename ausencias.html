@@ -120,13 +120,14 @@
             
             <div class="flex-1 overflow-y-auto p-6 bg-gray-50 space-y-6">
                 
-                <!-- CASO 1: Selector de Empleado -->
+                <!-- CASO 1: Buscador Inteligente de Empleado -->
                 <div id="cajaBuscadorEmpleado" class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hidden">
-                    <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Seleccionar Empleado a Procesar</label>
-                    <select id="selector_empleado" onchange="cargarKardexEmpleado(this.value)" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 text-sm font-medium">
-                        <option value="">Seleccione o busque empleado...</option>
-                        <!-- Opciones llenadas por JS -->
-                    </select>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Buscar Empleado a Procesar</label>
+                    <div class="relative">
+                        <i class="fas fa-search absolute left-3 top-2.5 text-gray-400"></i>
+                        <input type="text" id="buscador_empleado" list="lista_empleados" onchange="seleccionarDesdeBuscador(this.value)" placeholder="Escriba Nombre, C.I. o ID..." class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 text-sm font-medium">
+                        <datalist id="lista_empleados"></datalist>
+                    </div>
                 </div>
 
                 <!-- EL KARDEX FINANCIERO -->
@@ -167,18 +168,29 @@
                                 <input type="text" id="rango_fechas" placeholder="Seleccione inicio y fin..." class="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 font-medium bg-white cursor-pointer" readonly>
                             </div>
 
-                            <!-- ZONA PERMISOS (Horas) -->
-                            <div id="zona_horas" class="col-span-2 grid grid-cols-2 gap-4 hidden bg-orange-50 p-4 rounded-lg border border-orange-200">
-                                <div class="col-span-2">
-                                    <p class="text-xs text-orange-800 font-medium mb-2"><i class="fas fa-info-circle mr-1"></i>Indique la hora exacta de salida y retorno para calcular las horas descontadas.</p>
+                            <!-- ZONA PERMISOS (Opciones y Horas) -->
+                            <div id="zona_opciones_permiso" class="col-span-2 hidden bg-orange-50 p-4 rounded-lg border border-orange-200 space-y-4">
+                                <div class="flex flex-col md:flex-row md:items-center justify-between border-b border-orange-100 pb-3 gap-2">
+                                    <label class="text-sm font-bold text-orange-800 cursor-pointer flex items-center">
+                                        <input type="checkbox" id="permiso_por_dias" onchange="toggleHorasPermiso()" class="mr-2 w-4 h-4 text-orange-600 rounded focus:ring-orange-500">
+                                        Es por día(s) completo(s)
+                                    </label>
+                                    <label class="text-sm font-bold text-red-700 cursor-pointer flex items-center" title="El empleado deberá devolver estas horas/días">
+                                        <input type="checkbox" id="requiere_reposicion" class="mr-2 w-4 h-4 text-red-600 rounded focus:ring-red-500">
+                                        <i class="fas fa-history mr-1"></i> Exigir Reposición
+                                    </label>
                                 </div>
-                                <div>
-                                    <label class="block text-xs font-bold text-orange-700 uppercase">Hora Salida</label>
-                                    <input type="time" id="hora_inicio" class="w-full mt-1 px-3 py-2 border border-orange-300 rounded-md shadow-sm focus:ring-orange-500 bg-white">
-                                </div>
-                                <div>
-                                    <label class="block text-xs font-bold text-orange-700 uppercase">Hora Retorno</label>
-                                    <input type="time" id="hora_fin" class="w-full mt-1 px-3 py-2 border border-orange-300 rounded-md shadow-sm focus:ring-orange-500 bg-white">
+                                
+                                <div id="zona_relojes" class="grid grid-cols-2 gap-4">
+                                    <div class="col-span-2 text-xs text-orange-700 mb-[-10px]"><i class="fas fa-info-circle mr-1"></i>Indique la hora exacta (Ej. 1.5 días = Marcar "Día completo" NO, y poner las horas correspondientes).</div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-orange-700 uppercase">Hora Salida</label>
+                                        <input type="time" id="hora_inicio" class="w-full mt-1 px-3 py-2 border border-orange-300 rounded-md shadow-sm focus:ring-orange-500 bg-white">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-orange-700 uppercase">Hora Retorno</label>
+                                        <input type="time" id="hora_fin" class="w-full mt-1 px-3 py-2 border border-orange-300 rounded-md shadow-sm focus:ring-orange-500 bg-white">
+                                    </div>
                                 </div>
                             </div>
                             
@@ -270,24 +282,28 @@
         // ==========================================
         
         function abrirPanelCaso1() {
-            // Caso 1: Nuevo desde cero (Abre el buscador)
             empleadoSeleccionadoId = null;
             document.getElementById('drawerTitle').textContent = "Nueva Ausencia";
             document.getElementById('cajaBuscadorEmpleado').classList.remove('hidden');
-            
-            // Bloqueamos la interfaz hasta que elija a alguien
             document.getElementById('tarjetaKardex').classList.add('opacity-50', 'pointer-events-none');
             document.getElementById('cajaControles').classList.add('opacity-50', 'pointer-events-none');
             
-            // Llenamos el select
-            const select = document.getElementById('selector_empleado');
-            select.innerHTML = '<option value="">Seleccione o busque empleado...</option>';
+            // Llenamos el Datalist Inteligente
+            const dl = document.getElementById('lista_empleados');
+            dl.innerHTML = '';
             empleadosGlobal.forEach(e => {
-                select.innerHTML += `<option value="${e.id}">${e.nombres} ${e.apellidos} (CI: ${e.ci})</option>`;
+                dl.innerHTML += `<option value="${e.ci} - ${e.nombres} ${e.apellidos}">`;
             });
+            document.getElementById('buscador_empleado').value = '';
 
             limpiarFormulario();
             mostrarPanel();
+        }
+
+        // Nueva función para capturar la selección del Datalist
+        function seleccionarDesdeBuscador(valor) {
+            const emp = empleadosGlobal.find(e => `${e.ci} - ${e.nombres} ${e.apellidos}` === valor);
+            if(emp) cargarKardexEmpleado(emp.id);
         }
 
         function abrirPanelCaso2(idEmpleado) {
@@ -324,7 +340,7 @@
             tipoRegistroActual = tipo;
             const btnV = document.getElementById('btnTabVacacion');
             const btnP = document.getElementById('btnTabPermiso');
-            const zonaHoras = document.getElementById('zona_horas');
+            const zonaHoras = document.getElementById('zona_opciones_permiso');
 
             if (tipo === 'vacacion') {
                 btnV.className = "flex-1 py-2 bg-white text-blue-700 font-bold rounded-md shadow transition-all transform scale-100";
@@ -367,7 +383,22 @@
             const emp = empleadosGlobal.find(e => e.id === id);
             
             document.getElementById('drawerTitle').textContent = `Ausencias: ${emp.nombres}`;
-            
+
+            // ⚡ REGLA CORPORATIVA: Validar Tipo de Contrato
+            const btnVacacion = document.getElementById('btnTabVacacion');
+            // Aquí puedes agregar otros tipos de contrato que no tengan derecho a vacación
+            if (emp.tipo_contrato === 'Eventual' || emp.tipo_contrato === 'Consultoría') {
+                btnVacacion.disabled = true;
+                btnVacacion.classList.add('opacity-40', 'cursor-not-allowed');
+                btnVacacion.title = "El tipo de contrato no devenga vacaciones";
+                cambiarTipoRegistro('permiso'); // Forzamos a que solo pueda pedir permiso
+            } else {
+                btnVacacion.disabled = false;
+                btnVacacion.classList.remove('opacity-40', 'cursor-not-allowed');
+                btnVacacion.title = "";
+                cambiarTipoRegistro('vacacion');
+            }
+
             // Desbloqueamos la interfaz
             document.getElementById('tarjetaKardex').classList.remove('opacity-50', 'pointer-events-none');
             document.getElementById('cajaControles').classList.remove('opacity-50', 'pointer-events-none');
@@ -414,6 +445,18 @@
             }
         }
 
+        function toggleHorasPermiso() {
+            const esPorDias = document.getElementById('permiso_por_dias').checked;
+            const zonaRelojes = document.getElementById('zona_relojes');
+            if(esPorDias) {
+                zonaRelojes.classList.add('hidden');
+                document.getElementById('hora_inicio').value = '';
+                document.getElementById('hora_fin').value = '';
+            } else {
+                zonaRelojes.classList.remove('hidden');
+            }
+        }
+        
         function renderizarTablaPrincipal() {
             const tbody = document.getElementById('cuerpoTablaAusencias');
             tbody.innerHTML = '';

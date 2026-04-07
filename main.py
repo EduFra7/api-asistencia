@@ -308,6 +308,24 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
                 estado VARCHAR(20),                    -- Ej: 'A_Tiempo', 'Retraso', 'Falta'
                 creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+                             
+            -- ⚡ ¡AQUÍ AGREGAMOS LA TABLA QUE FALTABA PARA LAS VACACIONES! ⚡
+            CREATE TABLE {schema}.ausencias (
+                id SERIAL PRIMARY KEY,
+                empleado_id INT REFERENCES {schema}.empleados(id) NOT NULL,
+                tipo VARCHAR(20) NOT NULL,
+                fecha_inicio DATE NOT NULL,
+                fecha_fin DATE NOT NULL,
+                hora_inicio TIME,
+                hora_fin TIME,
+                horas_totales NUMERIC(5,2) DEFAULT 0.00,
+                dias_descontados NUMERIC(5,2) DEFAULT 0.00,
+                motivo TEXT,
+                requiere_reposicion BOOLEAN DEFAULT FALSE,
+                estado VARCHAR(20) DEFAULT 'aprobado',
+                eliminado BOOLEAN DEFAULT FALSE,
+                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
         """).format(schema=sql.Identifier(schema_name))
 
         cur.execute(script_sql) # Ejecutamos todo el bloque para crear la empresa
@@ -1116,70 +1134,59 @@ async def registrar_ausencia(data: dict, usuario = Depends(verificar_token)):
         fecha_inicio = data.get("fecha_inicio")
         fecha_fin = data.get("fecha_fin")
         motivo = data.get("motivo", "")
+        
+        # ⚡ Nuevos campos recibidos desde el Frontend
+        por_dias = data.get("por_dias", False)
+        requiere_reposicion = data.get("requiere_reposicion", False)
 
         dias_descontados = 0
         horas_totales = 0
         hora_inicio = None
         hora_fin = None
 
-        if tipo == "vacacion":
+        # ⚡ LÓGICA MEJORADA: Si es vacación O permiso por días completos
+        if tipo == "vacacion" or (tipo == "permiso" and por_dias):
             f_inicio = datetime.strptime(fecha_inicio, "%Y-%m-%d")
             f_fin = datetime.strptime(fecha_fin, "%Y-%m-%d")
             
-            # Traemos reglas del turno
-            cur.execute(f"""
-                SELECT t.dias, t.medio_tiempo_fines 
-                FROM {schema}.empleados e
-                JOIN {schema}.turnos t ON e.turno_id = t.id
-                WHERE e.id = %s
-            """, (empleado_id,))
+            cur.execute(f"SELECT t.dias, t.medio_tiempo_fines FROM {schema}.empleados e JOIN {schema}.turnos t ON e.turno_id = t.id WHERE e.id = %s", (empleado_id,))
             turno_emp = cur.fetchone()
 
             if not turno_emp:
-                raise HTTPException(status_code=400, detail="El empleado no tiene un turno asignado para calcular los días.")
+                raise HTTPException(status_code=400, detail="El empleado no tiene un turno asignado.")
 
             dias_laborales_json = turno_emp["dias"] 
             es_medio_tiempo_fines = turno_emp["medio_tiempo_fines"]
-
-            # Recorremos día por día saltando días no laborales
             mapa_dias = {0: 'L', 1: 'M', 2: 'X', 3: 'J', 4: 'V', 5: 'S', 6: 'D'}
             dia_actual = f_inicio
             
             while dia_actual <= f_fin:
-                num_dia = dia_actual.weekday() 
-                letra_dia = mapa_dias[num_dia]
-                
-                if dias_laborales_json.get(letra_dia, False) == True:
-                    if letra_dia in ['S', 'D'] and es_medio_tiempo_fines:
-                        dias_descontados += 0.5
-                    else:
-                        dias_descontados += 1.0
-                
+                letra_dia = mapa_dias[dia_actual.weekday()]
+                if dias_laborales_json.get(letra_dia, False):
+                    dias_descontados += 0.5 if (letra_dia in ['S', 'D'] and es_medio_tiempo_fines) else 1.0
                 dia_actual += timedelta(days=1) 
 
             if dias_descontados == 0:
-                raise HTTPException(status_code=400, detail="El rango seleccionado no contiene días laborales para este empleado.")
-
+                raise HTTPException(status_code=400, detail="El rango no contiene días laborales.")
         else:
             # Lógica de Permiso por Horas
             hora_inicio = data.get("hora_inicio")
             hora_fin = data.get("hora_fin")
             h_ini = datetime.strptime(hora_inicio, "%H:%M")
             h_fin = datetime.strptime(hora_fin, "%H:%M")
-            
             diferencia_segundos = (h_fin - h_ini).total_seconds()
-            if diferencia_segundos < 0:
-                diferencia_segundos += 86400 
+            if diferencia_segundos < 0: diferencia_segundos += 86400 
             horas_totales = round(diferencia_segundos / 3600.0, 2)
 
+        # ⚡ INSERT ACTUALIZADO (Incluye requiere_reposicion)
         cur.execute(f"""
             INSERT INTO {schema}.ausencias 
-            (empleado_id, tipo, fecha_inicio, fecha_fin, hora_inicio, hora_fin, horas_totales, dias_descontados, motivo)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (empleado_id, tipo, fecha_inicio, fecha_fin, hora_inicio, hora_fin, horas_totales, dias_descontados, motivo))
+            (empleado_id, tipo, fecha_inicio, fecha_fin, hora_inicio, hora_fin, horas_totales, dias_descontados, motivo, requiere_reposicion)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (empleado_id, tipo, fecha_inicio, fecha_fin, hora_inicio, hora_fin, horas_totales, dias_descontados, motivo, requiere_reposicion))
         
         conn.commit()
-        return {"mensaje": f"{tipo.capitalize()} registrada correctamente. Días descontados: {dias_descontados}"}
+        return {"mensaje": f"{tipo.capitalize()} registrada correctamente."}
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=400, detail=str(e))
