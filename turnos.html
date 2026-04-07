@@ -115,9 +115,21 @@
                             <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                         </label>
                     </div>
-                    <div id="caja_almuerzo" class="hidden pl-4 border-l-2 border-indigo-200">
-                        <label class="block text-xs font-medium text-gray-600">Minutos otorgados</label>
-                        <input type="number" id="t_almuerzo_min" value="60" onchange="calcularHoras()" class="mt-1 w-24 px-2 py-1 border border-gray-300 rounded text-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    <div id="caja_almuerzo" class="hidden pl-4 border-l-2 border-indigo-200 mt-2 space-y-2">
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600">Hora Inicio Almuerzo</label>
+                                <input type="time" id="t_inicio_almuerzo" onchange="calcularAlmuerzoMin()" class="mt-1 w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-600">Hora Fin Almuerzo</label>
+                                <input type="time" id="t_fin_almuerzo" onchange="calcularAlmuerzoMin()" class="mt-1 w-full px-2 py-1 border border-gray-300 rounded text-sm focus:ring-indigo-500">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600">Total Minutos Descontados</label>
+                            <input type="number" id="t_almuerzo_min" readonly class="mt-1 w-24 px-2 py-1 bg-gray-100 border border-gray-300 rounded text-sm text-gray-500 font-bold">
+                        </div>
                     </div>
 
                     <!-- Tolerancia -->
@@ -284,7 +296,7 @@
         }
 
         function bloquearCampos(estado) {
-            const campos = ['t_nombre', 't_ingreso', 't_salida', 't_almuerzo', 't_almuerzo_min', 't_tolerancia', 't_tolerancia_min', 't_tolerancia_mensual', 't_medio_tiempo_fines', 't_descuento', 't_extras'];
+            const campos = ['t_nombre', 't_ingreso', 't_salida', 't_almuerzo', 't_inicio_almuerzo', 't_fin_almuerzo', 't_almuerzo_min', 't_tolerancia', 't_tolerancia_min', 't_tolerancia_mensual', 't_medio_tiempo_fines', 't_descuento', 't_extras'];
             campos.forEach(id => {
                 document.getElementById(id).disabled = estado;
                 if(document.getElementById(id).type === 'text' || document.getElementById(id).type === 'time' || document.getElementById(id).type === 'number') {
@@ -300,6 +312,10 @@
             document.getElementById('t_ingreso').value = '08:00';
             document.getElementById('t_salida').value = '16:00';
             document.getElementById('t_almuerzo').checked = false;
+            // ⚡ LIMPIAMOS LAS HORAS NUEVAS
+            document.getElementById('t_inicio_almuerzo').value = '';
+            document.getElementById('t_fin_almuerzo').value = '';
+            document.getElementById('t_almuerzo_min').value = '';
             document.getElementById('t_tolerancia').checked = false;
             document.getElementById('t_descuento').checked = true;
             document.getElementById('t_extras').checked = false;
@@ -330,6 +346,8 @@
             document.getElementById('t_salida').value = t.hora_salida.substring(0,5);
             
             document.getElementById('t_almuerzo').checked = t.almuerzo;
+            document.getElementById('t_inicio_almuerzo').value = t.hora_inicio_almuerzo ? t.hora_inicio_almuerzo.substring(0,5) : '';
+            document.getElementById('t_fin_almuerzo').value = t.hora_fin_almuerzo ? t.hora_fin_almuerzo.substring(0,5) : '';
             document.getElementById('t_almuerzo_min').value = t.almuerzo_min;
             document.getElementById('t_tolerancia').checked = t.tolerancia;
             document.getElementById('t_tolerancia_min').value = t.tolerancia_min || 0;
@@ -375,13 +393,18 @@
                 hora_salida: document.getElementById('t_salida').value,
                 dias: diasSeleccionados,
                 almuerzo: document.getElementById('t_almuerzo').checked,
+                
+                // ⚡ AQUÍ ENVIAMOS LAS NUEVAS VARIABLES DE ALMUERZO A PYTHON
+                hora_inicio_almuerzo: document.getElementById('t_inicio_almuerzo').value || null,
+                hora_fin_almuerzo: document.getElementById('t_fin_almuerzo').value || null,
+                
                 almuerzo_min: parseInt(document.getElementById('t_almuerzo_min').value || 0),
                 tolerancia: document.getElementById('t_tolerancia').checked,
                 tolerancia_min: parseInt(document.getElementById('t_tolerancia_min').value || 0),
-                tolerancia_mensual_min: parseInt(document.getElementById('t_tolerancia_mensual').value || 0), // ⚡ NUEVO
+                tolerancia_mensual_min: parseInt(document.getElementById('t_tolerancia_mensual').value || 0),
                 descuento: document.getElementById('t_descuento').checked,
                 horas_extras: document.getElementById('t_extras').checked,
-                medio_tiempo_fines: document.getElementById('t_medio_tiempo_fines').checked // ⚡ NUEVO
+                medio_tiempo_fines: document.getElementById('t_medio_tiempo_fines').checked
             };
 
             const url = itemEditandoId ? `${API_URL}/turnos/${itemEditandoId}` : `${API_URL}/turnos`;
@@ -399,6 +422,36 @@
                 const res = await fetch(`${API_URL}/turnos/${itemEditandoId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
                 if(res.ok) { cerrarPanel(); cargarTurnos(); }
             } catch (e) { alert("Error al eliminar"); }
+        }
+
+        // ⚡ NUEVO: Función para calcular automáticamente los minutos del almuerzo
+        function calcularAlmuerzoMin() {
+            const inicio = document.getElementById('t_inicio_almuerzo').value;
+            const fin = document.getElementById('t_fin_almuerzo').value;
+            
+            // Si falta alguna de las dos horas, dejamos los minutos en 0
+            if(!inicio || !fin) {
+                document.getElementById('t_almuerzo_min').value = 0;
+                calcularHoras(); // Recalculamos el total del día
+                return;
+            }
+
+            let [inH, inM] = inicio.split(':').map(Number);
+            let [outH, outM] = fin.split(':').map(Number);
+            
+            let minInicio = (inH * 60) + inM;
+            let minFin = (outH * 60) + outM;
+            
+            // Cruce de medianoche (por si almuerzan de 23:30 a 00:30 en turno nocturno)
+            if(minFin < minInicio) {
+                minFin += (24 * 60);
+            }
+            
+            let totalMins = minFin - minInicio;
+            document.getElementById('t_almuerzo_min').value = totalMins;
+            
+            // ⚡ Disparamos el recálculo del panel negro (Total de horas del turno)
+            calcularHoras();
         }
 
         renderizarDias();

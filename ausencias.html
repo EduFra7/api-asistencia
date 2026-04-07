@@ -125,8 +125,8 @@
                     <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Buscar Empleado a Procesar</label>
                     <div class="relative">
                         <i class="fas fa-search absolute left-3 top-2.5 text-gray-400"></i>
-                        <input type="text" id="buscador_empleado" list="lista_empleados" onchange="seleccionarDesdeBuscador(this.value)" placeholder="Escriba Nombre, C.I. o ID..." class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 text-sm font-medium">
-                        <datalist id="lista_empleados"></datalist>
+                        <input type="text" id="buscador_empleado" oninput="filtrarBuscadorFlotante(this.value)" placeholder="Escriba Nombre, C.I. o ID..." class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 text-sm font-medium" autocomplete="off">
+                        <ul id="dropdown_empleados" class="absolute z-50 w-full bg-white border border-gray-200 shadow-lg rounded-b-md mt-1 hidden max-h-48 overflow-y-auto text-sm divide-y divide-gray-100"></ul>
                     </div>
                 </div>
 
@@ -181,15 +181,21 @@
                                     </label>
                                 </div>
                                 
-                                <div id="zona_relojes" class="grid grid-cols-2 gap-4">
-                                    <div class="col-span-2 text-xs text-orange-700 mb-[-10px]"><i class="fas fa-info-circle mr-1"></i>Indique la hora exacta (Ej. 1.5 días = Marcar "Día completo" NO, y poner las horas correspondientes).</div>
+                                <div id="zona_relojes" class="grid grid-cols-2 gap-4 mt-2">
+                                    <div class="col-span-2 text-xs text-orange-700 bg-orange-100 p-2 rounded"><i class="fas fa-info-circle mr-1"></i>Indique la fecha y hora exacta. El sistema excluirá los horarios de almuerzo y madrugadas automáticamente.</div>
                                     <div>
-                                        <label class="block text-xs font-bold text-orange-700 uppercase">Hora Salida</label>
-                                        <input type="time" id="hora_inicio" class="w-full mt-1 px-3 py-2 border border-orange-300 rounded-md shadow-sm focus:ring-orange-500 bg-white">
+                                        <label class="block text-[10px] font-bold text-orange-700 uppercase">Salida</label>
+                                        <div class="flex space-x-2 mt-1">
+                                            <input type="date" id="fecha_inicio_permiso" class="w-full px-2 py-1.5 border border-orange-300 rounded shadow-sm text-sm">
+                                            <input type="time" id="hora_inicio_permiso" class="w-full px-2 py-1.5 border border-orange-300 rounded shadow-sm text-sm">
+                                        </div>
                                     </div>
                                     <div>
-                                        <label class="block text-xs font-bold text-orange-700 uppercase">Hora Retorno</label>
-                                        <input type="time" id="hora_fin" class="w-full mt-1 px-3 py-2 border border-orange-300 rounded-md shadow-sm focus:ring-orange-500 bg-white">
+                                        <label class="block text-[10px] font-bold text-orange-700 uppercase">Retorno</label>
+                                        <div class="flex space-x-2 mt-1">
+                                            <input type="date" id="fecha_fin_permiso" class="w-full px-2 py-1.5 border border-orange-300 rounded shadow-sm text-sm">
+                                            <input type="time" id="hora_fin_permiso" class="w-full px-2 py-1.5 border border-orange-300 rounded shadow-sm text-sm">
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -351,6 +357,29 @@
                 btnV.className = "flex-1 py-2 text-gray-500 font-medium rounded-md hover:bg-gray-300 transition-all transform scale-95";
                 zonaHoras.classList.remove('hidden');
             }
+        }
+
+        function filtrarBuscadorFlotante(texto) {
+            const dropdown = document.getElementById('dropdown_empleados');
+            dropdown.innerHTML = '';
+            if(!texto) { dropdown.classList.add('hidden'); return; }
+            
+            const filtrados = empleadosGlobal.filter(e => `${e.ci} ${e.nombres} ${e.apellidos}`.toLowerCase().includes(texto.toLowerCase()));
+            
+            if(filtrados.length === 0) {
+                dropdown.innerHTML = '<li class="p-3 text-gray-500 italic">No se encontraron resultados</li>';
+            } else {
+                filtrados.forEach(emp => {
+                    dropdown.innerHTML += `<li onclick="seleccionarEmpleado('${emp.id}', '${emp.nombres} ${emp.apellidos}')" class="p-3 hover:bg-blue-50 cursor-pointer text-gray-700 font-medium transition-colors"><i class="fas fa-user-circle text-gray-400 mr-2"></i>${emp.ci} - ${emp.nombres} ${emp.apellidos}</li>`;
+                });
+            }
+            dropdown.classList.remove('hidden');
+        }
+
+        function seleccionarEmpleado(id, nombre) {
+            document.getElementById('buscador_empleado').value = nombre;
+            document.getElementById('dropdown_empleados').classList.add('hidden');
+            cargarKardexEmpleado(id);
         }
 
         // ==========================================
@@ -541,43 +570,57 @@
                 return alert("⚠️ Debes seleccionar un empleado primero.");
             }
 
-            // 1. Extraer las fechas del Flatpickr (SOPORTE MULTILINGÜE)
-            const rango = document.getElementById('rango_fechas').value;
-            if (!rango) return alert("⚠️ Selecciona el rango de fechas.");
+            // 1. Capturamos los valores generales de los Checkboxes
+            const por_dias = document.getElementById('permiso_por_dias').checked;
+            const requiere_reposicion = document.getElementById('requiere_reposicion').checked;
 
-            let fecha_inicio = rango;
-            let fecha_fin = rango;
-            
-            // Verificamos si usa " a " (Español) o " to " (Inglés)
-            let separador = rango.includes(" a ") ? " a " : (rango.includes(" to ") ? " to " : null);
-            
-            if (separador) {
-                const partes = rango.split(separador);
-                fecha_inicio = partes[0].trim();
-                fecha_fin = partes[1].trim();
-            }
-
-            // 2. Armar el paquete de datos
+            // 2. CREAMOS EL "PAYLOAD" (El paquete de datos base)
             const payload = {
                 empleado_id: empleadoSeleccionadoId,
                 tipo: tipoRegistroActual,
-                fecha_inicio: fecha_inicio,
-                fecha_fin: fecha_fin,
-                motivo: document.getElementById('motivo_ausencia').value
+                motivo: document.getElementById('motivo_ausencia').value,
+                por_dias: por_dias,
+                requiere_reposicion: requiere_reposicion
             };
 
-            // 3. Validar horas si es un permiso
-            if (tipoRegistroActual === 'permiso') {
-                const h_ini = document.getElementById('hora_inicio').value;
-                const h_fin = document.getElementById('hora_fin').value;
-                if (!h_ini || !h_fin) {
-                    return alert("⚠️ Para permisos, debes indicar hora de salida y retorno.");
+            // 3. LÓGICA SEGÚN EL TIPO DE REGISTRO
+            if (tipoRegistroActual === 'vacacion' || (tipoRegistroActual === 'permiso' && por_dias)) {
+                // CASO A: Vacación o Permiso por días completos (usa el rango del calendario)
+                const rango = document.getElementById('rango_fechas').value;
+                if (!rango) return alert("⚠️ Seleccione el rango de fechas.");
+
+                let fecha_inicio = rango;
+                let fecha_fin = rango;
+                let separador = rango.includes(" a ") ? " a " : (rango.includes(" to ") ? " to " : null);
+                
+                if (separador) {
+                    const partes = rango.split(separador);
+                    fecha_inicio = partes[0].trim();
+                    fecha_fin = partes[1].trim();
                 }
-                payload.hora_inicio = h_ini;
-                payload.hora_fin = h_fin;
+                
+                payload.fecha_inicio = fecha_inicio;
+                payload.fecha_fin = fecha_fin;
+
+            } else {
+                // CASO B: Permiso por horas/días específicos (Usa los nuevos relojes y fechas separadas)
+                const f_ini = document.getElementById('fecha_inicio_permiso').value;
+                const h_ini = document.getElementById('hora_inicio_permiso').value;
+                const f_fin = document.getElementById('fecha_fin_permiso').value;
+                const h_fin = document.getElementById('hora_fin_permiso').value;
+
+                if (!f_ini || !h_ini || !f_fin || !h_fin) {
+                    return alert("⚠️ Para este permiso, debe indicar Fecha y Hora tanto de salida como de retorno.");
+                }
+
+                // ⚡ AQUÍ ESTÁ EL CAMBIO: Estos nombres deben coincidir con lo que pusimos en main.py
+                payload.fecha_inicio_permiso = f_ini;
+                payload.hora_inicio_permiso = h_ini;
+                payload.fecha_fin_permiso = f_fin;
+                payload.hora_fin_permiso = h_fin;
             }
 
-            // 4. Enviar a la Base de Datos
+            // 4. ENVÍO AL SERVIDOR
             const btn = document.getElementById('btnGuardarAusencia');
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Procesando...';
@@ -586,18 +629,15 @@
                 const res = await fetch(`${API_URL}/ausencias`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token_api}` },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify(payload) // Enviamos el "sobre" con los datos
                 });
 
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.detail || "Error en el servidor");
 
                 alert("✅ " + data.mensaje);
-                // ⚡ LA MAGIA: Borramos la pizarra después de guardar exitosamente
                 limpiarFormulario();
                 cerrarPanel();
-                
-                // Recargamos el kardex para ver cómo baja el saldo en tiempo real
                 cargarKardexEmpleado(empleadoSeleccionadoId); 
                 cargarTodosLosKardexEnFondo();
                 

@@ -240,6 +240,8 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
                 hora_salida TIME NOT NULL,
                 dias JSONB NOT NULL,
                 almuerzo BOOLEAN DEFAULT FALSE,
+                hora_inicio_almuerzo TIME,       -- ⚡ NUEVO
+                hora_fin_almuerzo TIME,          -- ⚡ NUEVO
                 almuerzo_min INTEGER DEFAULT 0,
                 tolerancia BOOLEAN DEFAULT FALSE,
                 tolerancia_min INTEGER DEFAULT 0,
@@ -922,17 +924,19 @@ async def crear_turno(data: dict, usuario = Depends(verificar_token)):
     try:
         cur.execute(f"""
             INSERT INTO {schema}.turnos 
-            (nombre, hora_ingreso, hora_salida, dias, almuerzo, almuerzo_min, 
+            (nombre, hora_ingreso, hora_salida, dias, almuerzo, hora_inicio_almuerzo, hora_fin_almuerzo, almuerzo_min, 
              tolerancia, tolerancia_min, tolerancia_mensual_min, descuento, horas_extras, medio_tiempo_fines) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             data.get("nombre"), data.get("hora_ingreso"), data.get("hora_salida"),
             json.dumps(data.get("dias")),
-            data.get("almuerzo", False), data.get("almuerzo_min", 0),
+            data.get("almuerzo", False), 
+            data.get("hora_inicio_almuerzo"), data.get("hora_fin_almuerzo"), # ⚡ NUEVAS
+            data.get("almuerzo_min", 0),
             data.get("tolerancia", False), data.get("tolerancia_min", 0),
-            data.get("tolerancia_mensual_min", 0), # ⚡ NUEVO
+            data.get("tolerancia_mensual_min", 0),
             data.get("descuento", True), data.get("horas_extras", False),
-            data.get("medio_tiempo_fines", False) # ⚡ NUEVO
+            data.get("medio_tiempo_fines", False)
         ))
         conn.commit()
         return {"mensaje": "Turno creado exitosamente"}
@@ -952,14 +956,16 @@ async def actualizar_turno(turno_id: int, data: dict, usuario = Depends(verifica
         cur.execute(f"""
             UPDATE {schema}.turnos SET 
                 nombre=%s, hora_ingreso=%s, hora_salida=%s, dias=%s, 
-                almuerzo=%s, almuerzo_min=%s, 
+                almuerzo=%s, hora_inicio_almuerzo=%s, hora_fin_almuerzo=%s, almuerzo_min=%s, 
                 tolerancia=%s, tolerancia_min=%s, tolerancia_mensual_min=%s, 
                 descuento=%s, horas_extras=%s, medio_tiempo_fines=%s
             WHERE id=%s
         """, (
             data.get("nombre"), data.get("hora_ingreso"), data.get("hora_salida"),
             json.dumps(data.get("dias")),
-            data.get("almuerzo", False), data.get("almuerzo_min", 0),
+            data.get("almuerzo", False), 
+            data.get("hora_inicio_almuerzo"), data.get("hora_fin_almuerzo"),
+            data.get("almuerzo_min", 0),
             data.get("tolerancia", False), data.get("tolerancia_min", 0),
             data.get("tolerancia_mensual_min", 0), # ⚡ NUEVO
             data.get("descuento", True), data.get("horas_extras", False),
@@ -1169,14 +1175,67 @@ async def registrar_ausencia(data: dict, usuario = Depends(verificar_token)):
             if dias_descontados == 0:
                 raise HTTPException(status_code=400, detail="El rango no contiene días laborales.")
         else:
-            # Lógica de Permiso por Horas
-            hora_inicio = data.get("hora_inicio")
-            hora_fin = data.get("hora_fin")
-            h_ini = datetime.strptime(hora_inicio, "%H:%M")
-            h_fin = datetime.strptime(hora_fin, "%H:%M")
-            diferencia_segundos = (h_fin - h_ini).total_seconds()
-            if diferencia_segundos < 0: diferencia_segundos += 86400 
-            horas_totales = round(diferencia_segundos / 3600.0, 2)
+            # ⚡ MOTOR ERP: Lógica de Permiso por Horas Multidía y Almuerzos
+            fecha_ini_str = data.get("fecha_inicio_permiso")
+            hora_ini_str = data.get("hora_inicio_permiso")
+            fecha_fin_str = data.get("fecha_fin_permiso")
+            hora_fin_str = data.get("hora_fin_permiso")
+            
+            # Unificamos Fechas y Horas para cálculo
+            dt_inicio = datetime.strptime(f"{fecha_ini_str} {hora_ini_str}", "%Y-%m-%d %H:%M")
+            dt_fin = datetime.strptime(f"{fecha_fin_str} {hora_fin_str}", "%Y-%m-%d %H:%M")
+            
+            if dt_fin < dt_inicio:
+                raise HTTPException(status_code=400, detail="La fecha de retorno no puede ser en el pasado.")
+
+            cur.execute(f"SELECT t.* FROM {schema}.empleados e JOIN {schema}.turnos t ON e.turno_id = t.id WHERE e.id = %s", (empleado_id,))
+            turno_emp = cur.fetchone()
+
+            segundos_totales = 0
+            mapa_dias = {0: 'L', 1: 'M', 2: 'X', 3: 'J', 4: 'V', 5: 'S', 6: 'D'}
+            dias_json = turno_emp["dias"]
+            
+            def combinar_dt(d, t): return datetime.combine(d, t) if t else None
+
+            dia_cursor = dt_inicio.date()
+            while dia_cursor <= dt_fin.date():
+                letra_dia = mapa_dias[dia_cursor.weekday()]
+                
+                # Si ese día el empleado trabaja, calculamos cruces
+                if dias_json.get(letra_dia, False):
+                    w_start = combinar_dt(dia_cursor, turno_emp["hora_ingreso"])
+                    w_end = combinar_dt(dia_cursor, turno_emp["hora_salida"])
+                    
+                    if w_end < w_start: w_end += timedelta(days=1) # Turnos nocturnos
+                    
+                    # Intersección entre [El permiso] y [El turno laboral]
+                    p_start = max(w_start, dt_inicio)
+                    p_end = min(w_end, dt_fin)
+                    
+                    if p_start < p_end:
+                        overlap_secs = (p_end - p_start).total_seconds()
+                        
+                        # ⚡ RESTA DEL ALMUERZO SI SE CRUZA
+                        if turno_emp["almuerzo"] and turno_emp.get("hora_inicio_almuerzo"):
+                            l_start = combinar_dt(dia_cursor, turno_emp["hora_inicio_almuerzo"])
+                            l_end = combinar_dt(dia_cursor, turno_emp["hora_fin_almuerzo"])
+                            if l_end < l_start: l_end += timedelta(days=1)
+                            
+                            lunch_o_start = max(p_start, l_start)
+                            lunch_o_end = min(p_end, l_end)
+                            if lunch_o_start < lunch_o_end:
+                                overlap_secs -= (lunch_o_end - lunch_o_start).total_seconds()
+                                
+                        segundos_totales += overlap_secs
+                dia_cursor += timedelta(days=1)
+            
+            horas_totales = round(segundos_totales / 3600.0, 2)
+            
+            # Formateamos para guardar en DB
+            fecha_inicio = fecha_ini_str
+            fecha_fin = fecha_fin_str
+            hora_inicio = hora_ini_str
+            hora_fin = hora_fin_str
 
         # ⚡ INSERT ACTUALIZADO (Incluye requiere_reposicion)
         cur.execute(f"""
