@@ -294,13 +294,9 @@
             document.getElementById('tarjetaKardex').classList.add('opacity-50', 'pointer-events-none');
             document.getElementById('cajaControles').classList.add('opacity-50', 'pointer-events-none');
             
-            // Llenamos el Datalist Inteligente
-            const dl = document.getElementById('lista_empleados');
-            dl.innerHTML = '';
-            empleadosGlobal.forEach(e => {
-                dl.innerHTML += `<option value="${e.ci} - ${e.nombres} ${e.apellidos}">`;
-            });
             document.getElementById('buscador_empleado').value = '';
+            document.getElementById('dropdown_empleados').innerHTML = '';
+            document.getElementById('dropdown_empleados').classList.add('hidden');
 
             limpiarFormulario();
             mostrarPanel();
@@ -334,12 +330,21 @@
             if (calendarioInstancia) {
                 calendarioInstancia.clear();
             }
-            // 2. Limpiamos las horas y el texto
-            document.getElementById('hora_inicio').value = '';
-            document.getElementById('hora_fin').value = '';
+            // 2. Limpiamos los NUEVOS IDs de fecha y hora separados
+            document.getElementById('fecha_inicio_permiso').value = '';
+            document.getElementById('hora_inicio_permiso').value = '';
+            document.getElementById('fecha_fin_permiso').value = '';
+            document.getElementById('hora_fin_permiso').value = '';
+            
             document.getElementById('motivo_ausencia').value = '';
+            
             // 3. Devolvemos el selector a "Vacación" por defecto
             cambiarTipoRegistro('vacacion');
+            
+            // 4. Reiniciamos los checkboxes por defecto
+            document.getElementById('permiso_por_dias').checked = false;
+            document.getElementById('requiere_reposicion').checked = false;
+            toggleHorasPermiso(); // Asegura que los campos correctos estén visibles
         }
 
         function cambiarTipoRegistro(tipo) {
