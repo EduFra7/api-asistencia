@@ -42,14 +42,17 @@
             <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6">
                 <div class="flex justify-between items-center mb-4 border-b border-gray-100 pb-4">
                     <div class="flex space-x-2">
-                        <button onclick="cambiarFiltro('todos', this)" class="filtro-btn px-4 py-2 bg-blue-50 text-blue-700 font-semibold rounded-lg text-sm border border-blue-200 transition-colors">
-                            <i class="fas fa-users mr-2"></i>Todos
+                        <button id="btnFiltroTodos" onclick="cambiarFiltro('todos', this)" class="filtro-btn px-4 py-2 bg-blue-50 text-blue-700 font-semibold rounded-lg text-sm border border-blue-200 transition-colors">
+                            <i class="fas fa-users mr-2"></i>Todos <span id="count_todos" class="ml-1 opacity-60">0</span>
                         </button>
-                        <button onclick="cambiarFiltro('vacaciones', this)" class="filtro-btn px-4 py-2 bg-white text-gray-600 font-medium rounded-lg text-sm border border-gray-200 hover:bg-gray-50 transition-colors">
-                            <i class="fas fa-plane mr-2 text-blue-500"></i>De Vacación
+                        <button id="btnFiltroVacaciones" onclick="cambiarFiltro('vacaciones', this)" class="filtro-btn px-4 py-2 bg-white text-gray-600 font-medium rounded-lg text-sm border border-gray-200 hover:bg-gray-50 transition-colors">
+                            <i class="fas fa-plane mr-2 text-blue-500"></i>De Vacación <span id="count_vacaciones" class="ml-1 opacity-60">0</span>
                         </button>
-                        <button onclick="cambiarFiltro('permisos', this)" class="filtro-btn px-4 py-2 bg-white text-gray-600 font-medium rounded-lg text-sm border border-gray-200 hover:bg-gray-50 transition-colors">
-                            <i class="fas fa-user-clock mr-2 text-orange-500"></i>Con Permiso
+                        <button id="btnFiltroPermisos" onclick="cambiarFiltro('permisos', this)" class="filtro-btn px-4 py-2 bg-white text-gray-600 font-medium rounded-lg text-sm border border-gray-200 hover:bg-gray-50 transition-colors">
+                            <i class="fas fa-user-clock mr-2 text-orange-500"></i>Con Permiso <span id="count_permisos" class="ml-1 opacity-60">0</span>
+                        </button>
+                        <button id="btnFiltroTrabajo" onclick="cambiarFiltro('trabajando', this)" class="filtro-btn px-4 py-2 bg-white text-gray-600 font-medium rounded-lg text-sm border border-gray-200 hover:bg-gray-50 transition-colors">
+                            <i class="fas fa-briefcase mr-2 text-green-500"></i>En Trabajo <span id="count_trabajando" class="ml-1 opacity-60">0</span>
                         </button>
                     </div>
                 </div>
@@ -59,24 +62,24 @@
                         <label class="text-xs font-semibold text-gray-500 uppercase">Buscar Personal</label>
                         <div class="relative mt-1">
                             <i class="fas fa-search absolute left-3 top-2.5 text-gray-400"></i>
-                            <input type="text" id="filtro_busqueda" placeholder="Nombre, C.I. o ID..." class="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500">
+                            <input type="text" id="filtro_busqueda" oninput="renderizarTablaPrincipal()" placeholder="Nombre, C.I. o ID..." class="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500">
                         </div>
                     </div>
                     <div>
                         <label class="text-xs font-semibold text-gray-500 uppercase">Sucursal</label>
-                        <select id="filtro_sucursal" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500">
+                        <select id="filtro_sucursal" onchange="renderizarTablaPrincipal()" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500">
                             <option value="">Todas las sucursales</option>
                         </select>
                     </div>
                     <div>
                         <label class="text-xs font-semibold text-gray-500 uppercase">Sección</label>
-                        <select id="filtro_seccion" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500">
+                        <select id="filtro_seccion" onchange="renderizarTablaPrincipal()" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500">
                             <option value="">Todas las secciones</option>
                         </select>
                     </div>
                     <div>
                         <label class="text-xs font-semibold text-gray-500 uppercase">Cargo</label>
-                        <select id="filtro_cargo" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500">
+                        <select id="filtro_cargo" onchange="renderizarTablaPrincipal()" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500">
                             <option value="">Todos los cargos</option>
                         </select>
                     </div>
@@ -344,6 +347,7 @@
                 const data = await res.json();
                 empleadosGlobal = data;
                 renderizarTablaPrincipal();
+                actualizarContadoresFiltros();
                 cargarTodosLosKardexEnFondo();
             } catch (error) {
                 console.error("Error cargando empleados");
@@ -382,6 +386,9 @@
                 if (kardex.dias_disponibles !== undefined) {
                     const disponiblesTexto = kardex.dias_disponibles.toFixed(2);
                     
+                    // ⚡ Actualizamos la memoria global para que los filtros no lo borren
+                    emp.dias_disponibles_memoria = disponiblesTexto;
+
                     // Actualizamos el panel derecho
                     document.getElementById('kardex_disponibles').textContent = disponiblesTexto;
                     document.getElementById('kardex_tasa').innerHTML = `<i class="fas fa-chart-line mr-1"></i> Tasa: ${kardex.tasa_actual}`;
@@ -411,20 +418,54 @@
             const tbody = document.getElementById('cuerpoTablaAusencias');
             tbody.innerHTML = '';
             
-            empleadosGlobal.forEach(emp => {
+            // ⚡ CAPTURAMOS LO QUE EL USUARIO ESCRIBIÓ/SELECCIONÓ
+            const txtBusqueda = document.getElementById('filtro_busqueda').value.toLowerCase();
+            const valSucursal = document.getElementById('filtro_sucursal').value;
+            const valSeccion = document.getElementById('filtro_seccion').value;
+            const valCargo = document.getElementById('filtro_cargo').value;
+
+            // ⚡ FILTRAMOS LA LISTA MAESTRA
+            const listaFiltrada = empleadosGlobal.filter(emp => {
+                // 1. Filtro por Botones (Todos / Vacación / Permiso)
+                if (filtroEstadoAusencia === 'vacaciones' && emp.estado_ausencia !== 'vacacion') return false;
+                if (filtroEstadoAusencia === 'permisos' && emp.estado_ausencia !== 'permiso') return false;
+                if (filtroEstadoAusencia === 'trabajando' && emp.estado_ausencia) return false;
+
+                // 2. Filtro de Texto (Busca en Nombre, Apellido, CI o ID Lector)
+                const textoEmpleado = `${emp.nombres} ${emp.apellidos} ${emp.ci} ${emp.bio_id || ''}`.toLowerCase();
+                if (txtBusqueda && !textoEmpleado.includes(txtBusqueda)) return false;
+
+                // 3. Filtros Selectores
+                if (valSucursal && emp.sucursal_id != valSucursal) return false;
+                if (valSeccion && emp.seccion_id != valSeccion) return false;
+                if (valCargo && emp.cargo !== valCargo) return false;
+
+                return true; // Si pasó todas las pruebas, se dibuja
+            });
+
+            // Si ningún empleado cumple los filtros:
+            if (listaFiltrada.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-gray-500"><i class="fas fa-search mr-2"></i>No se encontraron resultados con estos filtros.</td></tr>';
+                return;
+            }
+
+            // DIBUJAMOS LOS RESULTADOS FILTRADOS
+            listaFiltrada.forEach(emp => {
                 const iniciales = (emp.nombres.charAt(0) + emp.apellidos.charAt(0)).toUpperCase();
                 
-                // ⚡ LÓGICA DINÁMICA DE ESTADOS (Adiós al dato simulado)
                 let badgeEstado = '';
                 if (emp.estado_ausencia === 'vacacion') {
-                    // Si está de vacación, pintamos de Azul
                     badgeEstado = '<span class="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold border border-blue-200 shadow-sm"><i class="fas fa-plane mr-1"></i>De Vacación</span>';
                 } else if (emp.estado_ausencia === 'permiso') {
-                    // Si tiene permiso, pintamos de Naranja
                     badgeEstado = '<span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-bold border border-orange-200 shadow-sm"><i class="fas fa-user-clock mr-1"></i>Con Permiso</span>';
                 } else {
-                    // Si no tiene nada activo HOY, pintamos Verde
                     badgeEstado = '<span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold border border-green-200 shadow-sm"><i class="fas fa-briefcase mr-1"></i>Trabajando</span>';
+                }
+
+                // ⚡ OPTIMIZACIÓN: Leemos directamente de la memoria, sin depender del HTML
+                let valorKardexActual = '<span class="text-xs text-gray-400"><i class="fas fa-spinner fa-spin"></i></span>';
+                if (emp.dias_disponibles_memoria !== undefined) {
+                    valorKardexActual = emp.dias_disponibles_memoria;
                 }
 
                 tbody.innerHTML += `
@@ -445,7 +486,7 @@
                             <p class="text-xs text-gray-400">${emp.seccion_nombre || '-'}</p>
                         </td>
                         <td id="celda_kardex_${emp.id}" class="p-4 text-center font-mono font-bold text-blue-700 text-lg">
-                            <span class="text-xs text-gray-400"><i class="fas fa-spinner fa-spin"></i></span>
+                            ${valorKardexActual}
                         </td>
                         <td class="p-4">${badgeEstado}</td>
                     </tr>`;
@@ -655,9 +696,14 @@
                     const res = await fetch(`${API_URL}/empleados/${emp.id}/kardex_vacaciones`, { headers: { 'Authorization': `Bearer ${token_api}` } });
                     if(res.ok) {
                         const kardex = await res.json();
+                        
+                        // ⚡ OPTIMIZACIÓN: Guardamos el dato en la memoria RAM del empleado
+                        emp.dias_disponibles_memoria = kardex.dias_disponibles !== undefined ? kardex.dias_disponibles.toFixed(2) : "0.00";
+                        
+                        // Si la celda está visible, la actualizamos
                         const celda = document.getElementById(`celda_kardex_${emp.id}`);
                         if (celda) {
-                            celda.textContent = kardex.dias_disponibles !== undefined ? kardex.dias_disponibles.toFixed(2) : "0.00";
+                            celda.textContent = emp.dias_disponibles_memoria;
                         }
                     }
                 } catch (e) {
@@ -850,6 +896,69 @@
             doc.save(`Kardex_Ausencias_${emp.ci}.pdf`);
         }
 
+        // BOTONES DE FILTROS DE BUSQUEDA Y SELECCIÓN
+
+        let filtroEstadoAusencia = 'todos'; // Puede ser 'todos', 'vacaciones', 'permisos'
+
+        // ⚡ 1. FUNCIÓN DE LOS BOTONES SUPERIORES
+        function cambiarFiltro(tipo, botonPresionado) {
+            filtroEstadoAusencia = tipo;
+            
+            // Reiniciamos los colores de todos los botones
+            document.querySelectorAll('.filtro-btn').forEach(btn => {
+                btn.className = "filtro-btn px-4 py-2 bg-white text-gray-600 font-medium rounded-lg text-sm border border-gray-200 hover:bg-gray-50 transition-colors";
+            });
+            // Pintamos de azul el botón presionado
+            botonPresionado.className = "filtro-btn px-4 py-2 bg-blue-50 text-blue-700 font-semibold rounded-lg text-sm border border-blue-200 transition-colors";
+            
+            // Re-dibujamos la tabla
+            renderizarTablaPrincipal();
+        }
+
+        // ⚡ 2. FUNCIÓN PARA LLENAR LOS SELECTORES DE SUCURSAL, SECCIÓN Y CARGO
+        async function cargarCatalogosFiltros() {
+            try {
+                const [resSuc, resSec] = await Promise.all([
+                    fetch(`${API_URL}/sucursales`, { headers: { 'Authorization': `Bearer ${token_api}` } }),
+                    fetch(`${API_URL}/secciones`, { headers: { 'Authorization': `Bearer ${token_api}` } })
+                ]);
+
+                const sucursales = await resSuc.json();
+                const secciones = await resSec.json();
+
+                const selSuc = document.getElementById('filtro_sucursal');
+                selSuc.innerHTML = '<option value="">Todas las sucursales</option>';
+                sucursales.forEach(s => selSuc.innerHTML += `<option value="${s.id}">${s.nombre}</option>`);
+
+                const selSec = document.getElementById('filtro_seccion');
+                selSec.innerHTML = '<option value="">Todas las secciones</option>';
+                secciones.forEach(s => selSec.innerHTML += `<option value="${s.id}">${s.nombre}</option>`);
+
+                // ⚡ Truco Senior: Extraemos los cargos únicos directamente de los empleados que ya cargamos
+                const selCargo = document.getElementById('filtro_cargo');
+                selCargo.innerHTML = '<option value="">Todos los cargos</option>';
+                const cargosUnicos = [...new Set(empleadosGlobal.map(e => e.cargo).filter(c => c))];
+                cargosUnicos.forEach(c => selCargo.innerHTML += `<option value="${c}">${c}</option>`);
+
+            } catch (error) {
+                console.error("Error al cargar filtros:", error);
+            }
+        }
+
+        // ⚡ FUNCIÓN PARA ACTUALIZAR LOS NÚMEROS EN LOS BOTONES
+        function actualizarContadoresFiltros() {
+            const total = empleadosGlobal.length;
+            const vacs = empleadosGlobal.filter(e => e.estado_ausencia === 'vacacion').length;
+            const perms = empleadosGlobal.filter(e => e.estado_ausencia === 'permiso').length;
+            // Trabajando son los que no tienen estado de ausencia hoy
+            const trabajand = total - vacs - perms;
+
+            document.getElementById('count_todos').textContent = total;
+            document.getElementById('count_vacaciones').textContent = vacs;
+            document.getElementById('count_permisos').textContent = perms;
+            document.getElementById('count_trabajando').textContent = trabajand;
+        }
+
         // ==========================================
         // ARRANQUE DEL SISTEMA Y LIBRERÍAS
         // ==========================================
@@ -871,6 +980,8 @@
 
             // 2. Cargar Datos
             await cargarEmpleados();
+            // ⚡ 3. Cargar los filtros (¡NUEVO!)
+            await cargarCatalogosFiltros();
         }
 
         inicializarModulo();

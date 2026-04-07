@@ -722,11 +722,24 @@ async def registrar_empleado(request: Request, usuario = Depends(verificar_token
              sexo, celular, correo, direccion, fecha_ingreso, fecha_antiguedad, tipo_contrato, salario_base, bono) 
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
-            bio_id, data.get("nombres"), data.get("apellidos"), ci, 
-            data.get("sucursal_id"), data.get("seccion_id"), data.get("cargo"), True,
-            data.get("sexo"), data.get("celular"), data.get("correo"), data.get("direccion"),
-            data.get("fecha_ingreso"), data.get("fecha_antiguedad"), data.get("tipo_contrato"),
-            data.get("salario_base", 0), data.get("bono", 0), data.get("turno_id")
+            bio_id, 
+            data.get("nombres"), 
+            data.get("apellidos"), 
+            ci, 
+            data.get("sucursal_id"), 
+            data.get("seccion_id"), 
+            data.get("cargo"), 
+            turno_id_final,       # ⚡ AQUÍ ESTÁ EL ARREGLO: turno_id va antes de activo
+            True,                 # ⚡ ACTIVO = True
+            data.get("sexo"), 
+            data.get("celular"), 
+            data.get("correo"), 
+            data.get("direccion"),
+            data.get("fecha_ingreso"), 
+            data.get("fecha_antiguedad"), 
+            data.get("tipo_contrato"),
+            data.get("salario_base", 0), 
+            data.get("bono", 0)   # ⚡ Eliminamos el turno_id que estaba sobrando al final
         ))
             msg = "Personal registrado con éxito."
 
