@@ -181,20 +181,43 @@
                                     </label>
                                 </div>
                                 
-                                <div id="zona_relojes" class="grid grid-cols-2 gap-4 mt-2">
-                                    <div class="col-span-2 text-xs text-orange-700 bg-orange-100 p-2 rounded"><i class="fas fa-info-circle mr-1"></i>Indique la fecha y hora exacta. El sistema excluirá los horarios de almuerzo y madrugadas automáticamente.</div>
-                                    <div>
-                                        <label class="block text-[10px] font-bold text-orange-700 uppercase">Salida</label>
-                                        <div class="flex space-x-2 mt-1">
-                                            <input type="date" id="fecha_inicio_permiso" class="w-full px-2 py-1.5 border border-orange-300 rounded shadow-sm text-sm">
-                                            <input type="time" id="hora_inicio_permiso" class="w-full px-2 py-1.5 border border-orange-300 rounded shadow-sm text-sm">
+                                <!-- ZONA DE RELOJES REDISEÑADA (Cero solapamiento, UX Corporativo) -->
+                                <div id="zona_relojes" class="col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                                    <div class="col-span-1 md:col-span-2 text-[11px] text-orange-800 bg-orange-100/50 p-2 rounded border border-orange-200">
+                                        <i class="fas fa-magic mr-1"></i>Las fechas se sincronizan automáticamente con el rango superior. Solo indique las horas.
+                                    </div>
+                                    
+                                    <!-- TARJETA: SALIDA -->
+                                    <div class="bg-white p-3 rounded-lg border border-orange-200 shadow-sm">
+                                        <label class="block text-xs font-bold text-orange-800 uppercase mb-2 border-b border-orange-100 pb-1"><i class="fas fa-sign-out-alt mr-1"></i>Salida</label>
+                                        <div class="grid grid-cols-2 gap-2">
+                                            <div>
+                                                <span class="text-[10px] text-gray-500 uppercase font-bold">Fecha</span>
+                                                <!-- Campo bloqueado (readonly) y con fondo gris -->
+                                                <input type="date" id="fecha_inicio_permiso" class="w-full mt-1 px-2 py-1.5 bg-gray-100 border border-gray-200 text-gray-500 rounded text-sm cursor-not-allowed" readonly title="Sincronizado automáticamente">
+                                            </div>
+                                            <div>
+                                                <span class="text-[10px] text-orange-600 font-bold uppercase">Hora Exacta</span>
+                                                <!-- Campo habilitado resaltado en naranja -->
+                                                <input type="time" id="hora_inicio_permiso" class="w-full mt-1 px-2 py-1.5 border-2 border-orange-300 rounded focus:ring-orange-500 focus:border-orange-500 text-sm font-bold text-gray-800 transition-colors">
+                                            </div>
                                         </div>
                                     </div>
-                                    <div>
-                                        <label class="block text-[10px] font-bold text-orange-700 uppercase">Retorno</label>
-                                        <div class="flex space-x-2 mt-1">
-                                            <input type="date" id="fecha_fin_permiso" class="w-full px-2 py-1.5 border border-orange-300 rounded shadow-sm text-sm">
-                                            <input type="time" id="hora_fin_permiso" class="w-full px-2 py-1.5 border border-orange-300 rounded shadow-sm text-sm">
+
+                                    <!-- TARJETA: RETORNO -->
+                                    <div class="bg-white p-3 rounded-lg border border-orange-200 shadow-sm">
+                                        <label class="block text-xs font-bold text-orange-800 uppercase mb-2 border-b border-orange-100 pb-1"><i class="fas fa-sign-in-alt mr-1"></i>Retorno</label>
+                                        <div class="grid grid-cols-2 gap-2">
+                                            <div>
+                                                <span class="text-[10px] text-gray-500 uppercase font-bold">Fecha</span>
+                                                <!-- Campo bloqueado (readonly) y con fondo gris -->
+                                                <input type="date" id="fecha_fin_permiso" class="w-full mt-1 px-2 py-1.5 bg-gray-100 border border-gray-200 text-gray-500 rounded text-sm cursor-not-allowed" readonly title="Sincronizado automáticamente">
+                                            </div>
+                                            <div>
+                                                <span class="text-[10px] text-orange-600 font-bold uppercase">Hora Exacta</span>
+                                                <!-- Campo habilitado resaltado en naranja -->
+                                                <input type="time" id="hora_fin_permiso" class="w-full mt-1 px-2 py-1.5 border-2 border-orange-300 rounded focus:ring-orange-500 focus:border-orange-500 text-sm font-bold text-gray-800 transition-colors">
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -1058,9 +1081,29 @@
                 dateFormat: "Y-m-d",
                 locale: "es", // Español
                 minDate: "today", // Bloquea fechas en el pasado por auditoría
+                
+                // ⚡ MAGIA UX: Este evento se dispara cada vez que el usuario toca el calendario
+                onChange: function(selectedDates, dateStr, instance) {
+                    if (selectedDates.length > 0) {
+                        // Extraemos la primera fecha que tocó
+                        let fInicio = instance.formatDate(selectedDates[0], "Y-m-d");
+                        
+                        // Si seleccionó un rango, sacamos la segunda fecha. 
+                        // Si solo hizo un clic (un día), duplicamos la primera fecha.
+                        let fFin = selectedDates.length > 1 ? instance.formatDate(selectedDates[1], "Y-m-d") : fInicio;
+                        
+                        // Enviamos los datos directamente a nuestras nuevas tarjetas bloqueadas
+                        document.getElementById('fecha_inicio_permiso').value = fInicio;
+                        document.getElementById('fecha_fin_permiso').value = fFin;
+                    } else {
+                        // Si el usuario borra el calendario, limpiamos las tarjetas
+                        document.getElementById('fecha_inicio_permiso').value = '';
+                        document.getElementById('fecha_fin_permiso').value = '';
+                    }
+                },
+                
                 disable: [
                     function(date) {
-                        // Opcional: Bloquear domingos visualmente (return date.getDay() === 0;)
                         return false; 
                     }
                 ]
@@ -1068,7 +1111,7 @@
 
             // 2. Cargar Datos
             await cargarEmpleados();
-            // ⚡ 3. Cargar los filtros (¡NUEVO!)
+            // 3. Cargar los filtros
             await cargarCatalogosFiltros();
         }
 
