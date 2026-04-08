@@ -522,7 +522,7 @@ async def crear_sucursal(data: dict, usuario = Depends(verificar_token)):
         conn.rollback()
         # Esto imprimirá el error real en los logs de Railway
         print(f"ERROR CRÍTICO EN POST SUCURSALES: {e}") 
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e))
     finally:
         cur.close()
         conn.close()
@@ -554,7 +554,7 @@ async def actualizar_sucursal(sucursal_id: int, data: dict, usuario = Depends(ve
     except Exception as e:
         conn.rollback()
         print(f"Error al actualizar sucursal: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e))
     finally:
         cur.close()
         conn.close()
@@ -572,7 +572,7 @@ def eliminar_sucursal(sucursal_id: int, usuario = Depends(verificar_token)):
     except psycopg2.IntegrityError:
         # PROTECCIÓN ANTI-DESASTRES
         conn.rollback()
-        raise HTTPException(status_code=400, detail="No puedes eliminar esta sucursal porque hay personal o relojes biométricos asignados a ella.")
+        raise HTTPException(status_code=422, detail="No puedes eliminar esta sucursal porque hay personal o relojes biométricos asignados a ella.")
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -642,7 +642,7 @@ async def actualizar_seccion(seccion_id: int, data: dict, usuario = Depends(veri
         return {"mensaje": "Sección actualizada correctamente"}
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e))
     finally:
         cur.close()
         conn.close()
@@ -658,7 +658,7 @@ def eliminar_seccion(seccion_id: int, usuario = Depends(verificar_token)):
         return {"mensaje": "Sección eliminada correctamente"}
     except psycopg2.IntegrityError:
         conn.rollback()
-        raise HTTPException(status_code=400, detail="No puedes eliminar este departamento porque tienes personal asignado a él.")
+        raise HTTPException(status_code=409, detail="No puedes eliminar este departamento porque tienes personal asignado a él.")
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -722,7 +722,7 @@ async def registrar_empleado(request: Request, usuario = Depends(verificar_token
             id_db, esta_eliminado = existe
             if not esta_eliminado:
                 # CASO: Está en el sistema como Activo o Inactivo. NO PERMITIMOS DUPLICAR.
-                raise HTTPException(status_code=400, detail="ERROR: Ese C.I. ya existe. Si fue retirado, búscalo en 'Inactivos' y cámbialo a 'Activo'.")
+                raise HTTPException(status_code=409, detail="ERROR: Ese C.I. ya existe. Si fue retirado, búscalo en 'Inactivos' y cámbialo a 'Activo'.")
             else:
                 # CASO: Era un registro "Eliminado" (limpieza de prueba). LO RESUCITAMOS.
                 cur.execute(f"""
@@ -768,7 +768,7 @@ async def registrar_empleado(request: Request, usuario = Depends(verificar_token
         
     except psycopg2.IntegrityError:
         conn.rollback()
-        raise HTTPException(status_code=400, detail="El ID Biométrico ya está ocupado por otro empleado activo.")
+        raise HTTPException(status_code=409, detail="El ID Biométrico ya está ocupado por otro empleado activo.")
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -787,7 +787,7 @@ async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depe
     if not activo_nuevo: # Si la orden es "Apagar" al empleado
         admin_password = data.get("admin_password")
         if not admin_password:
-            raise HTTPException(status_code=400, detail="Contraseña de administrador requerida para ejecutar la baja.")
+            raise HTTPException(status_code=409, detail="Contraseña de administrador requerida para ejecutar la baja.")
         
         # Conectamos a la base maestra para ver la contraseña del usuario que está intentando hacer esto
         conn_pub = conectar_bd("public")
@@ -799,7 +799,7 @@ async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depe
 
         # Comparamos la contraseña digitada contra el Hash de la Base de Datos
         if not user_db or not bcrypt.checkpw(admin_password.encode(), user_db["password_hash"].encode()):
-            raise HTTPException(status_code=401, detail="Contraseña incorrecta. Operación de baja denegada.")
+            raise HTTPException(status_code=409, detail="Contraseña incorrecta. Operación de baja denegada.")
 
     # --- 2. ACTUALIZACIÓN Y CAJA NEGRA ---
     conn = conectar_bd(schema)
@@ -867,7 +867,7 @@ async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depe
         
     except psycopg2.IntegrityError:
         conn.rollback()
-        raise HTTPException(status_code=400, detail="El C.I. o ID Biométrico ya está siendo usado por otro empleado en el sistema.")
+        raise HTTPException(status_code=409, detail="El C.I. o ID Biométrico ya está siendo usado por otro empleado en el sistema.")
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -942,7 +942,7 @@ async def crear_turno(data: dict, usuario = Depends(verificar_token)):
         return {"mensaje": "Turno creado exitosamente"}
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e))
     finally:
         cur.close()
         conn.close()
@@ -976,7 +976,7 @@ async def actualizar_turno(turno_id: int, data: dict, usuario = Depends(verifica
         return {"mensaje": "Turno actualizado exitosamente"}
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e))
     finally:
         cur.close()
         conn.close()
@@ -992,7 +992,7 @@ async def eliminar_turno(turno_id: int, usuario = Depends(verificar_token)):
         return {"mensaje": "Turno eliminado"}
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=400, detail="No se pudo eliminar el turno")
+        raise HTTPException(status_code=422, detail="No se pudo eliminar el turno")
     finally:
         cur.close()
         conn.close()
@@ -1094,7 +1094,7 @@ async def actualizar_saldo_inicial(empleado_id: int, data: dict, usuario = Depen
     admin_password = data.get("admin_password")
 
     if nuevo_saldo is None or not admin_password:
-        raise HTTPException(status_code=400, detail="El saldo y la contraseña son obligatorios.")
+        raise HTTPException(status_code=409, detail="El saldo y la contraseña son obligatorios.")
 
     # Verificación de Seguridad (Contraseña en Base Maestra)
     conn_pub = conectar_bd("public")
@@ -1106,7 +1106,7 @@ async def actualizar_saldo_inicial(empleado_id: int, data: dict, usuario = Depen
 
     # Comparamos la contraseña digitada
     if not user_db or not bcrypt.checkpw(admin_password.encode(), user_db["password_hash"].encode()):
-        raise HTTPException(status_code=403, detail="Contraseña de Administrador incorrecta. Operación denegada.")
+        raise HTTPException(status_code=409, detail="Contraseña de Administrador incorrecta. Operación denegada.")
 
     # Guardar el nuevo saldo
     conn = conectar_bd(schema)
@@ -1151,29 +1151,67 @@ async def registrar_ausencia(data: dict, usuario = Depends(verificar_token)):
         hora_fin = None
 
         # ⚡ LÓGICA MEJORADA: Si es vacación O permiso por días completos
+        # ⚡ LÓGICA MEJORADA: Si es vacación O permiso por días completos
         if tipo == "vacacion" or (tipo == "permiso" and por_dias):
             f_inicio = datetime.strptime(fecha_inicio, "%Y-%m-%d")
             f_fin = datetime.strptime(fecha_fin, "%Y-%m-%d")
             
-            cur.execute(f"SELECT t.dias, t.medio_tiempo_fines FROM {schema}.empleados e JOIN {schema}.turnos t ON e.turno_id = t.id WHERE e.id = %s", (empleado_id,))
+            cur.execute(f"SELECT * FROM {schema}.empleados e JOIN {schema}.turnos t ON e.turno_id = t.id WHERE e.id = %s", (empleado_id,))
             turno_emp = cur.fetchone()
 
             if not turno_emp:
-                raise HTTPException(status_code=400, detail="El empleado no tiene un turno asignado.")
+                raise HTTPException(status_code=409, detail="El empleado no tiene un turno asignado.")
 
             dias_laborales_json = turno_emp["dias"] 
             es_medio_tiempo_fines = turno_emp["medio_tiempo_fines"]
             mapa_dias = {0: 'L', 1: 'M', 2: 'X', 3: 'J', 4: 'V', 5: 'S', 6: 'D'}
             dia_actual = f_inicio
             
+            # ⚡ Variables para el motor matemático del ERP
+            minutos_totales_deuda = 0
+            
             while dia_actual <= f_fin:
                 letra_dia = mapa_dias[dia_actual.weekday()]
                 if dias_laborales_json.get(letra_dia, False):
-                    dias_descontados += 0.5 if (letra_dia in ['S', 'D'] and es_medio_tiempo_fines) else 1.0
+                    # 1. Contamos el día para el Frontend y Kardex
+                    factor_dia = 0.5 if (letra_dia in ['S', 'D'] and es_medio_tiempo_fines) else 1.0
+                    dias_descontados += factor_dia
+                    
+                    # 2. ⚡ CALCULAMOS LAS HORAS EXACTAS DE ESE DÍA PARA LA DEUDA
+                    # Convertimos todo a minutos para evitar errores de reloj
+                    in_h, in_m = turno_emp["hora_ingreso"].hour, turno_emp["hora_ingreso"].minute
+                    out_h, out_m = turno_emp["hora_salida"].hour, turno_emp["hora_salida"].minute
+                    
+                    mins_ingreso = (in_h * 60) + in_m
+                    mins_salida = (out_h * 60) + out_m
+                    if mins_salida < mins_ingreso: mins_salida += 1440 # Cruce de madrugada
+                    
+                    mins_trabajo_dia = mins_salida - mins_ingreso
+                    
+                    # Restamos el almuerzo de este día específico
+                    if turno_emp["almuerzo"] and turno_emp.get("hora_inicio_almuerzo"):
+                        alm_in_h, alm_in_m = turno_emp["hora_inicio_almuerzo"].hour, turno_emp["hora_inicio_almuerzo"].minute
+                        alm_out_h, alm_out_m = turno_emp["hora_fin_almuerzo"].hour, turno_emp["hora_fin_almuerzo"].minute
+                        
+                        mins_alm_in = (alm_in_h * 60) + alm_in_m
+                        mins_alm_out = (alm_out_h * 60) + alm_out_m
+                        if mins_alm_out < mins_alm_in: mins_alm_out += 1440
+                        
+                        mins_trabajo_dia -= (mins_alm_out - mins_alm_in)
+                    
+                    # Aplicamos factor de medio tiempo si es fin de semana
+                    mins_trabajo_dia = mins_trabajo_dia * factor_dia
+                    
+                    # Sumamos a la bolsa total de deuda
+                    minutos_totales_deuda += mins_trabajo_dia
+
                 dia_actual += timedelta(days=1) 
 
             if dias_descontados == 0:
-                raise HTTPException(status_code=400, detail="El rango no contiene días laborales.")
+                raise HTTPException(status_code=409, detail="El rango no contiene días laborales.")
+                
+            # ⚡ Guardamos las horas exactas en la BD
+            horas_totales = round(minutos_totales_deuda / 60.0, 2)
         else:
             # ⚡ MOTOR ERP: Lógica de Permiso por Horas Multidía y Almuerzos
             fecha_ini_str = data.get("fecha_inicio_permiso")
@@ -1186,7 +1224,7 @@ async def registrar_ausencia(data: dict, usuario = Depends(verificar_token)):
             dt_fin = datetime.strptime(f"{fecha_fin_str} {hora_fin_str}", "%Y-%m-%d %H:%M")
             
             if dt_fin < dt_inicio:
-                raise HTTPException(status_code=400, detail="La fecha de retorno no puede ser en el pasado.")
+                raise HTTPException(status_code=409, detail="La fecha de retorno no puede ser en el pasado.")
 
             cur.execute(f"SELECT t.* FROM {schema}.empleados e JOIN {schema}.turnos t ON e.turno_id = t.id WHERE e.id = %s", (empleado_id,))
             turno_emp = cur.fetchone()
@@ -1248,7 +1286,7 @@ async def registrar_ausencia(data: dict, usuario = Depends(verificar_token)):
         return {"mensaje": f"{tipo.capitalize()} registrada correctamente."}
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e))
     finally:
         cur.close()
         conn.close()
@@ -1278,7 +1316,7 @@ async def anular_ausencia(ausencia_id: int, usuario = Depends(verificar_token)):
         return {"mensaje": "Registro anulado. El saldo ha sido restituido al empleado."}
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e))
     finally:
         cur.close()
         conn.close()
@@ -1304,7 +1342,7 @@ async def editar_ausencia(ausencia_id: int, data: dict, usuario = Depends(verifi
         return {"mensaje": "Observaciones actualizadas."}
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e))
     finally:
         cur.close()
         conn.close()
