@@ -125,8 +125,8 @@
                     <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Buscar Empleado a Procesar</label>
                     <div class="relative">
                         <i class="fas fa-search absolute left-3 top-2.5 text-gray-400"></i>
-                        <input type="text" id="buscador_empleado" oninput="filtrarBuscadorFlotante(this.value)" placeholder="Escriba Nombre, C.I. o ID..." class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 text-sm font-medium" autocomplete="off">
-                        <ul id="dropdown_empleados" class="absolute z-50 w-full bg-white border border-gray-200 shadow-lg rounded-b-md mt-1 hidden max-h-48 overflow-y-auto text-sm divide-y divide-gray-100"></ul>
+                        <input type="text" id="buscador_empleado" list="lista_empleados" onchange="seleccionarDesdeBuscador(this.value)" placeholder="Escriba Nombre, C.I. o ID..." class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 text-sm font-medium">
+                        <datalist id="lista_empleados"></datalist>
                     </div>
                 </div>
 
@@ -181,44 +181,15 @@
                                     </label>
                                 </div>
                                 
-                                <!-- ZONA DE RELOJES REDISEÑADA (Cero solapamiento, UX Corporativo) -->
-                                <div id="zona_relojes" class="col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                                    <div class="col-span-1 md:col-span-2 text-[11px] text-orange-800 bg-orange-100/50 p-2 rounded border border-orange-200">
-                                        <i class="fas fa-magic mr-1"></i>Las fechas se sincronizan automáticamente con el rango superior. Solo indique las horas.
+                                <div id="zona_relojes" class="grid grid-cols-2 gap-4">
+                                    <div class="col-span-2 text-xs text-orange-700 mb-[-10px]"><i class="fas fa-info-circle mr-1"></i>Indique la hora exacta (Ej. 1.5 días = Marcar "Día completo" NO, y poner las horas correspondientes).</div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-orange-700 uppercase">Hora Salida</label>
+                                        <input type="time" id="hora_inicio" class="w-full mt-1 px-3 py-2 border border-orange-300 rounded-md shadow-sm focus:ring-orange-500 bg-white">
                                     </div>
-                                    
-                                    <!-- TARJETA: SALIDA -->
-                                    <div class="bg-white p-3 rounded-lg border border-orange-200 shadow-sm">
-                                        <label class="block text-xs font-bold text-orange-800 uppercase mb-2 border-b border-orange-100 pb-1"><i class="fas fa-sign-out-alt mr-1"></i>Salida</label>
-                                        <div class="grid grid-cols-2 gap-2">
-                                            <div>
-                                                <span class="text-[10px] text-gray-500 uppercase font-bold">Fecha</span>
-                                                <!-- Campo bloqueado (readonly) y con fondo gris -->
-                                                <input type="date" id="fecha_inicio_permiso" class="w-full mt-1 px-2 py-1.5 bg-gray-100 border border-gray-200 text-gray-500 rounded text-sm cursor-not-allowed" readonly title="Sincronizado automáticamente">
-                                            </div>
-                                            <div>
-                                                <span class="text-[10px] text-orange-600 font-bold uppercase">Hora Exacta</span>
-                                                <!-- Campo habilitado resaltado en naranja -->
-                                                <input type="time" id="hora_inicio_permiso" class="w-full mt-1 px-2 py-1.5 border-2 border-orange-300 rounded focus:ring-orange-500 focus:border-orange-500 text-sm font-bold text-gray-800 transition-colors">
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- TARJETA: RETORNO -->
-                                    <div class="bg-white p-3 rounded-lg border border-orange-200 shadow-sm">
-                                        <label class="block text-xs font-bold text-orange-800 uppercase mb-2 border-b border-orange-100 pb-1"><i class="fas fa-sign-in-alt mr-1"></i>Retorno</label>
-                                        <div class="grid grid-cols-2 gap-2">
-                                            <div>
-                                                <span class="text-[10px] text-gray-500 uppercase font-bold">Fecha</span>
-                                                <!-- Campo bloqueado (readonly) y con fondo gris -->
-                                                <input type="date" id="fecha_fin_permiso" class="w-full mt-1 px-2 py-1.5 bg-gray-100 border border-gray-200 text-gray-500 rounded text-sm cursor-not-allowed" readonly title="Sincronizado automáticamente">
-                                            </div>
-                                            <div>
-                                                <span class="text-[10px] text-orange-600 font-bold uppercase">Hora Exacta</span>
-                                                <!-- Campo habilitado resaltado en naranja -->
-                                                <input type="time" id="hora_fin_permiso" class="w-full mt-1 px-2 py-1.5 border-2 border-orange-300 rounded focus:ring-orange-500 focus:border-orange-500 text-sm font-bold text-gray-800 transition-colors">
-                                            </div>
-                                        </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-orange-700 uppercase">Hora Retorno</label>
+                                        <input type="time" id="hora_fin" class="w-full mt-1 px-3 py-2 border border-orange-300 rounded-md shadow-sm focus:ring-orange-500 bg-white">
                                     </div>
                                 </div>
                             </div>
@@ -317,9 +288,13 @@
             document.getElementById('tarjetaKardex').classList.add('opacity-50', 'pointer-events-none');
             document.getElementById('cajaControles').classList.add('opacity-50', 'pointer-events-none');
             
+            // Llenamos el Datalist Inteligente
+            const dl = document.getElementById('lista_empleados');
+            dl.innerHTML = '';
+            empleadosGlobal.forEach(e => {
+                dl.innerHTML += `<option value="${e.ci} - ${e.nombres} ${e.apellidos}">`;
+            });
             document.getElementById('buscador_empleado').value = '';
-            document.getElementById('dropdown_empleados').innerHTML = '';
-            document.getElementById('dropdown_empleados').classList.add('hidden');
 
             limpiarFormulario();
             mostrarPanel();
@@ -353,61 +328,29 @@
             if (calendarioInstancia) {
                 calendarioInstancia.clear();
             }
-            // 2. Limpiamos los NUEVOS IDs de fecha y hora separados
-            document.getElementById('fecha_inicio_permiso').value = '';
-            document.getElementById('hora_inicio_permiso').value = '';
-            document.getElementById('fecha_fin_permiso').value = '';
-            document.getElementById('hora_fin_permiso').value = '';
-            
+            // 2. Limpiamos las horas y el texto
+            document.getElementById('hora_inicio').value = '';
+            document.getElementById('hora_fin').value = '';
             document.getElementById('motivo_ausencia').value = '';
-            
             // 3. Devolvemos el selector a "Vacación" por defecto
             cambiarTipoRegistro('vacacion');
-            
-            // 4. Reiniciamos los checkboxes por defecto
-            document.getElementById('permiso_por_dias').checked = false;
-            document.getElementById('requiere_reposicion').checked = false;
-            toggleHorasPermiso(); // Asegura que los campos correctos estén visibles
         }
 
         function cambiarTipoRegistro(tipo) {
             tipoRegistroActual = tipo;
             const btnV = document.getElementById('btnTabVacacion');
             const btnP = document.getElementById('btnTabPermiso');
-            const zonaHoras = document.getElementById('zona_opciones_permiso');
+            const zonaOpcionesPermiso = document.getElementById('zona_opciones_permiso'); // El nuevo ID
 
             if (tipo === 'vacacion') {
                 btnV.className = "flex-1 py-2 bg-white text-blue-700 font-bold rounded-md shadow transition-all transform scale-100";
                 btnP.className = "flex-1 py-2 text-gray-500 font-medium rounded-md hover:bg-gray-300 transition-all transform scale-95";
-                zonaHoras.classList.add('hidden');
+                zonaOpcionesPermiso.classList.add('hidden'); // Ocultamos opciones de permiso
             } else {
                 btnP.className = "flex-1 py-2 bg-white text-orange-600 font-bold rounded-md shadow transition-all transform scale-100";
                 btnV.className = "flex-1 py-2 text-gray-500 font-medium rounded-md hover:bg-gray-300 transition-all transform scale-95";
-                zonaHoras.classList.remove('hidden');
+                zonaOpcionesPermiso.classList.remove('hidden'); // Mostramos opciones de permiso
             }
-        }
-
-        function filtrarBuscadorFlotante(texto) {
-            const dropdown = document.getElementById('dropdown_empleados');
-            dropdown.innerHTML = '';
-            if(!texto) { dropdown.classList.add('hidden'); return; }
-            
-            const filtrados = empleadosGlobal.filter(e => `${e.ci} ${e.nombres} ${e.apellidos}`.toLowerCase().includes(texto.toLowerCase()));
-            
-            if(filtrados.length === 0) {
-                dropdown.innerHTML = '<li class="p-3 text-gray-500 italic">No se encontraron resultados</li>';
-            } else {
-                filtrados.forEach(emp => {
-                    dropdown.innerHTML += `<li onclick="seleccionarEmpleado('${emp.id}', '${emp.nombres} ${emp.apellidos}')" class="p-3 hover:bg-blue-50 cursor-pointer text-gray-700 font-medium transition-colors"><i class="fas fa-user-circle text-gray-400 mr-2"></i>${emp.ci} - ${emp.nombres} ${emp.apellidos}</li>`;
-                });
-            }
-            dropdown.classList.remove('hidden');
-        }
-
-        function seleccionarEmpleado(id, nombre) {
-            document.getElementById('buscador_empleado').value = nombre;
-            document.getElementById('dropdown_empleados').classList.add('hidden');
-            cargarKardexEmpleado(id);
         }
 
         // ==========================================
@@ -507,8 +450,11 @@
             const zonaRelojes = document.getElementById('zona_relojes');
             if(esPorDias) {
                 zonaRelojes.classList.add('hidden');
-                document.getElementById('hora_inicio').value = '';
-                document.getElementById('hora_fin').value = '';
+                // ⚡ CORRECCIÓN: Limpiamos los nuevos campos de la vista rediseñada
+                document.getElementById('fecha_inicio_permiso').value = '';
+                document.getElementById('hora_inicio_permiso').value = '';
+                document.getElementById('fecha_fin_permiso').value = '';
+                document.getElementById('hora_fin_permiso').value = '';
             } else {
                 zonaRelojes.classList.remove('hidden');
             }
@@ -598,57 +544,58 @@
                 return alert("⚠️ Debes seleccionar un empleado primero.");
             }
 
-            // 1. Capturamos los valores generales de los Checkboxes
+            // 1. Extraer las fechas del Flatpickr (SOPORTE MULTILINGÜE)
+            const rango = document.getElementById('rango_fechas').value;
+            if (!rango) return alert("⚠️ Selecciona el rango de fechas.");
+
+            let fecha_inicio = rango;
+            let fecha_fin = rango;
+            
+            // Verificamos si usa " a " (Español) o " to " (Inglés)
+            let separador = rango.includes(" a ") ? " a " : (rango.includes(" to ") ? " to " : null);
+            
+            if (separador) {
+                const partes = rango.split(separador);
+                fecha_inicio = partes[0].trim();
+                fecha_fin = partes[1].trim();
+            }
+
+            // 2. Armar el paquete de datos
+            // ⚡ CAPTURAMOS LOS NUEVOS VALORES
             const por_dias = document.getElementById('permiso_por_dias').checked;
             const requiere_reposicion = document.getElementById('requiere_reposicion').checked;
 
-            // 2. CREAMOS EL "PAYLOAD" (El paquete de datos base)
             const payload = {
                 empleado_id: empleadoSeleccionadoId,
                 tipo: tipoRegistroActual,
+                fecha_inicio: fecha_inicio,
+                fecha_fin: fecha_fin,
                 motivo: document.getElementById('motivo_ausencia').value,
-                por_dias: por_dias,
-                requiere_reposicion: requiere_reposicion
+                por_dias: por_dias, // ⚡ Nuevo
+                requiere_reposicion: requiere_reposicion // ⚡ Nuevo
             };
 
-            // 3. LÓGICA SEGÚN EL TIPO DE REGISTRO
-            if (tipoRegistroActual === 'vacacion' || (tipoRegistroActual === 'permiso' && por_dias)) {
-                // CASO A: Vacación o Permiso por días completos (usa el rango del calendario)
-                const rango = document.getElementById('rango_fechas').value;
-                if (!rango) return alert("⚠️ Seleccione el rango de fechas.");
-
-                let fecha_inicio = rango;
-                let fecha_fin = rango;
-                let separador = rango.includes(" a ") ? " a " : (rango.includes(" to ") ? " to " : null);
-                
-                if (separador) {
-                    const partes = rango.split(separador);
-                    fecha_inicio = partes[0].trim();
-                    fecha_fin = partes[1].trim();
-                }
-                
-                payload.fecha_inicio = fecha_inicio;
-                payload.fecha_fin = fecha_fin;
-
-            } else {
-                // CASO B: Permiso por horas/días específicos (Usa los nuevos relojes y fechas separadas)
-                const f_ini = document.getElementById('fecha_inicio_permiso').value;
-                const h_ini = document.getElementById('hora_inicio_permiso').value;
-                const f_fin = document.getElementById('fecha_fin_permiso').value;
-                const h_fin = document.getElementById('hora_fin_permiso').value;
-
-                if (!f_ini || !h_ini || !f_fin || !h_fin) {
-                    return alert("⚠️ Para este permiso, debe indicar Fecha y Hora tanto de salida como de retorno.");
-                }
-
-                // ⚡ AQUÍ ESTÁ EL CAMBIO: Estos nombres deben coincidir con lo que pusimos en main.py
-                payload.fecha_inicio_permiso = f_ini;
-                payload.hora_inicio_permiso = h_ini;
-                payload.fecha_fin_permiso = f_fin;
-                payload.hora_fin_permiso = h_fin;
+            // Si es permiso y NO es por días completos, pedimos las horas
+            if (tipoRegistroActual === 'permiso' && !por_dias) {
+                const h_ini = document.getElementById('hora_inicio').value;
+                const h_fin = document.getElementById('hora_fin').value;
+                if (!h_ini || !h_fin) return alert("⚠️ Indique las horas de permiso.");
+                payload.hora_inicio = h_ini;
+                payload.hora_fin = h_fin;
             }
 
-            // 4. ENVÍO AL SERVIDOR
+            // 3. Validar horas si es un permiso
+            if (tipoRegistroActual === 'permiso') {
+                const h_ini = document.getElementById('hora_inicio').value;
+                const h_fin = document.getElementById('hora_fin').value;
+                if (!h_ini || !h_fin) {
+                    return alert("⚠️ Para permisos, debes indicar hora de salida y retorno.");
+                }
+                payload.hora_inicio = h_ini;
+                payload.hora_fin = h_fin;
+            }
+
+            // 4. Enviar a la Base de Datos
             const btn = document.getElementById('btnGuardarAusencia');
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Procesando...';
@@ -657,15 +604,18 @@
                 const res = await fetch(`${API_URL}/ausencias`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token_api}` },
-                    body: JSON.stringify(payload) // Enviamos el "sobre" con los datos
+                    body: JSON.stringify(payload)
                 });
 
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.detail || "Error en el servidor");
 
                 alert("✅ " + data.mensaje);
+                // ⚡ LA MAGIA: Borramos la pizarra después de guardar exitosamente
                 limpiarFormulario();
                 cerrarPanel();
+                
+                // Recargamos el kardex para ver cómo baja el saldo en tiempo real
                 cargarKardexEmpleado(empleadoSeleccionadoId); 
                 cargarTodosLosKardexEnFondo();
                 
@@ -698,19 +648,32 @@
                     return;
                 }
                 
-                historial.forEach((reg, index) => { // ⚡ AGREGAMOS EL INDEX AQUÍ
+                historial.forEach((reg, index) => { 
                     let fechasStr = `${reg.fecha_inicio} al ${reg.fecha_fin}`;
                     
                     let tipoStr = reg.tipo === 'vacacion' ? 
                         '<span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold"><i class="fas fa-plane mr-1"></i>Vacación</span>' : 
                         '<span class="bg-orange-100 text-orange-700 px-2 py-1 rounded text-xs font-bold"><i class="fas fa-clock mr-1"></i>Permiso</span>';
                     
-                    let descuentoStr = reg.tipo === 'vacacion' ? 
-                        `<span class="font-bold text-gray-800">${reg.dias_descontados} días</span>` : 
-                        `<span class="font-bold text-gray-800">${reg.horas_totales} hrs</span> <span class="text-xs text-gray-500">(${reg.hora_inicio.substring(0,5)} a ${reg.hora_fin.substring(0,5)})</span>`;
+                    // ⚡ LÓGICA MEJORADA: Etiqueta de Deuda adaptable (Horas o Días)
+                    let etiquetaDeuda = '';
+                    if (reg.tipo === 'permiso' && reg.requiere_reposicion) {
+                        let montoDeuda = reg.hora_inicio ? `${reg.horas_totales} hrs` : `${reg.dias_descontados} días`;
+                        etiquetaDeuda = `<div class="mt-1"><span class="bg-red-50 text-red-600 px-2 py-0.5 rounded text-[10px] font-bold border border-red-200 shadow-sm"><i class="fas fa-exclamation-circle mr-1"></i>Debe reponer ${montoDeuda}</span></div>`;
+                    }
+                    
+                    // ⚡ CORRECCIÓN: Diferenciamos si el permiso es de Día Completo (no tiene hora) o por Horas
+                    let descuentoStr = '';
+                    if (reg.tipo === 'vacacion' || (reg.tipo === 'permiso' && !reg.hora_inicio)) {
+                        // Caso A: Vacación o Permiso por Días
+                        descuentoStr = `<span class="font-bold text-gray-800">${reg.dias_descontados} días</span> ${etiquetaDeuda}`;
+                    } else {
+                        // Caso B: Permiso por Horas Exactas
+                        descuentoStr = `<span class="font-bold text-gray-800">${reg.horas_totales} hrs</span> <span class="text-xs text-gray-500">(${reg.hora_inicio.substring(0,5)} a ${reg.hora_fin.substring(0,5)})</span> ${etiquetaDeuda}`;
+                    }
                     
                     let motivoStr = reg.motivo ? `<p class="text-xs text-gray-500 italic mt-1 break-words leading-tight">"${reg.motivo}"</p>` : '';
-
+                    
                     tbody.innerHTML += `
                         <tr class="hover:bg-gray-50 transition-colors border-b border-gray-100">
                             <td class="p-3 text-xs text-gray-600 font-medium">${fechasStr}</td>
@@ -1081,29 +1044,9 @@
                 dateFormat: "Y-m-d",
                 locale: "es", // Español
                 minDate: "today", // Bloquea fechas en el pasado por auditoría
-                
-                // ⚡ MAGIA UX: Este evento se dispara cada vez que el usuario toca el calendario
-                onChange: function(selectedDates, dateStr, instance) {
-                    if (selectedDates.length > 0) {
-                        // Extraemos la primera fecha que tocó
-                        let fInicio = instance.formatDate(selectedDates[0], "Y-m-d");
-                        
-                        // Si seleccionó un rango, sacamos la segunda fecha. 
-                        // Si solo hizo un clic (un día), duplicamos la primera fecha.
-                        let fFin = selectedDates.length > 1 ? instance.formatDate(selectedDates[1], "Y-m-d") : fInicio;
-                        
-                        // Enviamos los datos directamente a nuestras nuevas tarjetas bloqueadas
-                        document.getElementById('fecha_inicio_permiso').value = fInicio;
-                        document.getElementById('fecha_fin_permiso').value = fFin;
-                    } else {
-                        // Si el usuario borra el calendario, limpiamos las tarjetas
-                        document.getElementById('fecha_inicio_permiso').value = '';
-                        document.getElementById('fecha_fin_permiso').value = '';
-                    }
-                },
-                
                 disable: [
                     function(date) {
+                        // Opcional: Bloquear domingos visualmente (return date.getDay() === 0;)
                         return false; 
                     }
                 ]
@@ -1111,7 +1054,7 @@
 
             // 2. Cargar Datos
             await cargarEmpleados();
-            // 3. Cargar los filtros
+            // ⚡ 3. Cargar los filtros (¡NUEVO!)
             await cargarCatalogosFiltros();
         }
 
