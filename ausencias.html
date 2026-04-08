@@ -62,7 +62,7 @@
                         <label class="text-xs font-semibold text-gray-500 uppercase">Buscar Personal</label>
                         <div class="relative mt-1">
                             <i class="fas fa-search absolute left-3 top-2.5 text-gray-400"></i>
-                            <input type="text" id="filtro_busqueda" oninput="renderizarTablaPrincipal()" placeholder="Nombre, C.I. o ID..." class="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500">
+                            <input type="text" id="filtro_busqueda" oninput="busquedaOptimizada(this.value)" placeholder="Nombre, C.I. o ID..." class="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500">
                         </div>
                     </div>
                     <div>
@@ -125,7 +125,7 @@
                     <label class="block text-xs font-bold text-gray-500 uppercase mb-2">Buscar Empleado a Procesar</label>
                     <div class="relative">
                         <i class="fas fa-search absolute left-3 top-2.5 text-gray-400"></i>
-                        <input type="text" id="buscador_empleado" oninput="filtrarBuscadorFlotante(this.value)" placeholder="Escriba Nombre, C.I. o ID..." class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 text-sm font-medium" autocomplete="off">
+                        <input type="text" id="buscador_empleado" oninput="busquedaOptimizada(this.value)" placeholder="Escriba Nombre, C.I. o ID..." class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 text-sm font-medium" autocomplete="off">
                         <ul id="dropdown_empleados" class="absolute z-50 w-full bg-white border border-gray-200 shadow-lg rounded-b-md mt-1 hidden max-h-48 overflow-y-auto text-sm divide-y divide-gray-100"></ul>
                     </div>
                 </div>
@@ -702,26 +702,27 @@
                 }
                 
                 historial.forEach((reg, index) => { 
-                    let fechasStr = `${reg.fecha_inicio} al ${reg.fecha_fin}`;
+                    let fechasStr = `${reg.fecha_inicio}`;
+                    if(reg.fecha_inicio !== reg.fecha_fin) fechasStr += ` al ${reg.fecha_fin}`;
                     
                     let tipoStr = reg.tipo === 'vacacion' ? 
                         '<span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold"><i class="fas fa-plane mr-1"></i>Vacación</span>' : 
                         '<span class="bg-orange-100 text-orange-700 px-2 py-1 rounded text-xs font-bold"><i class="fas fa-clock mr-1"></i>Permiso</span>';
                     
-                    // ⚡ LÓGICA MEJORADA: Etiqueta de Deuda adaptable (Horas o Días)
+                    // ⚡ LÓGICA DE AUDITORÍA: Mostrar Deuda en Horas Exactas
                     let etiquetaDeuda = '';
                     if (reg.tipo === 'permiso' && reg.requiere_reposicion) {
-                        let montoDeuda = reg.hora_inicio ? `${reg.horas_totales} hrs` : `${reg.dias_descontados} días`;
-                        etiquetaDeuda = `<div class="mt-1"><span class="bg-red-50 text-red-600 px-2 py-0.5 rounded text-[10px] font-bold border border-red-200 shadow-sm"><i class="fas fa-exclamation-circle mr-1"></i>Debe reponer ${montoDeuda}</span></div>`;
+                        // Extraemos la matemática pura del Backend
+                        etiquetaDeuda = `<div class="mt-1"><span class="bg-red-50 text-red-600 px-2 py-0.5 rounded text-[10px] font-bold border border-red-200 shadow-sm"><i class="fas fa-exclamation-circle mr-1"></i>Debe reponer ${reg.horas_totales} hrs</span></div>`;
                     }
                     
-                    // ⚡ CORRECCIÓN: Diferenciamos si el permiso es de Día Completo (no tiene hora) o por Horas
+                    // ⚡ BLINDAJE CONTRA NULL: Diferenciar Día Completo vs Horas
                     let descuentoStr = '';
-                    if (reg.tipo === 'vacacion' || (reg.tipo === 'permiso' && !reg.hora_inicio)) {
-                        // Caso A: Vacación o Permiso por Días
+                    if (reg.tipo === 'vacacion') {
                         descuentoStr = `<span class="font-bold text-gray-800">${reg.dias_descontados} días</span> ${etiquetaDeuda}`;
+                    } else if (reg.tipo === 'permiso' && !reg.hora_inicio) {
+                        descuentoStr = `<span class="font-bold text-gray-800">${reg.dias_descontados} días</span> <span class="text-xs text-gray-500">(Jornada Completa)</span> ${etiquetaDeuda}`;
                     } else {
-                        // Caso B: Permiso por Horas Exactas
                         descuentoStr = `<span class="font-bold text-gray-800">${reg.horas_totales} hrs</span> <span class="text-xs text-gray-500">(${reg.hora_inicio.substring(0,5)} a ${reg.hora_fin.substring(0,5)})</span> ${etiquetaDeuda}`;
                     }
                     
@@ -736,16 +737,13 @@
                                 ${motivoStr}
                             </td>
                             <td class="p-3 text-center space-x-2">
-                                <!-- ⚡ CONECTAMOS EL BOTÓN AL MOTOR PDF -->
-                                <button onclick="generarBoletaPDF(${index})" class="text-blue-500 hover:text-blue-700 transition-colors" title="Imprimir Boleta">
+                                <button onclick="generarBoletaPDF(${index})" class="text-blue-500 hover:text-blue-700 transition-colors transform hover:scale-110" title="Imprimir Boleta">
                                     <i class="fas fa-file-pdf"></i>
                                 </button>
-                                <!-- ⚡ Editar Motivo -->
-                                <button onclick="editarMotivoAusencia(${reg.id}, '${reg.motivo || ''}')" class="text-amber-500 hover:text-amber-700 transition-colors" title="Editar Observaciones">
+                                <button onclick="editarMotivoAusencia(${reg.id}, '${reg.motivo || ''}')" class="text-amber-500 hover:text-amber-700 transition-colors transform hover:scale-110" title="Editar Observaciones">
                                     <i class="fas fa-edit"></i>
                                 </button>
-                                <!-- ⚡ Anular Registro -->
-                                <button onclick="anularAusencia(${reg.id})" class="text-red-400 hover:text-red-600 transition-colors" title="Anular Ausencia">
+                                <button onclick="anularAusencia(${reg.id})" class="text-red-400 hover:text-red-600 transition-colors transform hover:scale-110" title="Anular Ausencia">
                                     <i class="fas fa-trash-alt"></i>
                                 </button>
                             </td>
@@ -817,25 +815,40 @@
         }
         
         // ⚡ TRABAJADOR EN SEGUNDO PLANO PARA LA TABLA PRINCIPAL
+        // ⚡ TRABAJADOR EN SEGUNDO PLANO OPTIMIZADO (Anti-Saturación)
         async function cargarTodosLosKardexEnFondo() {
-            for (const emp of empleadosGlobal) {
-                try {
-                    const res = await fetch(`${API_URL}/empleados/${emp.id}/kardex_vacaciones`, { headers: { 'Authorization': `Bearer ${token_api}` } });
-                    if(res.ok) {
-                        const kardex = await res.json();
-                        
-                        // ⚡ OPTIMIZACIÓN: Guardamos el dato en la memoria RAM del empleado
-                        emp.dias_disponibles_memoria = kardex.dias_disponibles !== undefined ? kardex.dias_disponibles.toFixed(2) : "0.00";
-                        
-                        // Si la celda está visible, la actualizamos
-                        const celda = document.getElementById(`celda_kardex_${emp.id}`);
-                        if (celda) {
-                            celda.textContent = emp.dias_disponibles_memoria;
+            const tamanoLote = 5; // Consultamos de 5 en 5 para no ahogar al servidor Python
+            
+            for (let i = 0; i < empleadosGlobal.length; i += tamanoLote) {
+                const lote = empleadosGlobal.slice(i, i + tamanoLote);
+                
+                // Ejecutamos el lote actual en paralelo
+                await Promise.all(lote.map(async (emp) => {
+                    // ⚡ CACHÉ: Solo hacemos la petición si NO lo tenemos ya en la RAM
+                    if (emp.dias_disponibles_memoria === undefined) {
+                        try {
+                            const res = await fetch(`${API_URL}/empleados/${emp.id}/kardex_vacaciones`, { headers: { 'Authorization': `Bearer ${token_api}` } });
+                            if(res.ok) {
+                                const kardex = await res.json();
+                                emp.dias_disponibles_memoria = kardex.dias_disponibles !== undefined ? kardex.dias_disponibles.toFixed(2) : "0.00";
+                                
+                                // Actualizamos la celda de la tabla visualmente
+                                const celda = document.getElementById(`celda_kardex_${emp.id}`);
+                                if (celda) {
+                                    // Agregamos una pequeña animación de "fade in" al cargar
+                                    celda.style.opacity = 0;
+                                    celda.textContent = emp.dias_disponibles_memoria;
+                                    setTimeout(() => celda.style.opacity = 1, 100);
+                                    celda.style.transition = "opacity 0.3s ease";
+                                }
+                            }
+                        } catch (e) {
+                            console.error(`Error calculando kardex en fondo para ID ${emp.id}`);
                         }
                     }
-                } catch (e) {
-                    console.error(`Error calculando kardex en fondo para ID ${emp.id}`);
-                }
+                }));
+                // Pausa microscópica entre lotes para que el navegador respire (fluidez de UI)
+                await new Promise(r => setTimeout(r, 50)); 
             }
         }
 
@@ -894,22 +907,34 @@
             }
         }
 
+        // ⚡ SISTEMA ANTI-LAG (Debounce)
+        let temporizadorBusqueda;
+
+        function busquedaOptimizada(valorTexto) {
+            // Cancelamos la búsqueda anterior si el usuario sigue escribiendo
+            clearTimeout(temporizadorBusqueda);
+            
+            // Programamos la nueva búsqueda para 300ms después de que deje de escribir
+            temporizadorBusqueda = setTimeout(() => {
+                renderizarTablaPrincipal();
+                filtrarBuscadorFlotante(valorTexto);
+            }, 300);
+        }
+
         // ==========================================
         // EXPORTACIÓN A PDF (BOLETA Y REPORTE)
         // ==========================================
 
         function generarBoletaPDF(index) {
-            // Extraemos los datos del empleado y del registro específico
             const reg = historialGlobal[index];
             const emp = empleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
             
             if(!reg || !emp) return alert("Error al leer los datos para el PDF.");
 
             const { jsPDF } = window.jspdf;
-            const doc = new jsPDF('p', 'mm', 'a5'); // Tamaño A5 para boletas es más estético
+            const doc = new jsPDF('p', 'mm', 'a5'); 
             
-            // --- ESTILOS Y CABECERA ---
-            doc.setFillColor(30, 58, 138); // Color Azul Corporativo
+            doc.setFillColor(30, 58, 138); 
             doc.rect(0, 0, 150, 20, 'F');
             
             doc.setTextColor(255, 255, 255);
@@ -917,7 +942,6 @@
             doc.setFontSize(14);
             doc.text("BOLETA DE AUTORIZACIÓN", 74, 13, { align: "center" });
 
-            // --- DATOS DEL EMPLEADO ---
             doc.setTextColor(50, 50, 50);
             doc.setFontSize(10);
             doc.text(`Empleado: ${emp.nombres} ${emp.apellidos}`, 15, 35);
@@ -925,9 +949,8 @@
             doc.text(`C.I.: ${emp.ci}    |    ID Reloj: ${emp.bio_id || 'N/A'}`, 15, 42);
             doc.text(`Cargo: ${emp.cargo || 'No especificado'}`, 15, 49);
             
-            doc.line(15, 54, 133, 54); // Línea separadora
+            doc.line(15, 54, 133, 54); 
 
-            // --- DETALLES DE LA AUSENCIA ---
             doc.setFont("helvetica", "bold");
             doc.text("Detalle de la Solicitud:", 15, 62);
             
@@ -936,28 +959,38 @@
             doc.text(`Fecha Inicio: ${reg.fecha_inicio}`, 15, 77);
             doc.text(`Fecha Retorno: ${reg.fecha_fin}`, 80, 77);
             
+            // ⚡ BLINDAJE DE ERRORES Y SELLO DE REPOSICIÓN
             if (reg.tipo === 'permiso') {
-                doc.text(`Hora Salida: ${reg.hora_inicio.substring(0,5)}`, 15, 84);
-                doc.text(`Hora Retorno: ${reg.hora_fin.substring(0,5)}`, 80, 84);
+                if(reg.hora_inicio) {
+                    doc.text(`Hora Salida: ${reg.hora_inicio.substring(0,5)}`, 15, 84);
+                    doc.text(`Hora Retorno: ${reg.hora_fin.substring(0,5)}`, 80, 84);
+                } else {
+                    doc.text(`Horario: Jornada Completa`, 15, 84);
+                }
+                
                 doc.setFont("helvetica", "bold");
-                doc.text(`Total Horas: ${reg.horas_totales}`, 15, 91);
+                doc.text(`Total Horas: ${reg.horas_totales} hrs`, 15, 91);
+                
+                // Si debe reponer, se imprime en rojo en el documento
+                if(reg.requiere_reposicion) {
+                    doc.setTextColor(220, 38, 38);
+                    doc.text(`* DEBE REPONER HORAS *`, 80, 91);
+                    doc.setTextColor(50, 50, 50);
+                }
             } else {
                 doc.setFont("helvetica", "bold");
                 doc.text(`Total Días Descontados: ${reg.dias_descontados}`, 15, 84);
             }
 
-            // --- MOTIVO / OBSERVACIONES ---
             doc.setFont("helvetica", "normal");
             doc.text("Observaciones:", 15, 102);
             
-            // Manejo de texto largo en el motivo (Word Wrap)
             const motivoTexto = reg.motivo || "Sin observaciones registradas.";
             const lineasMotivo = doc.splitTextToSize(motivoTexto, 118);
             doc.setFont("helvetica", "italic");
             doc.setTextColor(100, 100, 100);
             doc.text(lineasMotivo, 15, 108);
 
-            // --- ZONA DE FIRMAS ---
             doc.setTextColor(50, 50, 50);
             doc.line(20, 160, 65, 160);
             doc.text("Firma del Empleado", 42, 165, { align: "center" });
@@ -968,7 +1001,6 @@
             doc.setFontSize(8);
             doc.text(`Generado el: ${new Date().toLocaleDateString()}`, 74, 185, { align: "center" });
 
-            // Generar y descargar
             doc.save(`Boleta_${reg.tipo}_${emp.ci}_${reg.fecha_inicio}.pdf`);
         }
 
@@ -977,9 +1009,8 @@
             
             const emp = empleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
             const { jsPDF } = window.jspdf;
-            const doc = new jsPDF('p', 'pt', 'letter'); // Tamaño Carta en Puntos
+            const doc = new jsPDF('p', 'pt', 'letter'); 
 
-            // Cabecera del Documento
             doc.setFontSize(16);
             doc.setFont("helvetica", "bold");
             doc.text("REPORTE KARDEX DE AUSENCIAS", 40, 50);
@@ -990,33 +1021,46 @@
             doc.text(`Cargo: ${emp.cargo || 'N/A'}`, 40, 85);
             doc.text(`Fecha de Emisión: ${new Date().toLocaleDateString()}`, 40, 100);
 
-            // Preparar datos para la tabla AutoTable
+            // ⚡ MOTOR DE EXTRACCIÓN DE DATOS BLINDADO
             const dataTabla = historialGlobal.map(reg => {
                 let tiempo = reg.tipo === 'vacacion' ? `${reg.dias_descontados} Días` : `${reg.horas_totales} Hrs`;
-                let fechas = reg.tipo === 'vacacion' ? `${reg.fecha_inicio} al ${reg.fecha_fin}` : `${reg.fecha_inicio}\n(${reg.hora_inicio.substring(0,5)} a ${reg.hora_fin.substring(0,5)})`;
+                
+                let fechas = reg.fecha_inicio;
+                if(reg.fecha_inicio !== reg.fecha_fin) fechas += ` al ${reg.fecha_fin}`;
+                
+                if (reg.tipo === 'permiso' && reg.hora_inicio) {
+                    fechas += `\n(${reg.hora_inicio.substring(0,5)} a ${reg.hora_fin.substring(0,5)})`;
+                } else if (reg.tipo === 'permiso' && !reg.hora_inicio) {
+                    fechas += `\n(Día Completo)`;
+                }
+
+                let estadoTxt = reg.estado.toUpperCase();
+                if(reg.tipo === 'permiso' && reg.requiere_reposicion) {
+                    estadoTxt += "\n(REPONER HORAS)";
+                }
+
                 return [
                     reg.tipo.toUpperCase(),
                     fechas,
                     tiempo,
-                    reg.estado.toUpperCase(),
+                    estadoTxt,
                     reg.motivo || 'Ninguna'
                 ];
             });
 
-            // Dibujar la Tabla Automática
             doc.autoTable({
                 startY: 120,
                 head: [['TIPO', 'FECHA / HORARIO', 'DESCUENTO', 'ESTADO', 'OBSERVACIONES']],
                 body: dataTabla,
                 theme: 'striped',
-                headStyles: { fillColor: [30, 58, 138] }, // Azul corporativo
+                headStyles: { fillColor: [30, 58, 138] }, 
                 styles: { fontSize: 8, cellPadding: 4 },
                 columnStyles: {
                     0: { cellWidth: 60, fontStyle: 'bold' },
                     1: { cellWidth: 100 },
                     2: { cellWidth: 70, halign: 'center' },
-                    3: { cellWidth: 60 },
-                    4: { cellWidth: 'auto' } // El motivo toma el resto del espacio
+                    3: { cellWidth: 70 },
+                    4: { cellWidth: 'auto' } 
                 }
             });
 
@@ -1130,6 +1174,17 @@
             // 3. Cargar los filtros
             await cargarCatalogosFiltros();
         }
+
+        // ⚡ UX FLUIDA: Cerrar menú flotante al hacer clic afuera
+        document.addEventListener('click', function(event) {
+            const cajaBuscador = document.getElementById('cajaBuscadorEmpleado');
+            const dropdown = document.getElementById('dropdown_empleados');
+            
+            // Si el menú existe, está visible, y el clic NO fue dentro de la caja del buscador
+            if (cajaBuscador && dropdown && !dropdown.classList.contains('hidden') && !cajaBuscador.contains(event.target)) {
+                dropdown.classList.add('hidden');
+            }
+        });
 
         inicializarModulo();
         renderizarMenu('ausencias'); // Pinta el sidebar lateral
