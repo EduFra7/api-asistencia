@@ -842,19 +842,15 @@ async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depe
             anotacion = f"➤ [DADO DE BAJA EL {fecha_auditoria}]: Motivo registrado: {motivo_retiro_final}.\n"
             nuevo_historial = anotacion + historial_existente
 
-        # ⚡ BLINDAJE DE FOTO: Lógica de Actualización vs Eliminación
+        # ⚡ BLINDAJE DE FOTO UNIFICADO (El embudo perfecto)
         foto_perfil = data.get("foto_perfil")
         
         if foto_perfil == "ELIMINAR":
-            # Si el usuario hizo clic en la 'X' roja, limpiamos el campo en la base de datos
-            cur.execute(f"UPDATE {schema}.empleados SET foto_perfil = NULL WHERE id = %s", (empleado_id,))
+            foto_a_guardar = None  # 1. El usuario hizo clic en la 'X' roja, limpiamos la foto
         elif foto_perfil:
-            # Si envió un texto Base64 gigantesco, es una foto nueva, la actualizamos
-            cur.execute(f"UPDATE {schema}.empleados SET foto_perfil = %s WHERE id = %s", (foto_perfil, empleado_id))
-        
-        # Si foto_perfil llega como None (vacío), Python ignora el bloque y la foto antigua se salva
-        
-        conn.commit()
+            foto_a_guardar = foto_perfil  # 2. El usuario subió una cámara/archivo nuevo
+        else:
+            foto_a_guardar = foto_actual_bd  # 3. El usuario no tocó nada, conservamos la que ya estaba en BD
 
         # C. GUARDAMOS TODO EN POSTGRESQL EN UNA SOLA PETICIÓN
         cur.execute(f"""
@@ -879,7 +875,7 @@ async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depe
             fecha_retiro_final, motivo_retiro_final,
             data.get("turno_id"),
             nuevo_historial,
-            foto_a_guardar, # ⚡ Aplicamos la lógica de la foto aquí
+            foto_a_guardar, # ⚡ Aquí entra nuestra variable ya definida y procesada
             empleado_id
         ))
         
