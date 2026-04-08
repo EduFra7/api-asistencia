@@ -59,30 +59,40 @@ window.mostrarError = function(mensaje, titulo = "Operación Denegada") {
         icon: 'error',
         title: titulo,
         text: mensaje,
-        confirmButtonColor: '#3b82f6', // blue-500
+        confirmButtonColor: '#3b82f6', 
         confirmButtonText: 'Entendido',
-        customClass: { popup: 'rounded-xl shadow-2xl' }
+        heightAuto: false, // ⚡ Evita que la pantalla "salte"
+        backdrop: 'rgba(15, 23, 42, 0.6)', // ⚡ Tono Slate-900 corporativo
+        customClass: { 
+            popup: 'rounded-2xl shadow-2xl border border-gray-100',
+            backdrop: 'backdrop-blur-sm' // ⚡ Desenfoque elegante
+        }
     });
 };
 
-// Reemplaza a confirm() - Devuelve true o false
+// Reemplaza a confirm()
 window.pedirConfirmacion = async function(mensaje, titulo = "⚠️ ¿Estás seguro?", textoBoton = "Sí, continuar") {
     const result = await Swal.fire({
         title: titulo,
         text: mensaje,
         icon: 'warning',
         showCancelButton: true,
-        confirmButtonColor: '#ef4444', // red-500 para peligro
-        cancelButtonColor: '#94a3b8', // slate-400 para cancelar
+        confirmButtonColor: '#ef4444', 
+        cancelButtonColor: '#94a3b8', 
         confirmButtonText: textoBoton,
         cancelButtonText: 'Cancelar',
-        reverseButtons: true, // Pone el botón de cancelar a la izquierda (UX moderno)
-        customClass: { popup: 'rounded-xl shadow-2xl' }
+        reverseButtons: true, 
+        heightAuto: false, // ⚡ Evita saltos de scroll
+        backdrop: 'rgba(15, 23, 42, 0.6)', // ⚡ Fondo acorde a tu menú lateral
+        customClass: { 
+            popup: 'rounded-2xl shadow-2xl border border-gray-100',
+            backdrop: 'backdrop-blur-sm'
+        }
     });
     return result.isConfirmed;
 };
 
-// Reemplaza a prompt() - Devuelve el texto escrito o null
+// Reemplaza a prompt()
 window.pedirTexto = async function(mensaje, valorActual = "", titulo = "Ingresar Información") {
     const { value: texto } = await Swal.fire({
         title: titulo,
@@ -94,9 +104,14 @@ window.pedirTexto = async function(mensaje, valorActual = "", titulo = "Ingresar
         cancelButtonColor: '#94a3b8',
         confirmButtonText: 'Guardar',
         cancelButtonText: 'Cancelar',
-        customClass: { popup: 'rounded-xl shadow-2xl' }
+        heightAuto: false,
+        backdrop: 'rgba(15, 23, 42, 0.6)',
+        customClass: { 
+            popup: 'rounded-2xl shadow-2xl border border-gray-100',
+            backdrop: 'backdrop-blur-sm'
+        }
     });
-    return texto; // Será undefined si el usuario cancela
+    return texto; 
 };
 
 
