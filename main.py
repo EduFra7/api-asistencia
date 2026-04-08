@@ -258,6 +258,7 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
             CREATE TABLE {schema}.empleados (
                 id SERIAL PRIMARY KEY,
                 bio_id INT UNIQUE,                     -- ID Numérico del Lector Biométrico
+                foto_perfil TEXT,                      -- ⚡ NUEVO: CAMPO PARA LA FOTO BASE64
                 nombres VARCHAR(100) NOT NULL,
                 apellidos VARCHAR(100) NOT NULL,
                 ci VARCHAR(30) UNIQUE NOT NULL,        -- Carnet de Identidad (único)
@@ -570,9 +571,8 @@ def eliminar_sucursal(sucursal_id: int, usuario = Depends(verificar_token)):
         conn.commit()
         return {"mensaje": "Sucursal eliminada correctamente"}
     except psycopg2.IntegrityError:
-        # PROTECCIÓN ANTI-DESASTRES
         conn.rollback()
-        raise HTTPException(status_code=422, detail="No puedes eliminar esta sucursal porque hay personal o relojes biométricos asignados a ella.")
+        raise HTTPException(status_code=409, detail="Operación denegada: No puedes eliminar esta sucursal porque existen empleados registrados (activos o inactivos) asignados a ella. Transfiérelos a otra sucursal primero.")
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -658,7 +658,7 @@ def eliminar_seccion(seccion_id: int, usuario = Depends(verificar_token)):
         return {"mensaje": "Sección eliminada correctamente"}
     except psycopg2.IntegrityError:
         conn.rollback()
-        raise HTTPException(status_code=409, detail="No puedes eliminar este departamento porque tienes personal asignado a él.")
+        raise HTTPException(status_code=409, detail="Operación denegada: No puedes eliminar esta sección (departamento) porque tienes personal asignado a la misma. Reasigna al personal primero.")
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -714,43 +714,45 @@ async def registrar_empleado(request: Request, usuario = Depends(verificar_token
         bio_id = data.get("bio_id") or None
         turno_id_raw = data.get("turno_id")
         turno_id_final = int(turno_id_raw) if turno_id_raw else None
-        # 1. Buscamos si el C.I. existe en cualquier estado (Activo, Inactivo o Eliminado de prueba)
+        
+        # ⚡ Capturamos la foto Base64 enviada por el frontend
+        foto_perfil = data.get("foto_perfil") 
+
         cur.execute(f"SELECT id, eliminado FROM {schema}.empleados WHERE ci = %s", (ci,))
         existe = cur.fetchone()
 
         if existe:
             id_db, esta_eliminado = existe
             if not esta_eliminado:
-                # CASO: Está en el sistema como Activo o Inactivo. NO PERMITIMOS DUPLICAR.
+                # ⚡ ALERTA MEJORADA (409)
                 raise HTTPException(status_code=409, detail="ERROR: Ese C.I. ya existe. Si fue retirado, búscalo en 'Inactivos' y cámbialo a 'Activo'.")
             else:
-                # CASO: Era un registro "Eliminado" (limpieza de prueba). LO RESUCITAMOS.
                 cur.execute(f"""
                     UPDATE {schema}.empleados 
-                    SET bio_id = %s, nombres = %s, apellidos = %s, 
+                    SET bio_id = %s, foto_perfil = %s, nombres = %s, apellidos = %s, 
                         sucursal_id = %s, seccion_id = %s, cargo = %s, turno_id = %s,
                         eliminado = FALSE, activo = TRUE
                     WHERE id = %s
-                """, (bio_id, data.get("nombres"), data.get("apellidos"), 
-                      data.get("sucursal_id"), data.get("seccion_id"), data.get("cargo"), data.get("turno_id"), id_db))
+                """, (bio_id, foto_perfil, data.get("nombres"), data.get("apellidos"), 
+                      data.get("sucursal_id"), data.get("seccion_id"), data.get("cargo"), turno_id_final, id_db))
                 msg = "Empleado reactivado correctamente."
         else:
-            # 2. CASO: Es 100% nuevo, no hay rastro de él.
             cur.execute(f"""
             INSERT INTO {schema}.empleados 
-            (bio_id, nombres, apellidos, ci, sucursal_id, seccion_id, cargo, turno_id, activo,
+            (bio_id, foto_perfil, nombres, apellidos, ci, sucursal_id, seccion_id, cargo, turno_id, activo,
              sexo, celular, correo, direccion, fecha_ingreso, fecha_antiguedad, tipo_contrato, salario_base, bono) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             bio_id, 
+            foto_perfil,          # ⚡ Inyectamos la foto aquí
             data.get("nombres"), 
             data.get("apellidos"), 
             ci, 
             data.get("sucursal_id"), 
             data.get("seccion_id"), 
             data.get("cargo"), 
-            turno_id_final,       # ⚡ AQUÍ ESTÁ EL ARREGLO: turno_id va antes de activo
-            True,                 # ⚡ ACTIVO = True
+            turno_id_final,       
+            True,                 
             data.get("sexo"), 
             data.get("celular"), 
             data.get("correo"), 
@@ -759,7 +761,7 @@ async def registrar_empleado(request: Request, usuario = Depends(verificar_token
             data.get("fecha_antiguedad"), 
             data.get("tipo_contrato"),
             data.get("salario_base", 0), 
-            data.get("bono", 0)   # ⚡ Eliminamos el turno_id que estaba sobrando al final
+            data.get("bono", 0)   
         ))
             msg = "Personal registrado con éxito."
 
@@ -768,6 +770,7 @@ async def registrar_empleado(request: Request, usuario = Depends(verificar_token
         
     except psycopg2.IntegrityError:
         conn.rollback()
+        # ⚡ ALERTA MEJORADA (409)
         raise HTTPException(status_code=409, detail="El ID Biométrico ya está ocupado por otro empleado activo.")
     except Exception as e:
         conn.rollback()
@@ -804,13 +807,17 @@ async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depe
     # --- 2. ACTUALIZACIÓN Y CAJA NEGRA ---
     conn = conectar_bd(schema)
     cur = conn.cursor()
+    # --- 2. ACTUALIZACIÓN Y CAJA NEGRA ---
+    conn = conectar_bd(schema)
+    cur = conn.cursor()
     try:
         # A. Consultamos el estado ACTUAL antes de guardar los cambios
-        cur.execute(f"SELECT activo, fecha_retiro, motivo_retiro, historial_movimientos FROM {schema}.empleados WHERE id = %s", (empleado_id,))
+        cur.execute(f"SELECT activo, fecha_retiro, motivo_retiro, historial_movimientos, foto_perfil FROM {schema}.empleados WHERE id = %s", (empleado_id,))
         estado_db = cur.fetchone()
         
         activo_actual = estado_db[0]
         historial_existente = estado_db[3] or ""
+        foto_actual_bd = estado_db[4] # Guardamos la foto que ya existe
         nuevo_historial = historial_existente
         
         fecha_retiro_final = data.get("fecha_retiro")
@@ -820,23 +827,25 @@ async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depe
 
         # B. LÓGICA DE AUDITORÍA (CAJA NEGRA)
         if not activo_actual and activo_nuevo:
-            # CASO: RECONTRATACIÓN (Estaba inactivo y ahora es activo)
+            # CASO: RECONTRATACIÓN
             old_fecha = estado_db[1] or "Desconocida"
             old_motivo = estado_db[2] or "Sin motivo especificado"
             if old_fecha != "Desconocida":
                 anotacion = f"RECONTRATADO EL {fecha_auditoria}: Su baja anterior fue el {old_fecha} por '{old_motivo}'.\n"
-                nuevo_historial = anotacion + historial_existente # Ponemos lo más nuevo arriba
+                nuevo_historial = anotacion + historial_existente
             
-            # Limpiamos su estado actual para que empiece en blanco
             fecha_retiro_final = None
             motivo_retiro_final = None
 
         elif activo_actual and not activo_nuevo:
-            # CASO: DESPIDO / RETIRO (Estaba activo y ahora es inactivo)
+            # CASO: DESPIDO / RETIRO
             anotacion = f"➤ [DADO DE BAJA EL {fecha_auditoria}]: Motivo registrado: {motivo_retiro_final}.\n"
             nuevo_historial = anotacion + historial_existente
 
-        # C. GUARDAMOS TODO EN POSTGRESQL
+        # ⚡ BLINDAJE DE FOTO: Si el frontend manda una foto nueva, la usamos. Si no, mantenemos la antigua.
+        foto_a_guardar = data.get("foto_perfil") if data.get("foto_perfil") else foto_actual_bd
+
+        # C. GUARDAMOS TODO EN POSTGRESQL EN UNA SOLA PETICIÓN
         cur.execute(f"""
             UPDATE {schema}.empleados 
             SET bio_id = %s, nombres = %s, apellidos = %s, ci = %s, 
@@ -846,8 +855,8 @@ async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depe
                 salario_base = %s, bono = %s,
                 fecha_retiro = %s, motivo_retiro = %s,
                 turno_id = %s,
-                historial_movimientos = %s
-                
+                historial_movimientos = %s,
+                foto_perfil = %s
             WHERE id = %s
         """, (
             data.get("bio_id"), data.get("nombres"), data.get("apellidos"), 
@@ -859,6 +868,7 @@ async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depe
             fecha_retiro_final, motivo_retiro_final,
             data.get("turno_id"),
             nuevo_historial,
+            foto_a_guardar, # ⚡ Aplicamos la lógica de la foto aquí
             empleado_id
         ))
         
@@ -987,12 +997,25 @@ async def eliminar_turno(turno_id: int, usuario = Depends(verificar_token)):
     conn = conectar_bd(schema)
     cur = conn.cursor()
     try:
+        # Primero, verificamos si hay empleados usando este turno (Protección adicional)
+        cur.execute(f"SELECT id FROM {schema}.empleados WHERE turno_id = %s AND eliminado = FALSE LIMIT 1", (turno_id,))
+        if cur.fetchone():
+            raise HTTPException(status_code=409, detail="No puedes eliminar este turno porque hay empleados activos que lo están usando. Reasígnales otro turno primero.")
+
+        # Si está libre, aplicamos el Soft Delete
         cur.execute(f"UPDATE {schema}.turnos SET eliminado = TRUE WHERE id = %s", (turno_id,))
         conn.commit()
-        return {"mensaje": "Turno eliminado"}
+        return {"mensaje": "Turno eliminado exitosamente."}
+    except HTTPException:
+        # Si fue nuestro error personalizado, lo dejamos pasar tal cual
+        conn.rollback()
+        raise
+    except psycopg2.IntegrityError:
+         conn.rollback()
+         raise HTTPException(status_code=409, detail="Error de Integridad: Este turno está vinculado a registros históricos.")
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=422, detail="No se pudo eliminar el turno")
+        raise HTTPException(status_code=500, detail=f"Error interno del servidor: {str(e)}")
     finally:
         cur.close()
         conn.close()
@@ -1269,6 +1292,13 @@ async def registrar_ausencia(data: dict, usuario = Depends(verificar_token)):
             
             horas_totales = round(segundos_totales / 3600.0, 2)
             
+            # ⚡ NUEVA BARRERA DE SEGURIDAD ERP
+            if horas_totales <= 0:
+                raise HTTPException(
+                    status_code=409, 
+                    detail="Operación denegada: El permiso cae en el día libre del empleado, está fuera de su horario de trabajo, o es anulado por su hora de almuerzo. Horas a descontar: 0."
+                )
+
             # Formateamos para guardar en DB
             fecha_inicio = fecha_ini_str
             fecha_fin = fecha_fin_str

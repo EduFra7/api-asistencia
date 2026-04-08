@@ -337,7 +337,7 @@
             });
         }
 
-        // 3. GUARDAR Y ELIMINAR 
+        // 3. GUARDAR Y ELIMINAR (Con interfaz gráfica SweetAlert2)
         document.getElementById('btnGuardarContexto').onclick = async function() {
             const btn = this;
             btn.disabled = true;
@@ -362,18 +362,38 @@
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                     body: JSON.stringify(payload)
                 });
-                if(res.ok) {
-                    tipoContextoActual === 'sucursal' ? cargarSucursales() : cargarSecciones();
-                    cerrarPanel();
-                }
-            } catch (e) { alert("Error al guardar"); }
-            finally { btn.disabled = false; btn.textContent = "Guardar"; }
+                
+                const data = await res.json();
+                
+                if (!res.ok) throw new Error(data.detail || "Error al procesar la solicitud en el servidor");
+                
+                // ⚡ NOTIFICACIÓN FLOTANTE DE ÉXITO
+                mostrarExito(itemEditandoId ? "Registro actualizado correctamente" : "Registro creado correctamente");
+                
+                tipoContextoActual === 'sucursal' ? cargarSucursales() : cargarSecciones();
+                cerrarPanel();
+                
+            } catch (error) { 
+                // ⚡ VENTANA DE ERROR CORPORATIVA
+                mostrarError(error.message, "Error al guardar"); 
+            } finally { 
+                btn.disabled = false; 
+                btn.textContent = "Guardar"; 
+            }
         };
 
         async function ejecutarEliminacion() {
             if (!itemEditandoId) return;
             const msg = tipoContextoActual === 'sucursal' ? "esta sucursal" : "esta sección";
-            if (!confirm(`⚠️ ALERTA CRÍTICA:\n¿Seguro que deseas eliminar ${msg} de la base de datos?\n(No podrás eliminarlo si tiene personal asignado)`)) return;
+            
+            // ⚡ VENTANA DE CONFIRMACIÓN MODERNA
+            const seguro = await pedirConfirmacion(
+                `¿Seguro que deseas eliminar ${msg} de la base de datos?\n(No podrás eliminarlo si tiene personal asignado)`,
+                "⚠️ Alerta Crítica",
+                "Sí, eliminar"
+            );
+            
+            if (!seguro) return; // Si el usuario hace clic en "Cancelar", detenemos el proceso
             
             const btn = document.getElementById('btnEliminarContexto');
             btn.disabled = true;
@@ -386,12 +406,23 @@
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 
-                if (!res.ok) throw new Error("No se pudo eliminar. Verifica que no haya empleados asignados a este registro.");
+                const data = await res.json(); 
+                
+                if (!res.ok) throw new Error(data.detail || "No se pudo eliminar. Verifica que no haya empleados asignados a este registro.");
+                
+                // ⚡ NOTIFICACIÓN FLOTANTE DE ÉXITO
+                mostrarExito("Registro eliminado de la base de datos");
                 
                 tipoContextoActual === 'sucursal' ? cargarSucursales() : cargarSecciones();
                 cerrarPanel();
-            } catch (error) { alert(`❌ Error:\n${error.message}`); }
-            finally { btn.disabled = false; btn.innerHTML = '<i class="fas fa-trash-alt mr-1"></i> Eliminar'; }
+                
+            } catch (error) { 
+                // ⚡ VENTANA DE ERROR CORPORATIVA
+                mostrarError(error.message, "Error de Eliminación"); 
+            } finally { 
+                btn.disabled = false; 
+                btn.innerHTML = '<i class="fas fa-trash-alt mr-1"></i> Eliminar'; 
+            }
         }
 
         async function iniciarPantallaOrdenada() {

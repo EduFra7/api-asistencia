@@ -56,45 +56,34 @@
                     </div>
                 </div>
 
-                <!-- ── MODIFICACIÓN 1: CUADRÍCULA DE 4 COLUMNAS PARA FILTROS SEPARADOS ── -->
+                <!-- ── CUADRÍCULA DE 4 COLUMNAS (FILTROS DINÁMICOS) ── -->
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div>
                         <label class="text-xs font-semibold text-gray-500 uppercase">Buscar Empleado</label>
                         <div class="relative mt-1">
                             <i class="fas fa-search absolute left-3 top-2.5 text-gray-400"></i>
-                            <input type="text" onkeyup="simularBusqueda(this.value)" placeholder="Nombre, C.I. o ID Lector..." class="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <input type="text" id="filtro_busqueda" oninput="busquedaOptimizadaPlanilla(this.value)" placeholder="Nombre, C.I. o ID..." class="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
                         </div>
                     </div>
                     
-                    <!-- NUEVO FILTRO: SUCURSAL (FÍSICA) -->
                     <div>
                         <label class="text-xs font-semibold text-gray-500 uppercase">Sucursal (Ubicación)</label>
-                        <select onchange="simularFiltroSelect(this.value)" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
-                            <option value="todas">Todas las sucursales</option>
-                            <option value="Central">Central</option>
-                            <option value="Planta">Planta El Alto</option>
+                        <select id="filtro_sucursal" onchange="renderizarTabla()" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <option value="">Todas las sucursales</option>
                         </select>
                     </div>
 
-                    <!-- NUEVO FILTRO: SECCIÓN (LÓGICA) -->
                     <div>
                         <label class="text-xs font-semibold text-gray-500 uppercase">Sección (Depto)</label>
-                        <select onchange="simularFiltroSelect(this.value)" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
-                            <option value="todas">Todas las secciones</option>
-                            <option value="Mantenimiento">Mantenimiento</option>
-                            <option value="Produccion">Producción</option>
-                            <option value="Administracion">Administración</option>
+                        <select id="filtro_seccion" onchange="renderizarTabla()" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <option value="">Todas las secciones</option>
                         </select>
                     </div>
 
-                    <!-- FILTRO EXISTENTE: CARGO -->
                     <div>
                         <label class="text-xs font-semibold text-gray-500 uppercase">Cargo</label>
-                        <select onchange="simularFiltroSelect(this.value)" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
-                            <option value="todos">Todos los cargos</option>
-                            <option value="Administrador">Administrador</option>
-                            <option value="Supervisor">Supervisor</option>
-                            <option value="Operario">Operario de Planta</option>
+                        <select id="filtro_cargo" onchange="renderizarTabla()" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                            <option value="">Todos los cargos</option>
                         </select>
                     </div>
                 </div>
@@ -148,10 +137,15 @@
             <div class="flex-1 overflow-y-auto p-6 bg-gray-50">
                 <form id="empleadoForm" class="space-y-6">
                     
+                   <!-- ⚡ AVATAR INTELIGENTE (Webcam y Archivo) -->
                    <div class="flex items-center space-x-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-                        <div class="h-16 w-16 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 border-2 border-dashed border-gray-300 cursor-pointer hover:bg-gray-100 relative overflow-hidden">
-                            <i class="fas fa-camera text-xl"></i>
-                            <input type="file" id="fotoInput" class="absolute inset-0 opacity-0 cursor-pointer form-input" accept="image/*">
+                        <div onclick="abrirSelectorFoto()" class="h-20 w-20 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 border-2 border-dashed border-gray-300 cursor-pointer hover:bg-blue-50 hover:border-blue-300 relative overflow-hidden group transition-colors shadow-inner">
+                            <!-- Aquí se mostrará la foto capturada/subida -->
+                            <img id="previewFoto" src="" class="absolute inset-0 w-full h-full object-cover hidden z-10">
+                            <!-- Ícono por defecto -->
+                            <i id="iconoCamara" class="fas fa-camera text-2xl group-hover:scale-110 transition-transform"></i>
+                            <!-- Input oculto para archivos tradicionales -->
+                            <input type="file" id="fotoInput" class="hidden" accept="image/*" onchange="procesarArchivoFoto(this)">
                         </div>
                         <div class="flex-1">
                             <label class="block text-xs font-bold text-blue-600 uppercase">ID Lector Biométrico</label>
@@ -329,6 +323,28 @@
             </div>
         </div>
 
+        <!-- ⚡ MODAL DE WEBCAM (Oculto por defecto) -->
+        <div id="modalWebcam" class="fixed inset-0 bg-gray-900 bg-opacity-80 z-50 hidden flex items-center justify-center backdrop-blur-sm transition-opacity">
+            <div class="bg-white p-6 rounded-2xl shadow-2xl max-w-sm w-full flex flex-col items-center transform scale-100">
+                <h3 class="text-lg font-bold text-gray-800 mb-4"><i class="fas fa-camera text-blue-600 mr-2"></i>Fotografía de Perfil</h3>
+                
+                <!-- Contenedor circular simulando el Avatar -->
+                <div class="relative w-56 h-56 bg-black rounded-full overflow-hidden border-4 border-gray-200 shadow-inner mb-6">
+                    <!-- scale-x-[-1] hace el efecto espejo natural de los celulares -->
+                    <video id="videoWebcam" class="w-full h-full object-cover transform scale-x-[-1]" autoplay playsinline></video>
+                    <!-- Lienzo oculto para procesar y comprimir la foto -->
+                    <canvas id="canvasWebcam" class="hidden"></canvas>
+                </div>
+
+                <div class="flex space-x-3 w-full">
+                    <button onclick="cerrarWebcam()" class="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg font-medium hover:bg-gray-200 transition-colors">Cancelar</button>
+                    <button onclick="tomarFotoWebcam()" class="flex-1 bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 shadow-md transition-colors">
+                        <i class="fas fa-bullseye mr-2"></i>Capturar
+                    </button>
+                </div>
+            </div>
+        </div>
+
     </main>
 
     <!-- Conectamos nuestro archivo JS maestro -->
@@ -356,6 +372,9 @@
         const token_api = localStorage.getItem('token'); // Usamos token_api para no chocar con tu const 'token' si la hay
         let listaEmpleadosGlobal = [];
         let empleadoEditandoId = null;
+        let fotoBase64Global = null; // ⚡ AQUÍ GUARDAMOS LA FOTO
+        let streamWebcam = null;     // ⚡ AQUÍ GUARDAMOS LA CONEXIÓN A LA CÁMARA
+
 
         function cerrarSesion() {
             localStorage.clear(); // Borra todo
@@ -369,6 +388,7 @@
 
         function abrirPanelNuevo() {
             empleadoEditandoId = null;
+            fotoBase64Global = null; // ⚡ LIMPIAMOS LA MEMORIA DE LA FOTO
             document.getElementById('drawerTitle').textContent = "Registrar Nuevo Personal";
             document.getElementById('zonaSeguridad').classList.add('hidden');
             document.getElementById('btnEliminar').classList.add('hidden');
@@ -396,6 +416,15 @@
             
             // Llenado de datos básicos y extras
             document.getElementById('bioId').value = emp.bio_id || '';
+
+            // Si tiene foto, la mostramos en el avatar, si no, mostramos la cámara
+            if (emp.foto_perfil) {
+                comprimirYMostrarFoto(emp.foto_perfil);
+            } else {
+                document.getElementById('previewFoto').classList.add('hidden');
+                document.getElementById('iconoCamara').classList.remove('hidden');
+            }
+
             document.getElementById('emp_nombres').value = emp.nombres || '';
             document.getElementById('emp_apellidos').value = emp.apellidos || '';
             document.getElementById('emp_ci').value = emp.ci || '';
@@ -522,14 +551,18 @@
             }
         }
 
-        // ELIMINAR EMPLEADO REAL
+        // ELIMINAR EMPLEADO REAL (Con SweetAlert2)
         async function solicitarBorrado() {
             if(!empleadoEditandoId) return;
             
-            // Reemplazamos el alert falso por una confirmación real del navegador
-            const confirmacion = confirm("⚠️ ¿Estás completamente seguro de retirar a este empleado del sistema?\nEsta acción lo ocultará de la planilla.");
+            // ⚡ VENTANA DE CONFIRMACIÓN MODERNA
+            const seguro = await pedirConfirmacion(
+                "¿Estás completamente seguro de retirar a este empleado del sistema?\nEsta acción lo ocultará de la planilla.",
+                "⚠️ Alerta Crítica",
+                "Sí, retirar"
+            );
             
-            if(!confirmacion) return; // Si dice que no, cancelamos todo
+            if(!seguro) return; // Si dice que no, cancelamos todo
 
             const btn = document.getElementById('btnEliminar');
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Eliminando...';
@@ -542,15 +575,16 @@
                 });
                 
                 if(res.ok) {
+                    mostrarExito("Empleado retirado del sistema");
                     cerrarPanel();
                     await cargarEmpleados(); // Recarga la tabla para que desaparezca
                 } else {
                     const errorData = await res.json();
-                    alert("Error al eliminar: " + errorData.detail);
+                    mostrarError(errorData.detail || "Error desconocido al eliminar", "Error en base de datos");
                 }
             } catch (error) {
                 console.error(error);
-                alert("Error de conexión con el servidor al intentar eliminar.");
+                mostrarError("Error de conexión con el servidor al intentar eliminar.", "Fallo de Red");
             } finally {
                 btn.innerHTML = '<i class="fas fa-trash-alt mr-1"></i> Eliminar';
                 btn.disabled = false;
@@ -562,6 +596,7 @@
         // ==============================================================================
 
         // 1. Cargar las listas desplegables (Sucursal y Sección)
+        // 1. Cargar las listas desplegables (Formularios y Filtros)
         async function cargarCatalogos() {
             try {
                 const [resSucursales, resSecciones] = await Promise.all([
@@ -572,16 +607,26 @@
                 const sucursales = await resSucursales.json();
                 const secciones = await resSecciones.json();
 
+                // Llenar Selectores del Formulario
                 const selectSucursal = document.getElementById('emp_sucursal');
+                const selectSeccion = document.getElementById('emp_seccion');
                 selectSucursal.innerHTML = '<option value="">Seleccione Sucursal...</option>';
+                selectSeccion.innerHTML = '<option value="">Seleccione Sección...</option>';
+                
+                // Llenar Selectores de los Filtros de Búsqueda
+                const filtroSucursal = document.getElementById('filtro_sucursal');
+                const filtroSeccion = document.getElementById('filtro_seccion');
+                filtroSucursal.innerHTML = '<option value="">Todas las sucursales</option>';
+                filtroSeccion.innerHTML = '<option value="">Todas las secciones</option>';
+
                 sucursales.forEach(s => {
                     selectSucursal.innerHTML += `<option value="${s.id}">${s.nombre}</option>`;
+                    filtroSucursal.innerHTML += `<option value="${s.id}">${s.nombre}</option>`;
                 });
 
-                const selectSeccion = document.getElementById('emp_seccion');
-                selectSeccion.innerHTML = '<option value="">Seleccione Sección...</option>';
                 secciones.forEach(s => {
                     selectSeccion.innerHTML += `<option value="${s.id}">${s.nombre}</option>`;
+                    filtroSeccion.innerHTML += `<option value="${s.id}">${s.nombre}</option>`;
                 });
 
             } catch (error) {
@@ -626,49 +671,86 @@
             }
         }
 
-        // Dibuja la tabla aplicando los filtros
+        // ⚡ SISTEMA ANTI-LAG (Debounce)
+        let temporizadorBusquedaPlanilla;
+        function busquedaOptimizadaPlanilla(valorTexto) {
+            clearTimeout(temporizadorBusquedaPlanilla);
+            temporizadorBusquedaPlanilla = setTimeout(() => {
+                renderizarTabla();
+            }, 300); // Espera 300ms después de que el usuario deja de teclear
+        }
+
+        // Dibuja la tabla aplicando TODOS los filtros simultáneamente
         function renderizarTabla() {
             const tbody = document.getElementById('cuerpoTabla');
             tbody.innerHTML = '';
             
-            // Filtramos la lista global según el botón presionado
+            // Capturamos los valores de la interfaz
+            const txtBusqueda = document.getElementById('filtro_busqueda').value.toLowerCase();
+            const valSucursal = document.getElementById('filtro_sucursal').value;
+            const valSeccion = document.getElementById('filtro_seccion').value;
+            const valCargo = document.getElementById('filtro_cargo').value;
+
+            // Filtramos la lista global
             const listaFiltrada = listaEmpleadosGlobal.filter(emp => {
-                if(filtroActual === 'activos') return emp.activo === true;
-                if(filtroActual === 'inactivos') return emp.activo === false;
-                return true; // Si es 'todos', pasan ambos
+                // 1. Filtro Botones Superiores (Activo/Inactivo)
+                if(filtroActual === 'activos' && !emp.activo) return false;
+                if(filtroActual === 'inactivos' && emp.activo) return false;
+
+                // 2. Filtro de Texto (Buscador inteligente)
+                const textoEmpleado = `${emp.nombres} ${emp.apellidos} ${emp.ci} ${emp.bio_id || ''}`.toLowerCase();
+                if (txtBusqueda && !textoEmpleado.includes(txtBusqueda)) return false;
+
+                // 3. Filtros Selectores
+                if (valSucursal && emp.sucursal_id != valSucursal) return false;
+                if (valSeccion && emp.seccion_id != valSeccion) return false;
+                if (valCargo && emp.cargo !== valCargo) return false;
+
+                return true; // Si pasa todos los filtros, sobrevive
             });
 
-            // Actualizamos los contadores visuales (Opcional, pero da toque Senior)
+            // Actualizamos los contadores visuales superiores
             const countActivos = listaEmpleadosGlobal.filter(e => e.activo).length;
             const countInactivos = listaEmpleadosGlobal.filter(e => !e.activo).length;
             document.querySelector("button[onclick=\"cambiarFiltro('activos', this)\"]").innerHTML = `<i class="fas fa-user-check mr-2"></i>Activos (${countActivos})`;
             document.querySelector("button[onclick=\"cambiarFiltro('inactivos', this)\"]").innerHTML = `<i class="fas fa-user-times mr-2"></i>Inactivos (${countInactivos})`;
             document.querySelector("button[onclick=\"cambiarFiltro('todos', this)\"]").innerHTML = `<i class="fas fa-users mr-2"></i>Todos (${listaEmpleadosGlobal.length})`;
 
+            // Extraemos cargos únicos de la BD para el filtro de Cargos (Truco Senior)
+            const selCargo = document.getElementById('filtro_cargo');
+            const cargoSeleccionadoPrevio = selCargo.value;
+            selCargo.innerHTML = '<option value="">Todos los cargos</option>';
+            const cargosUnicos = [...new Set(listaEmpleadosGlobal.map(e => e.cargo).filter(c => c))];
+            cargosUnicos.forEach(c => {
+                selCargo.innerHTML += `<option value="${c}" ${c === cargoSeleccionadoPrevio ? 'selected' : ''}>${c}</option>`;
+            });
+
+            // Si no hay resultados
             if(listaFiltrada.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-gray-500">No hay personal en esta categoría</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-gray-500"><i class="fas fa-search mr-2"></i>No se encontró personal con estos filtros</td></tr>';
                 return;
             }
             
+            // Dibujamos la tabla final
             listaFiltrada.forEach(emp => {
                 const iniciales = (emp.nombres.charAt(0) + emp.apellidos.charAt(0)).toUpperCase();
                 const badgeEstado = emp.activo 
-                    ? '<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-semibold">Activo</span>'
-                    : '<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-semibold">Inactivo</span>';
+                    ? '<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-semibold shadow-sm border border-green-200">Activo</span>'
+                    : '<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-semibold shadow-sm border border-red-200">Inactivo</span>';
 
                 tbody.innerHTML += `
-                    <tr onclick="abrirPanelEdicion(${emp.id})" class="hover:bg-blue-50 transition-colors cursor-pointer group">
-                        <td class="p-4 font-mono text-gray-500">${emp.bio_id || '-'}</td>
+                    <tr onclick="abrirPanelEdicion(${emp.id})" class="hover:bg-blue-50 transition-colors cursor-pointer group border-b border-gray-100">
+                        <td class="p-4 font-mono text-gray-500 text-xs">${emp.bio_id || '-'}</td>
                         <td class="p-4">
                             <div class="flex items-center">
-                                <div class="h-8 w-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold mr-3">${iniciales}</div>
-                                <p class="font-bold text-gray-800 group-hover:text-blue-600">${emp.nombres} ${emp.apellidos}</p>
+                                <div class="h-8 w-8 rounded-full bg-slate-800 text-white shadow-inner flex items-center justify-center font-bold mr-3">${iniciales}</div>
+                                <p class="font-bold text-gray-800 group-hover:text-blue-600 transition-colors">${emp.nombres} ${emp.apellidos}</p>
                             </div>
                         </td>
-                        <td class="p-4">${emp.ci}</td>
-                        <td class="p-4">${emp.sucursal_nombre || '-'}</td>
-                        <td class="p-4">${emp.seccion_nombre || '-'}</td>
-                        <td class="p-4">${emp.cargo || '-'}</td>
+                        <td class="p-4 text-gray-600 text-sm">${emp.ci}</td>
+                        <td class="p-4 text-gray-600 text-sm font-medium">${emp.sucursal_nombre || '-'}</td>
+                        <td class="p-4 text-gray-600 text-sm">${emp.seccion_nombre || '-'}</td>
+                        <td class="p-4 text-gray-600 text-sm">${emp.cargo || '-'}</td>
                         <td class="p-4">${badgeEstado}</td>
                     </tr>`;
             });
@@ -688,15 +770,16 @@
         }
 
         // 3. Enviar el Formulario al Backend (Horario NO obligatorio)
-        // MOTOR DE GUARDADO "MODO DIOS" (Caza-Bugs)
+        // MOTOR DE GUARDADO "MODO DIOS" (Con UI Profesional)
         // ==========================================
         async function guardarEmpleado() {
             console.log("🚀 [INICIO] Intentando guardar datos...");
             const btn = document.getElementById('btnGuardar');
             
             // 1. Armamos el paquete de datos
-           const payload = {
+            const payload = {
                 bio_id: document.getElementById('bioId').value ? parseInt(document.getElementById('bioId').value) : null,
+                foto_perfil: fotoBase64Global,
                 nombres: document.getElementById('emp_nombres').value.trim(),
                 apellidos: document.getElementById('emp_apellidos').value.trim(),
                 ci: document.getElementById('emp_ci').value.trim(),
@@ -705,7 +788,6 @@
                 seccion_id: parseInt(document.getElementById('emp_seccion').value),
                 activo: document.getElementById('toggleEstado').checked,
                 turno_id: document.getElementById('emp_turno').value ? parseInt(document.getElementById('emp_turno').value) : null,
-                // --- LOS CAMPOS NUEVOS CONECTADOS ---
                 sexo: document.getElementById('emp_sexo').value,
                 celular: document.getElementById('emp_celular').value.trim(),
                 correo: document.getElementById('emp_correo').value.trim(),
@@ -715,7 +797,6 @@
                 tipo_contrato: document.getElementById('emp_contrato').value,
                 salario_base: parseFloat(document.getElementById('emp_salario').value) || 0.00,
                 bono: parseFloat(document.getElementById('emp_bono').value) || 0.00,
-                // --- LOS CAMPOS CRÍTICOS DE BAJA ---
                 fecha_retiro: document.getElementById('emp_fecha_retiro').value || null,
                 motivo_retiro: document.getElementById('emp_motivo_retiro').value.trim(),
                 admin_password: document.getElementById('emp_admin_password').value
@@ -723,16 +804,16 @@
 
             console.log("📦 [DATOS CAPTURADOS]:", payload);
 
-            // 2. Validación Anti-Fallos Silenciosos
+            // 2. Validación Anti-Fallos Silenciosos con SweetAlert
             if(!payload.nombres || !payload.ci || isNaN(payload.sucursal_id)) {
-                console.error("❌ [BLOQUEO] Faltan datos obligatorios. Sucursal ID detectado como:", payload.sucursal_id);
-                alert("⚠️ Error: Los campos Nombres, C.I. y Sucursal son obligatorios. Verifica que hayas seleccionado una Sucursal válida.");
+                console.error("❌ [BLOQUEO] Faltan datos obligatorios. Sucursal ID:", payload.sucursal_id);
+                mostrarError("Los campos Nombres, C.I. y Sucursal son obligatorios. Verifica que hayas seleccionado una Sucursal válida.", "Datos incompletos");
                 return; // Cortamos la ejecución aquí
             }
 
             // Bloqueamos el botón para evitar doble clic
             btn.disabled = true;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Procesando con Railway...';
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Procesando...';
 
             // Decidimos si es CREAR o ACTUALIZAR
             const metodoHTTP = empleadoEditandoId ? 'PUT' : 'POST';
@@ -756,16 +837,18 @@
                     throw new Error(data.detail || "Error desconocido en la Base de Datos");
                 }
                 
-                // Si todo sale bien
-                alert(`✅ ÉXITO: ${data.mensaje || 'Empleado guardado correctamente'}`);
+                // ⚡ NOTIFICACIÓN FLOTANTE DE ÉXITO
+                mostrarExito(data.mensaje || (empleadoEditandoId ? 'Empleado actualizado' : 'Empleado registrado'));
+                
                 cerrarPanel();
                 await cargarEmpleados(); 
                 
             } catch (error) { 
                 console.error("💥 [ERROR CRÍTICO CAPTURADO]:", error);
-                alert(`❌ ERROR DEL SERVIDOR:\n${error.message}\n\nRevisa la consola (F12) para detalles técnicos.`);
+                // ⚡ VENTANA DE ERROR CORPORATIVA
+                mostrarError(error.message, "Fallo al Guardar");
             } finally { 
-                // Siempre devolvemos el botón a la normalidad, pase lo que pase
+                // Siempre devolvemos el botón a la normalidad
                 btn.disabled = false; 
                 btn.innerHTML = empleadoEditandoId ? 'Guardar Cambios' : 'Registrar Empleado'; 
             }
@@ -787,7 +870,7 @@
             });
 
             if(listaFiltrada.length === 0) {
-                alert("No hay información para exportar con este filtro.");
+                mostrarError("No hay información de empleados para exportar con el filtro actual.", "Reporte Vacío");
                 return;
             }
 
@@ -875,8 +958,10 @@
                 return true; 
             });
 
-            if(listaFiltrada.length === 0) return alert("No hay datos para exportar.");
-
+            if(listaFiltrada.length === 0) {
+                 mostrarError("No hay datos en la tabla para generar el archivo Excel.", "Tabla Vacía");
+                 return;
+            }
             // 1. Preparamos los datos en una matriz (Array de Arrays)
             const datosParaExcel = [];
             
@@ -933,7 +1018,120 @@
             XLSX.writeFile(wb, nombreArchivo);
         }
 
-        // 6. Iniciar la pantalla ordenadamente (Añade esta función al final de todo el JS)
+        // ==========================================
+        // 📷 MOTOR DE CAPTURA DE FOTOS Y WEBCAM
+        // ==========================================
+
+        async function abrirSelectorFoto() {
+            const { value: opcion } = await Swal.fire({
+                title: 'Foto de Perfil',
+                text: '¿Cómo deseas agregar la foto del empleado?',
+                icon: 'question',
+                showCancelButton: true,
+                showDenyButton: true,
+                confirmButtonColor: '#3b82f6', // blue
+                denyButtonColor: '#10b981',    // green
+                confirmButtonText: '<i class="fas fa-upload mr-1"></i> Subir Archivo',
+                denyButtonText: '<i class="fas fa-camera mr-1"></i> Usar Webcam',
+                cancelButtonText: 'Cancelar',
+                customClass: { popup: 'rounded-xl shadow-2xl' }
+            });
+
+            if (opcion) {
+                // Hizo clic en "Subir Archivo": Simulamos un clic en el input oculto
+                document.getElementById('fotoInput').click();
+            } else if (opcion === false) {
+                // Hizo clic en "Usar Webcam"
+                iniciarWebcam();
+            }
+        }
+
+        // ⚡ OPCIÓN A: PROCESAR ARCHIVO DE LA PC
+        function procesarArchivoFoto(input) {
+            if (input.files && input.files[0]) {
+                const archivo = input.files[0];
+                
+                // Validamos que sea una imagen
+                if (!archivo.type.startsWith('image/')) {
+                    mostrarError("El archivo seleccionado no es una imagen válida.", "Formato Inválido");
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    comprimirYMostrarFoto(e.target.result);
+                };
+                reader.readAsDataURL(archivo);
+            }
+        }
+
+        // ⚡ OPCIÓN B: INICIAR LA CÁMARA WEB
+        async function iniciarWebcam() {
+            try {
+                // Pedimos permiso a la cámara del usuario
+                streamWebcam = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+                const video = document.getElementById('videoWebcam');
+                video.srcObject = streamWebcam;
+                
+                // Mostramos el modal
+                document.getElementById('modalWebcam').classList.remove('hidden');
+            } catch (error) {
+                console.error("Error webcam:", error);
+                mostrarError("No se pudo acceder a la cámara. Verifica los permisos de tu navegador.", "Sin acceso");
+            }
+        }
+
+        function cerrarWebcam() {
+            // Apagamos la cámara para ahorrar recursos
+            if (streamWebcam) {
+                streamWebcam.getTracks().forEach(track => track.stop());
+                streamWebcam = null;
+            }
+            document.getElementById('modalWebcam').classList.add('hidden');
+        }
+
+        // ⚡ CAPTURA Y COMPRESIÓN (EVITANDO COLAPSO DE BD)
+        function tomarFotoWebcam() {
+            const video = document.getElementById('videoWebcam');
+            const canvas = document.getElementById('canvasWebcam');
+            const ctx = canvas.getContext('2d');
+
+            // Configuramos un tamaño corporativo estándar (400x400 px)
+            const tamano = 400;
+            canvas.width = tamano;
+            canvas.height = tamano;
+
+            // Cortamos el centro del video para que quede cuadrado perfecto
+            const dimensionVideo = Math.min(video.videoWidth, video.videoHeight);
+            const startX = (video.videoWidth - dimensionVideo) / 2;
+            const startY = (video.videoHeight - dimensionVideo) / 2;
+
+            // Dibujamos el frame de la cámara en nuestro lienzo (Aplicamos efecto espejo)
+            ctx.translate(tamano, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(video, startX, startY, dimensionVideo, dimensionVideo, 0, 0, tamano, tamano);
+
+            // Convertimos la imagen a JPG comprimido al 80% (Muy liviano)
+            const fotoDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+            
+            comprimirYMostrarFoto(fotoDataUrl);
+            cerrarWebcam();
+        }
+
+        function comprimirYMostrarFoto(base64String) {
+            // 1. Lo guardamos en la variable global para enviarlo a Python
+            fotoBase64Global = base64String;
+            
+            // 2. Lo mostramos en la interfaz
+            const imgPreview = document.getElementById('previewFoto');
+            const icono = document.getElementById('iconoCamara');
+            
+            imgPreview.src = base64String;
+            imgPreview.classList.remove('hidden');
+            icono.classList.add('hidden'); // Ocultamos el icono de la cámara
+        }
+
+        // Iniciar la pantalla ordenadamente (Añade esta función al final de todo el JS)
         async function arrancarPantallaPlanilla() {
             await Promise.all([
                 cargarCatalogos(),

@@ -5,56 +5,119 @@ const originalFetch = window.fetch;
 
 window.fetch = async function() {
     try {
-        // Ejecutamos la petición original como si nada pasara
         const response = await originalFetch.apply(this, arguments);
         
-        // ⚡ EL GUARDIAS: Si el servidor devuelve 401 (Token Expirado/Inválido)
         if (response.status === 401) {
             console.warn("⚠️ [SEGURIDAD] Sesión expirada o token inválido. Expulsando usuario...");
-            
-            // Limpiamos los datos muertos
             localStorage.removeItem('token');
             localStorage.removeItem('userData');
-            
-            // Redirigimos al login
             window.location.href = 'index.html'; 
-            
-            // Detenemos la ejecución devolviendo una promesa que nunca se resuelve
-            // Esto evita que el resto del código intente leer .json() y colapse
             return new Promise(() => {}); 
         }
         
-        return response; // Si todo está bien, devolvemos la respuesta normal
+        return response; 
     } catch (error) {
-        // Si hay un error de red (servidor caído, sin internet), lo dejamos pasar
         throw error;
     }
 };
+
 // ==============================================================================
+// 💎 MOTOR GRÁFICO DE NOTIFICACIONES (Reemplazo de alert, confirm, prompt)
+// ==============================================================================
+
+// 1. Inyección Dinámica de SweetAlert2 (Para no tener que editar cada HTML)
+if (!window.Swal) {
+    const swalScript = document.createElement('script');
+    swalScript.src = 'https://cdn.jsdelivr.net/npm/sweetalert2@11';
+    document.head.appendChild(swalScript);
+}
+
+// 2. Configuración del "Toast" (Notificación flotante estilo WhatsApp)
+// Esperamos a que la librería cargue para definir el Toast global
+let Toast;
+window.addEventListener('load', () => {
+    Toast = Swal.mixin({
+        toast: true,
+        position: 'bottom-end',
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
+        didOpen: (toast) => {
+            toast.addEventListener('mouseenter', Swal.stopTimer)
+            toast.addEventListener('mouseleave', Swal.resumeTimer)
+        }
+    });
+});
+
+// 3. Funciones Globales para usar en todo el ERP
+window.mostrarExito = function(mensaje) {
+    if(Toast) Toast.fire({ icon: 'success', title: mensaje });
+};
+
+window.mostrarError = function(mensaje, titulo = "Operación Denegada") {
+    Swal.fire({
+        icon: 'error',
+        title: titulo,
+        text: mensaje,
+        confirmButtonColor: '#3b82f6', // blue-500
+        confirmButtonText: 'Entendido',
+        customClass: { popup: 'rounded-xl shadow-2xl' }
+    });
+};
+
+// Reemplaza a confirm() - Devuelve true o false
+window.pedirConfirmacion = async function(mensaje, titulo = "⚠️ ¿Estás seguro?", textoBoton = "Sí, continuar") {
+    const result = await Swal.fire({
+        title: titulo,
+        text: mensaje,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444', // red-500 para peligro
+        cancelButtonColor: '#94a3b8', // slate-400 para cancelar
+        confirmButtonText: textoBoton,
+        cancelButtonText: 'Cancelar',
+        reverseButtons: true, // Pone el botón de cancelar a la izquierda (UX moderno)
+        customClass: { popup: 'rounded-xl shadow-2xl' }
+    });
+    return result.isConfirmed;
+};
+
+// Reemplaza a prompt() - Devuelve el texto escrito o null
+window.pedirTexto = async function(mensaje, valorActual = "", titulo = "Ingresar Información") {
+    const { value: texto } = await Swal.fire({
+        title: titulo,
+        input: 'textarea',
+        inputLabel: mensaje,
+        inputValue: valorActual,
+        showCancelButton: true,
+        confirmButtonColor: '#3b82f6', 
+        cancelButtonColor: '#94a3b8',
+        confirmButtonText: 'Guardar',
+        cancelButtonText: 'Cancelar',
+        customClass: { popup: 'rounded-xl shadow-2xl' }
+    });
+    return texto; // Será undefined si el usuario cancela
+};
+
 
 // ==============================================================================
 // COMPONENTE: MENÚ LATERAL DINÁMICO
-// Este archivo inyecta el menú en todas las pantallas y gestiona la pestaña activa.
 // ==============================================================================
 
 function renderizarMenu(pantallaActiva) {
-    // 1. Obtener datos del usuario desde la memoria del navegador
     const userDataStr = localStorage.getItem('userData');
     let empresaNombre = "Cargando...";
     let rol = "Admin";
 
     if (userDataStr) {
         const userData = JSON.parse(userDataStr);
-        // Soporte para variables antiguas y nuevas
         empresaNombre = userData.empresa_nombre || userData.empresa || "Empresa"; 
         rol = userData.rol === 'admin' ? 'Administrador' : 'Usuario';
     }
 
-    // 2. Definir las clases CSS (Estilos) para cuando un botón está presionado o suelto
     const claseActiva = "flex items-center px-3 py-2 bg-blue-600 rounded-lg text-white transition-colors shadow-sm";
     const claseInactiva = "flex items-center px-3 py-2 text-slate-300 hover:bg-slate-800 rounded-lg transition-colors";
 
-    // 3. Construir el bloque de HTML del Menú
     const menuHTML = `
         <div class="p-6 border-b border-slate-800">
             <h2 class="text-xl font-bold text-blue-400 truncate"><i class="fas fa-fingerprint mr-2"></i>${empresaNombre}</h2>
@@ -65,7 +128,7 @@ function renderizarMenu(pantallaActiva) {
             <nav class="space-y-1 px-3">
                 
                 <!-- ── SECCIÓN: ASISTENCIA ── -->
-                <div class="text-xs font-semibold uppercase tracking-wider mb-2 mt-4 px-3 uppercase tracking-wider mb-2 mt-6 px-3 ${pantallaActiva === 'dashboard' ? 'text-blue-400' : 'text-slate-500'}">Control de Asistencia</div>
+                <div class="text-xs font-semibold uppercase tracking-wider mb-2 mt-4 px-3 ${pantallaActiva === 'dashboard' ? 'text-blue-400' : 'text-slate-500'}">Control de Asistencia</div>
                 <a href="dashboard_cliente.html" class="${pantallaActiva === 'dashboard' ? claseActiva : claseInactiva}">
                     <i class="fas fa-chart-pie w-5 mr-2"></i> Dashboard
                 </a>
@@ -114,11 +177,8 @@ function renderizarMenu(pantallaActiva) {
         </div>
     `;
 
-    // 4. Inyectar este HTML dentro del contenedor vacío en la pantalla actual
     const contenedorMenu = document.getElementById('menu-lateral');
     if (contenedorMenu) {
         contenedorMenu.innerHTML = menuHTML;
-    } else {
-        console.error("No se encontró el <aside id='menu-lateral'> en esta página.");
     }
 }

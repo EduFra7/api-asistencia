@@ -598,14 +598,13 @@
 
         async function guardarAusencia() {
             if (!empleadoSeleccionadoId) {
-                return alert("⚠️ Debes seleccionar un empleado primero.");
+                mostrarError("Debes seleccionar un empleado primero.", "Atención");
+                return;
             }
 
-            // 1. Capturamos los valores generales de los Checkboxes
             const por_dias = document.getElementById('permiso_por_dias').checked;
             const requiere_reposicion = document.getElementById('requiere_reposicion').checked;
 
-            // 2. CREAMOS EL "PAYLOAD" (El paquete de datos base)
             const payload = {
                 empleado_id: empleadoSeleccionadoId,
                 tipo: tipoRegistroActual,
@@ -614,11 +613,12 @@
                 requiere_reposicion: requiere_reposicion
             };
 
-            // 3. LÓGICA SEGÚN EL TIPO DE REGISTRO
             if (tipoRegistroActual === 'vacacion' || (tipoRegistroActual === 'permiso' && por_dias)) {
-                // CASO A: Vacación o Permiso por días completos (usa el rango del calendario)
                 const rango = document.getElementById('rango_fechas').value;
-                if (!rango) return alert("⚠️ Seleccione el rango de fechas.");
+                if (!rango) {
+                    mostrarError("Seleccione el rango de fechas en el calendario.", "Faltan datos");
+                    return;
+                }
 
                 let fecha_inicio = rango;
                 let fecha_fin = rango;
@@ -634,24 +634,22 @@
                 payload.fecha_fin = fecha_fin;
 
             } else {
-                // CASO B: Permiso por horas/días específicos (Usa los nuevos relojes y fechas separadas)
                 const f_ini = document.getElementById('fecha_inicio_permiso').value;
                 const h_ini = document.getElementById('hora_inicio_permiso').value;
                 const f_fin = document.getElementById('fecha_fin_permiso').value;
                 const h_fin = document.getElementById('hora_fin_permiso').value;
 
                 if (!f_ini || !h_ini || !f_fin || !h_fin) {
-                    return alert("⚠️ Para este permiso, debe indicar Fecha y Hora tanto de salida como de retorno.");
+                    mostrarError("Para este permiso, debe indicar Fecha y Hora tanto de salida como de retorno.", "Faltan datos");
+                    return;
                 }
 
-                // ⚡ AQUÍ ESTÁ EL CAMBIO: Estos nombres deben coincidir con lo que pusimos en main.py
                 payload.fecha_inicio_permiso = f_ini;
                 payload.hora_inicio_permiso = h_ini;
                 payload.fecha_fin_permiso = f_fin;
                 payload.hora_fin_permiso = h_fin;
             }
 
-            // 4. ENVÍO AL SERVIDOR
             const btn = document.getElementById('btnGuardarAusencia');
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Procesando...';
@@ -660,20 +658,23 @@
                 const res = await fetch(`${API_URL}/ausencias`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token_api}` },
-                    body: JSON.stringify(payload) // Enviamos el "sobre" con los datos
+                    body: JSON.stringify(payload) 
                 });
 
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.detail || "Error en el servidor");
 
-                alert("✅ " + data.mensaje);
+                // ⚡ NOTIFICACIÓN FLOTANTE DE ÉXITO
+                mostrarExito(data.mensaje);
+                
                 limpiarFormulario();
                 cerrarPanel();
                 cargarKardexEmpleado(empleadoSeleccionadoId); 
                 cargarTodosLosKardexEnFondo();
                 
             } catch (error) {
-                alert("❌ Error: " + error.message);
+                // ⚡ VENTANA DE ERROR CORPORATIVA
+                mostrarError(error.message, "Error al registrar");
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fas fa-save mr-2"></i>Registrar en Sistema';
@@ -760,12 +761,12 @@
         // UI: MODAL DE SALDO INICIAL
         // ==========================================
         function abrirModalSaldoInicial() {
-            if (!empleadoSeleccionadoId) return alert("Seleccione un empleado primero.");
-            // Limpiamos la contraseña por seguridad al abrir
+            if (!empleadoSeleccionadoId) {
+                mostrarError("Seleccione un empleado primero.", "Atención");
+                return;
+            }
             document.getElementById('input_admin_pwd').value = '';
-            // Ponemos el input de saldo en 0.00 por defecto
             document.getElementById('input_saldo_inicial').value = '0.00';
-            
             document.getElementById('modalSaldoInicial').classList.remove('hidden');
         }
 
@@ -778,7 +779,8 @@
             const password = document.getElementById('input_admin_pwd').value;
 
             if (nuevoSaldo === "" || !password) {
-                return alert("⚠️ Debe ingresar el nuevo saldo y su contraseña de administrador.");
+                mostrarError("Debe ingresar el nuevo saldo y su contraseña de administrador.", "Datos incompletos");
+                return;
             }
 
             const btn = document.getElementById('btnGuardarSaldo');
@@ -796,18 +798,16 @@
                 });
 
                 const data = await res.json();
-                
                 if (!res.ok) throw new Error(data.detail || "Error en el servidor");
 
-                alert("✅ " + data.mensaje);
+                mostrarExito(data.mensaje);
                 cerrarModalSaldoInicial();
                 
-                // Recargamos el Kardex para que se refleje la matemática al instante
                 await cargarKardexEmpleado(empleadoSeleccionadoId);
                 cargarTodosLosKardexEnFondo();
                 
             } catch (error) {
-                alert("❌ " + error.message);
+                mostrarError(error.message, "Acceso Denegado");
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fas fa-save mr-2"></i> Confirmar Ajuste';
@@ -857,8 +857,14 @@
         // ==========================================
 
         async function anularAusencia(ausenciaId) {
-            // Confirmación de seguridad
-            if (!confirm("⚠️ ¿Estás seguro de que deseas anular este registro?\n\nEl saldo descontado será devuelto automáticamente al empleado.")) return;
+            // ⚡ VENTANA DE CONFIRMACIÓN MODERNA
+            const seguro = await pedirConfirmacion(
+                "El saldo descontado será devuelto automáticamente al empleado. Esta acción quedará registrada.", 
+                "¿Anular este registro?", 
+                "Sí, anular"
+            );
+            
+            if (!seguro) return;
 
             try {
                 const res = await fetch(`${API_URL}/ausencias/${ausenciaId}`, {
@@ -869,22 +875,19 @@
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.detail || "Error al anular el registro");
                 
-                alert("✅ " + data.mensaje);
-                
-                // Recargamos todo el Kardex para que la matemática se actualice en pantalla
+                mostrarExito(data.mensaje);
                 cargarKardexEmpleado(empleadoSeleccionadoId);
                 
             } catch (error) {
-                alert("❌ Error: " + error.message);
+                mostrarError(error.message, "Error al anular");
             }
         }
 
         async function editarMotivoAusencia(ausenciaId, motivoActual) {
-            // Usamos un prompt nativo por simplicidad y rapidez
-            const nuevoMotivo = prompt("Editar motivo / observaciones:", motivoActual);
+            // ⚡ VENTANA DE ENTRADA DE TEXTO MODERNA
+            const nuevoMotivo = await pedirTexto("Editar motivo / observaciones:", motivoActual, "Actualizar Observaciones");
             
-            // Si el usuario cancela o no cambia nada, no hacemos peticiones al servidor
-            if (nuevoMotivo === null || nuevoMotivo.trim() === motivoActual) return;
+            if (nuevoMotivo === undefined || nuevoMotivo.trim() === motivoActual) return;
 
             try {
                 const res = await fetch(`${API_URL}/ausencias/${ausenciaId}`, {
@@ -899,11 +902,11 @@
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.detail || "Error al actualizar las observaciones");
                 
-                // Solo necesitamos recargar la tabla del historial
+                mostrarExito("Observaciones actualizadas correctamente");
                 cargarHistorialAusencias(empleadoSeleccionadoId);
                 
             } catch (error) {
-                alert("❌ Error: " + error.message);
+                mostrarError(error.message, "Error de actualización");
             }
         }
 
@@ -929,7 +932,10 @@
             const reg = historialGlobal[index];
             const emp = empleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
             
-            if(!reg || !emp) return alert("Error al leer los datos para el PDF.");
+            if(!reg || !emp) {
+                mostrarError("Error al leer los datos para el PDF.", "Datos corruptos");
+                return;
+            }
 
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('p', 'mm', 'a5'); 
@@ -1005,7 +1011,10 @@
         }
 
         function generarReporteHistorialPDF() {
-            if (historialGlobal.length === 0) return alert("No hay datos para exportar.");
+            if (historialGlobal.length === 0) {
+                mostrarError("No hay datos en el historial para exportar.", "Historial Vacío");
+                return;
+            }
             
             const emp = empleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
             const { jsPDF } = window.jspdf;
