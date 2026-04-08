@@ -507,8 +507,11 @@
             const zonaRelojes = document.getElementById('zona_relojes');
             if(esPorDias) {
                 zonaRelojes.classList.add('hidden');
-                document.getElementById('hora_inicio').value = '';
-                document.getElementById('hora_fin').value = '';
+                // ⚡ CORRECCIÓN: Limpiamos los nuevos campos de la vista rediseñada
+                document.getElementById('fecha_inicio_permiso').value = '';
+                document.getElementById('hora_inicio_permiso').value = '';
+                document.getElementById('fecha_fin_permiso').value = '';
+                document.getElementById('hora_fin_permiso').value = '';
             } else {
                 zonaRelojes.classList.remove('hidden');
             }
@@ -698,16 +701,29 @@
                     return;
                 }
                 
-                historial.forEach((reg, index) => { // ⚡ AGREGAMOS EL INDEX AQUÍ
+                historial.forEach((reg, index) => { 
                     let fechasStr = `${reg.fecha_inicio} al ${reg.fecha_fin}`;
                     
                     let tipoStr = reg.tipo === 'vacacion' ? 
                         '<span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold"><i class="fas fa-plane mr-1"></i>Vacación</span>' : 
                         '<span class="bg-orange-100 text-orange-700 px-2 py-1 rounded text-xs font-bold"><i class="fas fa-clock mr-1"></i>Permiso</span>';
                     
-                    let descuentoStr = reg.tipo === 'vacacion' ? 
-                        `<span class="font-bold text-gray-800">${reg.dias_descontados} días</span>` : 
-                        `<span class="font-bold text-gray-800">${reg.horas_totales} hrs</span> <span class="text-xs text-gray-500">(${reg.hora_inicio.substring(0,5)} a ${reg.hora_fin.substring(0,5)})</span>`;
+                    // ⚡ LÓGICA MEJORADA: Etiqueta de Deuda adaptable (Horas o Días)
+                    let etiquetaDeuda = '';
+                    if (reg.tipo === 'permiso' && reg.requiere_reposicion) {
+                        let montoDeuda = reg.hora_inicio ? `${reg.horas_totales} hrs` : `${reg.dias_descontados} días`;
+                        etiquetaDeuda = `<div class="mt-1"><span class="bg-red-50 text-red-600 px-2 py-0.5 rounded text-[10px] font-bold border border-red-200 shadow-sm"><i class="fas fa-exclamation-circle mr-1"></i>Debe reponer ${montoDeuda}</span></div>`;
+                    }
+                    
+                    // ⚡ CORRECCIÓN: Diferenciamos si el permiso es de Día Completo (no tiene hora) o por Horas
+                    let descuentoStr = '';
+                    if (reg.tipo === 'vacacion' || (reg.tipo === 'permiso' && !reg.hora_inicio)) {
+                        // Caso A: Vacación o Permiso por Días
+                        descuentoStr = `<span class="font-bold text-gray-800">${reg.dias_descontados} días</span> ${etiquetaDeuda}`;
+                    } else {
+                        // Caso B: Permiso por Horas Exactas
+                        descuentoStr = `<span class="font-bold text-gray-800">${reg.horas_totales} hrs</span> <span class="text-xs text-gray-500">(${reg.hora_inicio.substring(0,5)} a ${reg.hora_fin.substring(0,5)})</span> ${etiquetaDeuda}`;
+                    }
                     
                     let motivoStr = reg.motivo ? `<p class="text-xs text-gray-500 italic mt-1 break-words leading-tight">"${reg.motivo}"</p>` : '';
 
