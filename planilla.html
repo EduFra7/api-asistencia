@@ -137,16 +137,23 @@
             <div class="flex-1 overflow-y-auto p-6 bg-gray-50">
                 <form id="empleadoForm" class="space-y-6">
                     
-                   <!-- ⚡ AVATAR INTELIGENTE (Webcam y Archivo) -->
+                   <!-- ⚡ AVATAR INTELIGENTE (Webcam, Archivo y Eliminación) -->
                    <div class="flex items-center space-x-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-                        <div onclick="abrirSelectorFoto()" class="h-20 w-20 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 border-2 border-dashed border-gray-300 cursor-pointer hover:bg-blue-50 hover:border-blue-300 relative overflow-hidden group transition-colors shadow-inner">
-                            <!-- Aquí se mostrará la foto capturada/subida -->
-                            <img id="previewFoto" src="" class="absolute inset-0 w-full h-full object-cover hidden z-10">
-                            <!-- Ícono por defecto -->
-                            <i id="iconoCamara" class="fas fa-camera text-2xl group-hover:scale-110 transition-transform"></i>
-                            <!-- Input oculto para archivos tradicionales -->
-                            <input type="file" id="fotoInput" class="hidden" accept="image/*" onchange="procesarArchivoFoto(this)">
+                        <!-- Contenedor Padre Relative -->
+                        <div class="relative w-20 h-20">
+                            <!-- Círculo del Avatar -->
+                            <div onclick="abrirSelectorFoto()" class="w-full h-full rounded-full bg-gray-100 flex items-center justify-center text-gray-400 border-2 border-dashed border-gray-300 cursor-pointer hover:bg-blue-50 hover:border-blue-300 relative overflow-hidden group transition-colors shadow-inner">
+                                <img id="previewFoto" src="" class="absolute inset-0 w-full h-full object-cover hidden z-10">
+                                <i id="iconoCamara" class="fas fa-camera text-2xl group-hover:scale-110 transition-transform"></i>
+                                <input type="file" id="fotoInput" class="hidden" accept="image/*" onchange="procesarArchivoFoto(this)">
+                            </div>
+                            
+                            <!-- ⚡ NUEVO: Botón flotante para eliminar foto -->
+                            <button type="button" id="btnEliminarFoto" onclick="quitarFotoDelUI()" class="hidden absolute top-0 right-0 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center z-20 hover:bg-red-600 shadow-md border border-white transform translate-x-1 -translate-y-1 transition-transform">
+                                <i class="fas fa-times text-xs"></i>
+                            </button>
                         </div>
+                        
                         <div class="flex-1">
                             <label class="block text-xs font-bold text-blue-600 uppercase">ID Lector Biométrico</label>
                             <input type="number" id="bioId" placeholder="Ej. 102" class="form-input mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 text-lg font-bold disabled:bg-gray-100 disabled:text-gray-500">
@@ -388,6 +395,8 @@
 
         function abrirPanelNuevo() {
             empleadoEditandoId = null;
+            // ⚡ EXORCISMO DE DATOS: Matamos la foto fantasma antes de abrir
+            quitarFotoDelUI();
             fotoBase64Global = null; // ⚡ LIMPIAMOS LA MEMORIA DE LA FOTO
             document.getElementById('drawerTitle').textContent = "Registrar Nuevo Personal";
             document.getElementById('zonaSeguridad').classList.add('hidden');
@@ -417,12 +426,16 @@
             // Llenado de datos básicos y extras
             document.getElementById('bioId').value = emp.bio_id || '';
 
-            // Si tiene foto, la mostramos en el avatar, si no, mostramos la cámara
+            // ⚡ CARGAMOS LA FOTO O LA LIMPIAMOS SI NO TIENE
+            fotoBase64Global = null; 
             if (emp.foto_perfil) {
-                comprimirYMostrarFoto(emp.foto_perfil);
+                document.getElementById('previewFoto').src = emp.foto_perfil;
+                document.getElementById('previewFoto').classList.remove('hidden');
+                document.getElementById('iconoCamara').classList.add('hidden');
+                document.getElementById('btnEliminarFoto').classList.remove('hidden');
             } else {
-                document.getElementById('previewFoto').classList.add('hidden');
-                document.getElementById('iconoCamara').classList.remove('hidden');
+                quitarFotoDelUI();
+                fotoBase64Global = null; // Anulamos el "ELIMINAR" porque solo estamos cargando un perfil en blanco
             }
 
             document.getElementById('emp_nombres').value = emp.nombres || '';
@@ -1125,10 +1138,27 @@
             // 2. Lo mostramos en la interfaz
             const imgPreview = document.getElementById('previewFoto');
             const icono = document.getElementById('iconoCamara');
+            const btnTrash = document.getElementById('btnEliminarFoto');
             
             imgPreview.src = base64String;
             imgPreview.classList.remove('hidden');
-            icono.classList.add('hidden'); // Ocultamos el icono de la cámara
+            icono.classList.add('hidden'); // Ocultamos el icono de la 
+            btnTrash.classList.remove('hidden'); // ⚡ Mostramos el botón de basura
+        }
+
+        // ⚡ LIMPIEZA VISUAL Y DE VARIABLES (MATA FANTASMAS)
+        function quitarFotoDelUI() {
+            // Le mandamos una bandera especial al backend para que sepa que queremos borrarla de la BD
+            fotoBase64Global = "ELIMINAR"; 
+            
+            // Limpiamos la interfaz
+            document.getElementById('previewFoto').classList.add('hidden');
+            document.getElementById('previewFoto').src = '';
+            document.getElementById('iconoCamara').classList.remove('hidden');
+            document.getElementById('btnEliminarFoto').classList.add('hidden');
+            
+            // Vaciamos el input file para que deje subir la misma foto si el usuario se arrepiente
+            document.getElementById('fotoInput').value = ''; 
         }
 
         // Iniciar la pantalla ordenadamente (Añade esta función al final de todo el JS)
