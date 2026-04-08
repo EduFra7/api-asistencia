@@ -1384,6 +1384,55 @@ async def editar_ausencia(ausencia_id: int, data: dict, usuario = Depends(verifi
         cur.close()
         conn.close()
 
+# ==============================================================================
+# 11. MÓDULO: SIMULADOR DE HARDWARE (DEV / QA)
+# ==============================================================================
+
+@app.post("/simulador/evento")
+async def simular_evento_hardware(data: dict, usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    conn = conectar_bd(schema)
+    cur = conn.cursor()
+    try:
+        device_no = data.get("device_no", "SIMULADOR-01")
+        bio_id = data.get("bio_id")
+        verify_mode = data.get("verify_mode", "1") 
+        action = data.get("action", "0") 
+        
+        # Unificamos fecha y hora recibidas del frontend
+        fecha = data.get("fecha")
+        hora = data.get("hora")
+        fecha_hora_str = f"{fecha} {hora}:00" # Formato YYYY-MM-DD HH:MM:SS
+        
+        # Validar que el empleado (bio_id) exista en esta empresa
+        cur.execute(f"SELECT id, nombres, apellidos FROM {schema}.empleados WHERE bio_id = %s AND eliminado = FALSE", (bio_id,))
+        emp = cur.fetchone()
+        if not emp:
+            raise HTTPException(status_code=404, detail=f"No se encontró ningún empleado activo con el ID Biométrico {bio_id}")
+
+        # ⚡ CREAMOS EL PAQUETE FALSO IDÉNTICO AL REAL DE ZKTECO
+        raw_string = f"{bio_id}\t{fecha_hora_str}\t{action}\t{verify_mode}\tSIMULADO"
+        
+        # Inyectamos en la tabla de Eventos Brutos
+        cur.execute(f"""
+            INSERT INTO {schema}.eventos_brutos 
+            (device_no, item, verify_mode, action, fecha_hora, raw_data)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (device_no, bio_id, verify_mode, action, fecha_hora_str, psycopg2.extras.Json({"raw": raw_string})))
+        
+        conn.commit()
+        return {"mensaje": f"Ping recibido. Marcaje de {emp[1]} registrado a las {hora}."}
+        
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error del simulador: {str(e)}")
+    finally:
+        cur.close()
+        conn.close()
+
 # ── RUTA DE ESTADO (Para saber si la API está viva) ──
 @app.get("/")
 def inicio():
