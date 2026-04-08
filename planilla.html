@@ -141,14 +141,16 @@
                    <div class="flex items-center space-x-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
                         <!-- Contenedor Padre Relative -->
                         <div class="relative w-20 h-20">
-                            <!-- Círculo del Avatar -->
+                            <!-- 1. Círculo del Avatar (El único que debe abrir el menú) -->
                             <div onclick="abrirSelectorFoto()" class="w-full h-full rounded-full bg-gray-100 flex items-center justify-center text-gray-400 border-2 border-dashed border-gray-300 cursor-pointer hover:bg-blue-50 hover:border-blue-300 relative overflow-hidden group transition-colors shadow-inner">
                                 <img id="previewFoto" src="" class="absolute inset-0 w-full h-full object-cover hidden z-10">
                                 <i id="iconoCamara" class="fas fa-camera text-2xl group-hover:scale-110 transition-transform"></i>
-                                <input type="file" id="fotoInput" class="hidden" accept="image/*" onchange="procesarArchivoFoto(this)">
                             </div>
                             
-                            <!-- ⚡ NUEVO: Botón flotante para eliminar foto -->
+                            <!-- ⚡ 2. SOLUCIÓN AL BUG: El input oculto ahora está AFUERA del div clickeable -->
+                            <input type="file" id="fotoInput" class="hidden" accept="image/*" onchange="procesarArchivoFoto(this)">
+                            
+                            <!-- 3. Botón flotante para eliminar foto -->
                             <button type="button" id="btnEliminarFoto" onclick="quitarFotoDelUI()" class="hidden absolute top-0 right-0 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center z-20 hover:bg-red-600 shadow-md border border-white transform translate-x-1 -translate-y-1 transition-transform">
                                 <i class="fas fa-times text-xs"></i>
                             </button>
@@ -432,10 +434,11 @@
                 document.getElementById('previewFoto').src = emp.foto_perfil;
                 document.getElementById('previewFoto').classList.remove('hidden');
                 document.getElementById('iconoCamara').classList.add('hidden');
-                document.getElementById('btnEliminarFoto').classList.remove('hidden');
+                // ⚡ MODO LECTURA: Aseguramos que la X roja esté OCULTA
+                document.getElementById('btnEliminarFoto').classList.add('hidden');
             } else {
                 quitarFotoDelUI();
-                fotoBase64Global = null; // Anulamos el "ELIMINAR" porque solo estamos cargando un perfil en blanco
+                fotoBase64Global = null; 
             }
 
             document.getElementById('emp_nombres').value = emp.nombres || '';
@@ -534,12 +537,15 @@
             document.getElementById('btnGuardar').classList.remove('hidden');
             document.getElementById('btnGuardar').textContent = "Guardar Cambios";
             
-            // Desbloquea los inputs estándar
             inputsFormulario.forEach(input => input.disabled = false);
             
-            // ⚡ ARREGLO: Desbloqueo forzado de los campos de retiro
             document.getElementById('emp_fecha_retiro').disabled = false;
             document.getElementById('emp_motivo_retiro').disabled = false;
+
+            // ⚡ UX PREMIUM: Si hay una foto cargada, revelamos el botón de eliminar
+            if (!document.getElementById('previewFoto').classList.contains('hidden')) {
+                document.getElementById('btnEliminarFoto').classList.remove('hidden');
+            }
         }
 
         let estadoOriginalActivo = true; 
@@ -1036,25 +1042,29 @@
         // ==========================================
 
         async function abrirSelectorFoto() {
-            const { value: opcion } = await Swal.fire({
+            // ⚡ SEGURO ANTI-CLIC: Si los inputs están bloqueados (Modo Lectura), no hacemos nada
+            if (document.getElementById('emp_nombres').disabled) return;
+
+            const resultado = await Swal.fire({
                 title: 'Foto de Perfil',
                 text: '¿Cómo deseas agregar la foto del empleado?',
                 icon: 'question',
                 showCancelButton: true,
                 showDenyButton: true,
-                confirmButtonColor: '#3b82f6', // blue
-                denyButtonColor: '#10b981',    // green
+                confirmButtonColor: '#3b82f6', 
+                denyButtonColor: '#10b981',    
                 confirmButtonText: '<i class="fas fa-upload mr-1"></i> Subir Archivo',
                 denyButtonText: '<i class="fas fa-camera mr-1"></i> Usar Webcam',
                 cancelButtonText: 'Cancelar',
                 customClass: { popup: 'rounded-xl shadow-2xl' }
             });
 
-            if (opcion) {
-                // Hizo clic en "Subir Archivo": Simulamos un clic en el input oculto
+            // ⚡ LECTURA CORRECTA DE LOS BOTONES
+            if (resultado.isConfirmed) {
+                // Hizo clic en el botón azul "Subir Archivo"
                 document.getElementById('fotoInput').click();
-            } else if (opcion === false) {
-                // Hizo clic en "Usar Webcam"
+            } else if (resultado.isDenied) {
+                // Hizo clic en el botón verde "Usar Webcam"
                 iniciarWebcam();
             }
         }

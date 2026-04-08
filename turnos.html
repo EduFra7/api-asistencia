@@ -205,18 +205,34 @@
         const diasEstructura = ['L', 'M', 'X', 'J', 'V', 'S', 'D']; // Usamos X para Miércoles
         let diasSeleccionados = { L: true, M: true, X: true, J: true, V: true, S: false, D: false };
 
-        // 1. GENERAR BOTONES DE DÍAS
+        // 1. GENERAR BOTONES DE DÍAS (Con UX inteligente para Lectura/Edición)
         function renderizarDias() {
             const cont = document.getElementById('contenedorDias');
             cont.innerHTML = '';
             let tieneFinDeSemana = false;
+
+            // Detectamos si el formulario general está bloqueado
+            const modoLectura = document.getElementById('t_nombre').disabled;
 
             diasEstructura.forEach(d => {
                 const activo = diasSeleccionados[d];
                 if (activo && (d === 'S' || d === 'D')) tieneFinDeSemana = true;
 
                 const btn = document.createElement('button');
-                btn.className = `w-10 h-10 rounded-full font-bold text-sm transition-all shadow-sm ${activo ? 'bg-blue-600 text-white border border-blue-700' : 'bg-gray-100 text-gray-400 border border-gray-200 hover:bg-gray-200'}`;
+                
+                // Construcción dinámica de clases de Tailwind
+                let clasesBase = 'w-10 h-10 rounded-full font-bold text-sm transition-all shadow-sm flex items-center justify-center ';
+                
+                if (modoLectura) {
+                    // ESTILO MODO LECTURA: Opacidad al 60% y cursor bloqueado
+                    clasesBase += 'cursor-not-allowed opacity-60 ';
+                    clasesBase += activo ? 'bg-blue-600 text-white border border-blue-700' : 'bg-gray-100 text-gray-400 border border-gray-200';
+                } else {
+                    // ESTILO MODO EDICIÓN/NUEVO: Interactivos con hover
+                    clasesBase += activo ? 'bg-blue-600 text-white border border-blue-700 hover:bg-blue-700' : 'bg-gray-100 text-gray-400 border border-gray-200 hover:bg-gray-200';
+                }
+
+                btn.className = clasesBase;
                 btn.innerText = d === 'X' ? 'M' : d;
                 btn.onclick = () => toggleDia(d);
                 cont.appendChild(btn);
@@ -295,14 +311,15 @@
             } catch (e) { console.error(e); }
         }
 
-        // ⚡ OPTIMIZACIÓN: Bloqueo de UI Dinámico
+        // ⚡ OPTIMIZACIÓN: Bloqueo de UI Dinámico y Reparación del Bug Plural/Singular
         function bloquearCampos(estado) {
             // Selecciona todos los inputs, selects y textareas dentro del formulario del panel
             const campos = document.querySelectorAll('#formTurno input, #formTurno select, #formTurno textarea');
+            
             campos.forEach(campo => {
-                campos.disabled = estado;
+                campo.disabled = estado; // ⚡ CORRECCIÓN: Singular, afecta a cada elemento iterado
                 
-                // Si es un checkbox o radio, no cambiamos el color de fondo
+                // Estilos visuales para inputs de texto, números y tiempo
                 if (campo.type !== 'checkbox' && campo.type !== 'radio') {
                     if (estado) {
                         campo.classList.add('bg-gray-100', 'text-gray-500', 'cursor-not-allowed');
@@ -311,8 +328,23 @@
                         campo.classList.remove('bg-gray-100', 'text-gray-500', 'cursor-not-allowed');
                         campo.classList.add('bg-white');
                     }
+                } else {
+                    // ⚡ NUEVO: Estilo visual para los switches (interruptores Tailwind)
+                    const toggleUI = campo.nextElementSibling; // El div que hace de switch visual
+                    if (toggleUI) {
+                        if (estado) {
+                            toggleUI.classList.add('opacity-50', 'cursor-not-allowed');
+                            campo.parentElement.classList.add('cursor-not-allowed');
+                        } else {
+                            toggleUI.classList.remove('opacity-50', 'cursor-not-allowed');
+                            campo.parentElement.classList.remove('cursor-not-allowed');
+                        }
+                    }
                 }
             });
+
+            // ⚡ Refrescamos los botones de los días para que apliquen su estilo de bloqueo
+            renderizarDias();
         }
 
         function abrirPanelNuevo() {
