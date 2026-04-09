@@ -114,6 +114,30 @@ window.pedirTexto = async function(mensaje, valorActual = "", titulo = "Ingresar
     return texto; 
 };
 
+// Reemplaza a la petición de contraseñas de administrador
+window.pedirClave = async function(mensaje = "Ingrese la contraseña de Administrador", titulo = "Autorización Requerida") {
+    const { value: password } = await Swal.fire({
+        title: titulo,
+        text: mensaje,
+        input: 'password',
+        inputAttributes: {
+            autocapitalize: 'off',
+            autocorrect: 'off'
+        },
+        showCancelButton: true,
+        confirmButtonColor: '#2563eb', 
+        cancelButtonColor: '#94a3b8',
+        confirmButtonText: '<i class="fas fa-unlock mr-2"></i>Desbloquear',
+        cancelButtonText: 'Cancelar',
+        heightAuto: false, 
+        backdrop: 'rgba(15, 23, 42, 0.6)', 
+        customClass: { 
+            popup: 'rounded-2xl shadow-2xl border border-gray-100',
+            backdrop: 'backdrop-blur-sm'
+        }
+    });
+    return password; // Retorna la contraseña escrita o undefined si cancela
+};
 
 // ==============================================================================
 // COMPONENTE: MENÚ LATERAL DINÁMICO
@@ -143,11 +167,12 @@ function renderizarMenu(pantallaActiva) {
             <nav class="space-y-1 px-3">
                 
                 <!-- ── SECCIÓN: ASISTENCIA ── -->
-                <div class="text-xs font-semibold uppercase tracking-wider mb-2 mt-4 px-3 ${pantallaActiva === 'dashboard' ? 'text-blue-400' : 'text-slate-500'}">Control de Asistencia</div>
+                <div class="text-xs font-semibold uppercase tracking-wider mb-2 mt-4 px-3 ${(pantallaActiva === 'dashboard' || pantallaActiva === 'asistencia') ? 'text-blue-400' : 'text-slate-500'}">Control de Asistencia</div>
                 <a href="dashboard_cliente.html" class="${pantallaActiva === 'dashboard' ? claseActiva : claseInactiva}">
                     <i class="fas fa-chart-pie w-5 mr-2"></i> Dashboard
                 </a>
-                <a href="#" class="${claseInactiva}">
+                <!-- ⚡ NUEVO ENLACE: Calendario / Control Detallado -->
+                <a href="calendario.html" class="${pantallaActiva === 'asistencia' ? claseActiva : claseInactiva}">
                     <i class="fas fa-calendar-alt w-5 mr-2"></i> Calendario
                 </a>
                 <a href="#" class="${claseInactiva}">
@@ -176,6 +201,11 @@ function renderizarMenu(pantallaActiva) {
                 <div class="text-xs font-semibold uppercase tracking-wider mb-2 mt-6 px-3 ${pantallaActiva === 'ajustes' ? 'text-yellow-500' : 'text-slate-500'}">Ajustes (Admin)</div>
                 <a href="ajustes.html" class="${pantallaActiva === 'ajustes' ? claseActiva : claseInactiva}">
                     <i class="fas fa-cogs w-5 mr-2"></i> Configuraciones
+                </a>
+                
+                <!-- ⚡ NUEVO ENLACE: Simulador (Solo visible en dev o por admins si lo deseas) -->
+                <a href="simulador.html" class="${pantallaActiva === 'simulador' ? claseActiva : claseInactiva}">
+                    <i class="fas fa-satellite-dish w-5 mr-2"></i> Simulador ADMS
                 </a>
                 
                 <a href="#" class="${claseInactiva}">
