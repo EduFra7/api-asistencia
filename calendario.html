@@ -8,271 +8,269 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     
-    <!-- ⚡ Le decimos al navegador que esto es código de Tailwind -->
     <style type="text/tailwindcss">
-        /* Paleta de Colores Inteligentes para el Calendario (Pasteles) */
-        .cal-header { @apply text-xs font-bold text-gray-400 uppercase tracking-wider text-center py-2 bg-gray-50 border-b border-gray-200; }
-        
-        /* ⚡ CORRECCIÓN 1: Bordes más definidos para la cuadrícula */
-        .cal-day { @apply h-28 border-b border-r border-gray-200 p-2 flex flex-col justify-between cursor-pointer transition-all hover:ring-2 hover:ring-blue-400 hover:shadow-md relative bg-white z-0 hover:z-10; }
-        .cal-day.empty { @apply bg-gray-50/30 cursor-default hover:ring-0 hover:shadow-none border-transparent; }
-        
-        /* Estados (Colores Pasteles) */
-        .estado-puntual { @apply bg-green-50; border-bottom: 3px solid #22c55e; }
-        .estado-tarde { @apply bg-orange-50; border-bottom: 3px solid #f97316; }
-        .estado-falta { @apply bg-red-50; border-bottom: 3px solid #ef4444; }
-        .estado-vacacion { @apply bg-blue-50; border-bottom: 3px solid #3b82f6; }
-        .estado-permiso { @apply bg-yellow-50; border-bottom: 3px solid #eab308; }
-        .estado-inhabiles { @apply bg-gray-100 opacity-60; }
+        .cal-header { @apply text-xs font-bold text-gray-500 uppercase tracking-wider text-center py-3 bg-gray-50; }
+        .cal-day { @apply min-h-[80px] md:min-h-[100px] xl:min-h-[120px] p-1 md:p-2 flex flex-col justify-between cursor-pointer transition-all hover:bg-gray-50/80 relative bg-white overflow-hidden; }
+        .cal-day.empty { @apply bg-gray-50/40 cursor-default hover:bg-gray-50/40; }
+                
+        .estado-puntual { @apply bg-green-50/30; box-shadow: inset 0 -4px 0 0 #22c55e; }
+        .estado-tarde { @apply bg-orange-50/30; box-shadow: inset 0 -4px 0 0 #f97316; }
+        .estado-falta { @apply bg-red-50/30; box-shadow: inset 0 -4px 0 0 #ef4444; }
+        .estado-vacacion { @apply bg-blue-50/30; box-shadow: inset 0 -4px 0 0 #3b82f6; }
+        .estado-permiso { @apply bg-yellow-50/30; box-shadow: inset 0 -4px 0 0 #eab308; }
+        .estado-inhabiles { @apply bg-gray-100/60; }
         .estado-futuro { @apply bg-white; }
         
-        /* Anomalías */
-        .anomalia-marcaje { @apply ring-2 ring-red-500 ring-offset-1; }
+        .cal-day:not(.empty):hover::after {
+            content: ''; @apply absolute inset-0 border-2 border-blue-400 pointer-events-none z-10;
+        }
+        .anomalia-marcaje { box-shadow: inset 0 0 0 2px #ef4444, inset 0 -4px 0 0 #f97316 !important; }
     </style>
 </head>
-<body class="bg-gray-50 font-sans flex h-screen overflow-hidden text-gray-800">
+<body class="bg-gray-50 font-sans flex h-screen overflow-hidden text-gray-800 relative">
 
-    <aside id="menu-lateral" class="w-64 bg-slate-900 text-white flex flex-col h-full shadow-xl z-20 shrink-0"></aside>
+    <!-- ⚡ OVERLAY MÓVIL (Fondo oscuro al abrir el menú) -->
+    <div id="overlay-menu" class="fixed inset-0 bg-slate-900/60 z-30 hidden backdrop-blur-sm transition-opacity" onclick="toggleMenu()"></div>
 
-    <main class="flex-1 flex h-screen overflow-hidden">
+    <!-- ⚡ MENÚ LATERAL (Oculto en móvil, fijo en PC) -->
+    <aside id="menu-lateral" class="w-64 bg-slate-900 text-white flex flex-col h-full shadow-2xl z-40 absolute md:relative transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out shrink-0"></aside>
+
+    <main class="flex-1 flex flex-col h-screen overflow-hidden w-full relative">
         
-        <!-- 📱 PANEL IZQUIERDO (Filtros y Lista) -->
-        <div class="w-96 bg-white border-r border-gray-200 flex flex-col h-full shrink-0 z-10 shadow-sm">
-            
-            <div class="p-5 border-b border-gray-200 bg-gray-50 space-y-4">
-                <h2 class="text-lg font-bold text-gray-800"><i class="fas fa-users mr-2 text-blue-600"></i>Directorio</h2>
-                
-                <!-- ⚡ CORRECCIÓN 2: Los 3 botones de estado -->
-                <div class="flex bg-gray-200 p-1 rounded-lg">
-                    <button class="flex-1 text-xs font-bold py-1.5 rounded-md bg-white shadow-sm text-blue-600">Activos</button>
-                    <button class="flex-1 text-xs font-medium py-1.5 rounded-md text-gray-600 hover:text-gray-800 transition-colors">Inactivos</button>
-                    <button class="flex-1 text-xs font-medium py-1.5 rounded-md text-gray-600 hover:text-gray-800 transition-colors">Todos</button>
-                </div>
-
-                <!-- Buscador General -->
-                <div class="relative">
-                    <i class="fas fa-search absolute left-3 top-2.5 text-gray-400"></i>
-                    <input type="text" id="busqueda" placeholder="Buscar por Nombre, CI o ID Lector..." class="w-full pl-10 pr-4 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none shadow-sm transition-all">
-                </div>
-
-                <!-- Filtros de Sucursal y Sección -->
-                <div class="grid grid-cols-2 gap-2">
-                    <select class="w-full bg-white border border-gray-300 rounded text-xs px-2 py-1.5 outline-none focus:border-blue-500 text-gray-600">
-                        <option value="">Todas las Sucursales</option>
-                        <option value="1">Sede Central</option>
-                    </select>
-                    <select class="w-full bg-white border border-gray-300 rounded text-xs px-2 py-1.5 outline-none focus:border-blue-500 text-gray-600">
-                        <option value="">Todas las Secciones</option>
-                        <option value="1">Soporte Técnico</option>
-                    </select>
-                </div>
-            </div>
-
-            <!-- Lista de Empleados -->
-            <div class="flex-1 overflow-y-auto" id="listaEmpleados">
-                <div onclick="seleccionarEmpleado(102)" class="p-4 border-b border-gray-100 hover:bg-blue-50 cursor-pointer flex items-center transition-colors border-l-4 border-transparent hover:border-blue-600 bg-blue-50/30">
-                    <div class="w-10 h-10 rounded-full bg-gray-200 overflow-hidden mr-3 border border-gray-300 shrink-0">
-                        <img src="https://ui-avatars.com/api/?name=Leonardo+Arispe&background=0D8ABC&color=fff" class="w-full h-full object-cover">
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <p class="text-sm font-bold text-gray-800 truncate">Leonardo Arispe</p>
-                        <p class="text-xs text-gray-500 truncate">Soporte Técnico | Bio: 103</p>
-                    </div>
-                    <i class="fas fa-chevron-right text-gray-300 text-xs"></i>
-                </div>
+        <!-- ⚡ BARRA SUPERIOR MÓVIL -->
+        <div class="md:hidden bg-slate-900 text-white p-4 flex items-center justify-between shadow-md shrink-0 z-20">
+            <div class="flex items-center">
+                <button onclick="toggleMenu()" class="text-white hover:text-blue-400 focus:outline-none mr-4">
+                    <i class="fas fa-bars text-xl"></i>
+                </button>
+                <h1 class="font-bold tracking-wide"><i class="fas fa-fingerprint text-blue-500 mr-2"></i>BITECH</h1>
             </div>
         </div>
 
-        <!-- 🖥️ PANEL DERECHO (Calendario y Detalles) -->
-        <div class="flex-1 flex flex-col h-full bg-gray-50/50 relative overflow-y-auto">
+        <!-- ⚡ CONTENEDOR DIVIDIDO -->
+        <div class="flex-1 flex flex-col md:flex-row h-full overflow-hidden">
             
-            <!-- Estado Vacio Oculto (Para usar por defecto) -->
-            <div id="vistaVacia" class="absolute inset-0 flex flex-col items-center justify-center text-gray-400 bg-gray-50 z-20 hidden">
-                <i class="fas fa-calendar-alt text-6xl mb-4 opacity-50"></i>
-                <p class="text-lg font-medium">Selecciona un empleado para ver su asistencia</p>
+            <!-- 📱 PANEL IZQUIERDO -->
+            <div class="w-full md:w-80 lg:w-96 bg-white border-b md:border-b-0 md:border-r border-gray-200 flex flex-col h-[40vh] md:h-full shrink-0 z-10 shadow-sm relative">
+                
+                <div class="p-3 md:p-5 border-b border-gray-200 bg-gray-50 space-y-3 md:space-y-4 shrink-0">
+                    <h2 class="text-base md:text-lg font-bold text-gray-800 hidden md:block"><i class="fas fa-users mr-2 text-blue-600"></i>Directorio</h2>
+                    
+                    <div class="flex bg-gray-200 p-1 rounded-lg">
+                        <button class="flex-1 text-[10px] md:text-xs font-bold py-1.5 px-1 rounded-md bg-white shadow-sm text-blue-600 truncate">Activos</button>
+                        <button class="flex-1 text-[10px] md:text-xs font-medium py-1.5 px-1 rounded-md text-gray-600 hover:text-gray-800 transition-colors truncate">Inactivos</button>
+                        <button class="flex-1 text-[10px] md:text-xs font-medium py-1.5 px-1 rounded-md text-gray-600 hover:text-gray-800 transition-colors truncate">Todos</button>
+                    </div>
+
+                    <div class="relative">
+                        <i class="fas fa-search absolute left-3 top-2.5 text-gray-400 text-sm"></i>
+                        <input type="text" id="busqueda" placeholder="Buscar por Nombre, CI..." class="w-full pl-9 pr-3 py-1.5 md:py-2 bg-white border border-gray-300 rounded-lg text-xs md:text-sm focus:ring-2 focus:ring-blue-500 outline-none shadow-sm transition-all">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2 hidden sm:grid">
+                        <select class="w-full bg-white border border-gray-300 rounded text-xs px-2 py-1.5 outline-none focus:border-blue-500 text-gray-600">
+                            <option value="">Todas las Sucursales</option>
+                            <option value="1">Sede Central</option>
+                        </select>
+                        <select class="w-full bg-white border border-gray-300 rounded text-xs px-2 py-1.5 outline-none focus:border-blue-500 text-gray-600">
+                            <option value="">Todas las Secciones</option>
+                            <option value="1">Soporte Técnico</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="flex-1 overflow-y-auto" id="listaEmpleados">
+                    <div onclick="seleccionarEmpleado(102)" class="p-3 md:p-4 border-b border-gray-100 hover:bg-blue-50 cursor-pointer flex items-center transition-colors border-l-4 border-transparent hover:border-blue-600 bg-blue-50/30">
+                        <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gray-200 overflow-hidden mr-3 border border-gray-300 shrink-0">
+                            <img src="https://ui-avatars.com/api/?name=Leonardo+Arispe&background=0D8ABC&color=fff" class="w-full h-full object-cover">
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-xs md:text-sm font-bold text-gray-800 truncate">Leonardo Arispe</p>
+                            <p class="text-[10px] md:text-xs text-gray-500 truncate">Soporte Técnico | Bio: 103</p>
+                        </div>
+                        <i class="fas fa-chevron-right text-gray-300 text-xs md:block hidden"></i>
+                    </div>
+                </div>
             </div>
 
-            <!-- ⚡ CORRECCIÓN 6: Limpieza del Header sin números extraños -->
-            <header class="bg-white p-6 border-b border-gray-200 flex justify-between items-center shrink-0 shadow-sm">
-                <div class="flex items-center space-x-4">
-                    <div class="w-16 h-16 rounded-full border-2 border-white shadow-md bg-gray-200 overflow-hidden">
-                        <img src="https://ui-avatars.com/api/?name=Leonardo+Arispe&background=0D8ABC&color=fff" class="w-full h-full object-cover">
-                    </div>
-                    <div>
-                        <h1 class="text-2xl font-bold text-gray-800">Leonardo Arispe</h1>
-                        <div class="flex items-center space-x-3 mt-1 text-sm">
-                            <span class="text-gray-500"><i class="fas fa-id-card mr-1"></i>CI: 1234567</span>
-                            <span class="text-blue-600 font-medium"><i class="fas fa-briefcase mr-1"></i>Soporte Técnico</span>
-                            <span class="text-gray-500"><i class="fas fa-building mr-1"></i>Sucursal Central</span>
+            <!-- 🖥️ PANEL DERECHO -->
+            <div class="flex-1 flex flex-col h-full bg-gray-50/50 relative overflow-y-auto w-full">
+                
+                <header class="bg-white p-4 md:p-6 border-b border-gray-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shrink-0 shadow-sm">
+                    <div class="flex items-center space-x-3 md:space-x-4">
+                        <div class="w-12 h-12 md:w-16 md:h-16 rounded-full border-2 border-white shadow-md bg-gray-200 overflow-hidden shrink-0">
+                            <img src="https://ui-avatars.com/api/?name=Leonardo+Arispe&background=0D8ABC&color=fff" class="w-full h-full object-cover">
+                        </div>
+                        <div>
+                            <h1 class="text-lg md:text-2xl font-bold text-gray-800 leading-tight">Leonardo Arispe</h1>
+                            <div class="flex flex-wrap items-center gap-2 mt-1 text-[10px] md:text-sm text-gray-500">
+                                <span><i class="fas fa-id-card mr-1"></i>CI: 1234567</span>
+                                <span class="text-blue-600 font-medium"><i class="fas fa-briefcase mr-1"></i>Soporte Técnico</span>
+                                <span class="text-gray-500 hidden sm:inline"><i class="fas fa-building mr-1"></i>Sucursal Central</span>
+                            </div>
                         </div>
                     </div>
-                </div>
-                
-                <!-- ⚡ CORRECCIÓN 7: Colores más suaves (Slate-800 en vez de 900) -->
-                <div class="bg-slate-800 text-white p-3 rounded-lg shadow-md text-right border border-slate-700">
-                    <p class="text-xs text-slate-300 uppercase tracking-wide font-bold mb-1">Turno Asignado</p>
-                    <p class="text-sm font-medium"><i class="fas fa-clock mr-1 text-blue-400"></i>08:00 a 16:00 (Oficina)</p>
-                    <p class="text-xs text-orange-300 mt-0.5"><i class="fas fa-utensils mr-1"></i>Incluye 60 min Almuerzo</p>
-                </div>
-            </header>
-
-            <div class="p-6 flex-1 flex flex-col gap-6 max-w-[1400px] mx-auto w-full">
-                
-                <!-- 📊 KPIs -->
-                <div class="grid grid-cols-4 gap-4 shrink-0">
-                    <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-                        <div><p class="text-xs text-gray-500 font-bold uppercase">Días Trabajados</p><p class="text-2xl font-black text-gray-800 mt-1">14 <span class="text-sm font-normal text-gray-400">/ 22</span></p></div>
-                        <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600"><i class="fas fa-calendar-check"></i></div>
-                    </div>
-                    <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-                        <!-- ⚡ CORRECCIÓN 3: Horas Laborales -->
-                        <div><p class="text-xs text-gray-500 font-bold uppercase">Horas Laborales</p><p class="text-2xl font-black text-gray-800 mt-1">112.5 <span class="text-sm font-normal text-gray-400">hrs</span></p></div>
-                        <div class="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600"><i class="fas fa-stopwatch"></i></div>
-                    </div>
-                    <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-                        <div><p class="text-xs text-gray-500 font-bold uppercase">Retraso Acumulado</p><p class="text-2xl font-black text-red-600 mt-1">45 <span class="text-sm font-normal text-red-400">min</span></p></div>
-                        <div class="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600"><i class="fas fa-running"></i></div>
-                    </div>
-                    <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-                        <div><p class="text-xs text-gray-500 font-bold uppercase">Deuda / Descuento</p><p class="text-2xl font-black text-gray-800 mt-1">Bs. 35.00</p></div>
-                        <div class="w-10 h-10 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600"><i class="fas fa-file-invoice-dollar"></i></div>
-                    </div>
-                </div>
-
-                <div class="flex gap-6 items-start">
                     
-                    <!-- CALENDARIO -->
-                    <div class="flex-[2] bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                        <div class="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
-                            <h3 class="text-lg font-bold text-gray-800" id="mesAnioTexto">Abril 2026</h3>
-                            <div class="flex space-x-2">
-                                <input type="month" id="selectorMes" class="border border-gray-300 rounded px-2 py-1 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500">
-                                <button class="p-1.5 px-3 bg-white border border-gray-300 rounded hover:bg-gray-100 transition-colors"><i class="fas fa-chevron-left text-gray-600"></i></button>
-                                <button class="p-1.5 px-3 bg-white border border-gray-300 rounded hover:bg-gray-100 transition-colors"><i class="fas fa-chevron-right text-gray-600"></i></button>
-                            </div>
+                    <div class="bg-slate-800 text-white p-2 md:p-3 rounded-lg shadow-md w-full sm:w-auto text-left sm:text-right border border-slate-700">
+                        <p class="text-[10px] md:text-xs text-slate-300 uppercase tracking-wide font-bold mb-0.5">Turno Asignado</p>
+                        <p class="text-xs md:text-sm font-medium"><i class="fas fa-clock mr-1 text-blue-400"></i>08:00 a 16:00 (Oficina)</p>
+                        <p class="text-[10px] md:text-xs text-orange-300 mt-0.5"><i class="fas fa-utensils mr-1"></i>Incluye 60 min Almuerzo</p>
+                    </div>
+                </header>
+
+                <div class="p-3 md:p-6 flex-1 flex flex-col gap-4 md:gap-6 w-full max-w-[1400px] mx-auto">
+                    
+                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4 shrink-0">
+                        <div class="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+                            <div><p class="text-[10px] md:text-xs text-gray-500 font-bold uppercase">Días Trab.</p><p class="text-lg md:text-2xl font-black text-gray-800 mt-1">14 <span class="text-[10px] md:text-sm font-normal text-gray-400">/ 22</span></p></div>
+                            <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600"><i class="fas fa-calendar-check text-sm md:text-base"></i></div>
                         </div>
-
-                        <!-- ⚡ CORRECCIÓN 1: Cuadrícula mejorada con bordes finos -->
-                        <div class="grid grid-cols-7 border-l border-gray-200" id="cuadriculaCalendario">
-                            
-                            <div class="cal-header border-t border-gray-200">Lun</div><div class="cal-header border-t border-gray-200">Mar</div><div class="cal-header border-t border-gray-200">Mié</div>
-                            <div class="cal-header border-t border-gray-200">Jue</div><div class="cal-header border-t border-gray-200">Vie</div><div class="cal-header border-t border-gray-200">Sáb</div><div class="cal-header border-t border-gray-200">Dom</div>
-
-                            <div class="cal-day empty"></div> <div class="cal-day empty"></div>
-                            
-                            <div class="cal-day estado-puntual">
-                                <span class="text-sm font-bold text-gray-700">1</span>
-                                <div class="text-xs mt-1">
-                                    <p class="text-green-700 font-semibold"><i class="fas fa-check-circle mr-1"></i>Puntual</p>
-                                    <p class="text-gray-500 text-[10px]">8.0 hrs</p>
-                                </div>
-                            </div>
-
-                            <div class="cal-day estado-tarde anomalia-marcaje">
-                                <span class="text-sm font-bold text-gray-700">2</span>
-                                <div class="text-xs mt-1">
-                                    <p class="text-orange-600 font-semibold"><i class="fas fa-exclamation-triangle mr-1"></i>Tarde 15m</p>
-                                    <p class="text-red-500 text-[10px] font-bold">Falta Salida</p>
-                                </div>
-                            </div>
-
-                            <div class="cal-day estado-vacacion text-center justify-center relative">
-                                <span class="text-sm font-bold text-gray-700 absolute top-2 left-2">3</span>
-                                <i class="fas fa-umbrella-beach text-blue-400 text-2xl opacity-50 mb-1"></i>
-                                <p class="text-xs text-blue-700 font-bold uppercase">Vacación</p>
-                            </div>
-
-                            <div class="cal-day estado-inhabiles"><span class="text-sm font-bold text-gray-500">4</span></div>
-                            <div class="cal-day estado-inhabiles"><span class="text-sm font-bold text-gray-500">5</span></div>
-                            
-                            <!-- Ejemplo de relleno para que veas la cuadrícula (JS hará esto real) -->
-                            <div class="cal-day estado-futuro"><span class="text-sm font-bold text-gray-700">6</span></div>
-                            <div class="cal-day estado-futuro"><span class="text-sm font-bold text-gray-700">7</span></div>
-                            <div class="cal-day estado-futuro"><span class="text-sm font-bold text-gray-700">8</span></div>
-                            <div class="cal-day estado-futuro"><span class="text-sm font-bold text-gray-700">9</span></div>
-                            <div class="cal-day empty"></div> <div class="cal-day empty"></div> <div class="cal-day empty"></div>
+                        <div class="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+                            <div><p class="text-[10px] md:text-xs text-gray-500 font-bold uppercase">Horas Lab.</p><p class="text-lg md:text-2xl font-black text-gray-800 mt-1">112.5 <span class="text-[10px] md:text-sm font-normal text-gray-400">hrs</span></p></div>
+                            <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600"><i class="fas fa-stopwatch text-sm md:text-base"></i></div>
+                        </div>
+                        <div class="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+                            <div><p class="text-[10px] md:text-xs text-gray-500 font-bold uppercase">Retraso Acum.</p><p class="text-lg md:text-2xl font-black text-red-600 mt-1">45 <span class="text-[10px] md:text-sm font-normal text-red-400">min</span></p></div>
+                            <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600"><i class="fas fa-running text-sm md:text-base"></i></div>
+                        </div>
+                        <div class="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+                            <div><p class="text-[10px] md:text-xs text-gray-500 font-bold uppercase">Deuda</p><p class="text-lg md:text-2xl font-black text-gray-800 mt-1">Bs. 35.00</p></div>
+                            <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600"><i class="fas fa-file-invoice-dollar text-sm md:text-base"></i></div>
                         </div>
                     </div>
 
-                    <!-- 📝 RADIOGRAFÍA DEL DÍA SELECCIONADO -->
-                    <div class="flex-1 bg-white rounded-xl border border-gray-200 shadow-xl overflow-hidden sticky top-6">
-                        <!-- ⚡ CORRECCIÓN 7: Colores corporativos (Slate-800) -->
-                        <div class="bg-slate-800 p-4 text-white flex justify-between items-center border-b border-slate-900">
-                            <div>
-                                <p class="text-xs text-slate-300 uppercase tracking-wide">Detalle del Día</p>
-                                <h4 class="text-lg font-bold text-white"><i class="far fa-calendar-check mr-2"></i>Jueves 2, Abril</h4>
-                            </div>
-                            <span class="px-2 py-1 bg-orange-500 text-white text-xs font-bold rounded shadow-sm">TARDE</span>
-                        </div>
+                    <div class="flex flex-col xl:flex-row gap-4 md:gap-6 items-start">
                         
-                        <div class="p-5 space-y-4">
-                            <!-- Timeline -->
-                            <div class="relative border-l-2 border-gray-200 ml-3 space-y-5 pb-2">
-                                <div class="relative">
-                                    <div class="absolute -left-[21px] bg-green-500 w-3 h-3 rounded-full border-2 border-white"></div>
-                                    <p class="text-xs text-gray-500 ml-4 mb-0.5">Entrada (Turno 08:00)</p>
-                                    <p class="text-lg font-bold text-gray-800 ml-4">08:15 <span class="text-xs font-normal text-orange-500 ml-2">+15m retraso</span></p>
-                                </div>
-                                <div class="relative">
-                                    <div class="absolute -left-[21px] bg-blue-400 w-3 h-3 rounded-full border-2 border-white"></div>
-                                    <p class="text-xs text-gray-500 ml-4 mb-0.5">Inicio Almuerzo</p>
-                                    <p class="text-sm font-bold text-gray-800 ml-4">12:30</p>
-                                </div>
-                                <div class="relative">
-                                    <div class="absolute -left-[21px] bg-blue-400 w-3 h-3 rounded-full border-2 border-white"></div>
-                                    <p class="text-xs text-gray-500 ml-4 mb-0.5">Fin Almuerzo</p>
-                                    <p class="text-sm font-bold text-gray-800 ml-4">13:35 <span class="text-xs font-normal text-orange-500 ml-2">+5m exceso</span></p>
-                                </div>
-                                <div class="relative">
-                                    <div class="absolute -left-[21px] bg-red-500 w-3 h-3 rounded-full border-2 border-white shadow-[0_0_0_4px_rgba(239,68,68,0.2)] animate-pulse"></div>
-                                    <p class="text-xs text-red-500 font-bold ml-4 mb-0.5">Salida (Turno 16:00)</p>
-                                    <p class="text-sm font-bold text-red-600 ml-4">SIN MARCAJE</p>
+                        <div class="flex-[2] bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col w-full">
+                            <div class="p-3 md:p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50 shrink-0">
+                                <h3 class="text-base md:text-lg font-bold text-gray-800" id="mesAnioTexto">Abril 2026</h3>
+                                <div class="flex space-x-1 md:space-x-2">
+                                    <input type="month" id="selectorMes" class="border border-gray-300 rounded px-1 md:px-2 py-1 text-[10px] md:text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 hidden sm:block">
+                                    <button class="p-1.5 px-2 md:px-3 bg-white border border-gray-300 rounded hover:bg-gray-100 transition-colors"><i class="fas fa-chevron-left text-gray-600 text-xs md:text-sm"></i></button>
+                                    <button class="p-1.5 px-2 md:px-3 bg-white border border-gray-300 rounded hover:bg-gray-100 transition-colors"><i class="fas fa-chevron-right text-gray-600 text-xs md:text-sm"></i></button>
                                 </div>
                             </div>
 
-                            <div class="border-t border-gray-100 pt-4">
-                                <p class="text-sm font-bold text-gray-800 mb-2">Desglose de Penalización</p>
-                                <div class="bg-orange-50 rounded p-3 text-sm space-y-1 text-gray-700 border border-orange-100">
-                                    <div class="flex justify-between"><span>Retraso al Ingreso:</span><span class="font-bold text-orange-600">15 min</span></div>
-                                    <div class="flex justify-between"><span>Exceso en Almuerzo:</span><span class="font-bold text-orange-600">5 min</span></div>
-                                    <div class="flex justify-between border-t border-orange-200 pt-1 mt-1"><span>Total Penalizable:</span><span class="font-bold text-red-600">20 min</span></div>
+                            <!-- ⚡ SCROLL HORIZONTAL PROTECTOR EN MÓVIL -->
+                            <div class="w-full overflow-x-auto">
+                                <div class="min-w-[700px] grid grid-cols-7 gap-px bg-gray-200 flex-1" id="cuadriculaCalendario">
+                                    
+                                    <div class="cal-header">Lun</div><div class="cal-header">Mar</div><div class="cal-header">Mié</div>
+                                    <div class="cal-header">Jue</div><div class="cal-header">Vie</div><div class="cal-header">Sáb</div><div class="cal-header">Dom</div>
+
+                                    <div class="cal-day empty"></div> <div class="cal-day empty"></div>
+                                    
+                                    <div class="cal-day estado-puntual">
+                                        <span class="text-xs md:text-sm font-bold text-gray-700">1</span>
+                                        <div class="text-[10px] md:text-xs mt-1">
+                                            <p class="text-green-700 font-semibold"><i class="fas fa-check-circle mr-1"></i>Puntual</p>
+                                            <p class="text-gray-500 text-[9px] md:text-[10px]">8.0 hrs</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="cal-day estado-tarde anomalia-marcaje">
+                                        <span class="text-xs md:text-sm font-bold text-gray-700">2</span>
+                                        <div class="text-[10px] md:text-xs mt-1">
+                                            <p class="text-orange-600 font-semibold"><i class="fas fa-exclamation-triangle mr-1"></i>Tarde 15m</p>
+                                            <p class="text-red-500 text-[9px] md:text-[10px] font-bold">Falta Salida</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="cal-day estado-vacacion text-center justify-center relative">
+                                        <span class="text-xs md:text-sm font-bold text-gray-700 absolute top-1 md:top-2 left-1 md:left-2">3</span>
+                                        <i class="fas fa-umbrella-beach text-blue-400 text-xl md:text-2xl opacity-50 mb-1"></i>
+                                        <p class="text-[9px] md:text-xs text-blue-700 font-bold uppercase mt-1 md:mt-2">Vacación</p>
+                                    </div>
+
+                                    <div class="cal-day estado-inhabiles"><span class="text-xs md:text-sm font-bold text-gray-500">4</span></div>
+                                    <div class="cal-day estado-inhabiles"><span class="text-xs md:text-sm font-bold text-gray-500">5</span></div>
+                                    
+                                    <div class="cal-day estado-futuro"><span class="text-xs md:text-sm font-bold text-gray-700">6</span></div>
+                                    <div class="cal-day estado-futuro"><span class="text-xs md:text-sm font-bold text-gray-700">7</span></div>
+                                    <div class="cal-day estado-futuro"><span class="text-xs md:text-sm font-bold text-gray-700">8</span></div>
+                                    <div class="cal-day estado-futuro"><span class="text-xs md:text-sm font-bold text-gray-700">9</span></div>
+                                    <div class="cal-day estado-futuro"><span class="text-xs md:text-sm font-bold text-gray-700">10</span></div>
+                                    <div class="cal-day estado-inhabiles"><span class="text-xs md:text-sm font-bold text-gray-500">11</span></div>
+                                    <div class="cal-day estado-inhabiles"><span class="text-xs md:text-sm font-bold text-gray-500">12</span></div>
+                                    
+                                    <div class="cal-day empty"></div><div class="cal-day empty"></div><div class="cal-day empty"></div>
+                                    <div class="cal-day empty"></div><div class="cal-day empty"></div><div class="cal-day empty"></div><div class="cal-day empty"></div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- ⚡ CORRECCIÓN 7: Botones más claros -->
-                        <div class="bg-gray-50 p-4 border-t border-gray-200 flex justify-between items-center">
-                            <button class="text-xs text-gray-500 hover:text-red-500 font-medium transition-colors"><i class="fas fa-trash-alt mr-1"></i>Anular Día</button>
-                            <button onclick="solicitarClaveAdmin()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow text-sm font-medium transition-colors flex items-center">
-                                <i class="fas fa-lock mr-2 text-blue-200"></i>Editar / Justificar
-                            </button>
+                        <div class="flex-1 w-full bg-white rounded-xl border border-gray-200 shadow-xl overflow-hidden xl:sticky top-6">
+                            <div class="bg-slate-800 p-3 md:p-4 text-white flex justify-between items-center border-b border-slate-900">
+                                <div>
+                                    <p class="text-[10px] md:text-xs text-slate-300 uppercase tracking-wide">Detalle del Día</p>
+                                    <h4 class="text-base md:text-lg font-bold text-white"><i class="far fa-calendar-check mr-2"></i>Jueves 2, Abril</h4>
+                                </div>
+                                <span class="px-2 py-1 bg-orange-500 text-white text-[10px] md:text-xs font-bold rounded shadow-sm">TARDE</span>
+                            </div>
+                            
+                            <div class="p-4 md:p-5 space-y-4">
+                                <div class="relative border-l-2 border-gray-200 ml-3 space-y-4 md:space-y-5 pb-2">
+                                    <div class="relative">
+                                        <div class="absolute -left-[21px] bg-green-500 w-3 h-3 rounded-full border-2 border-white"></div>
+                                        <p class="text-[10px] md:text-xs text-gray-500 ml-4 mb-0.5">Entrada (Turno 08:00)</p>
+                                        <p class="text-sm md:text-lg font-bold text-gray-800 ml-4">08:15 <span class="text-[10px] md:text-xs font-normal text-orange-500 ml-1 md:ml-2">+15m retraso</span></p>
+                                    </div>
+                                    <div class="relative">
+                                        <div class="absolute -left-[21px] bg-blue-400 w-3 h-3 rounded-full border-2 border-white"></div>
+                                        <p class="text-[10px] md:text-xs text-gray-500 ml-4 mb-0.5">Inicio Almuerzo</p>
+                                        <p class="text-xs md:text-sm font-bold text-gray-800 ml-4">12:30</p>
+                                    </div>
+                                    <div class="relative">
+                                        <div class="absolute -left-[21px] bg-blue-400 w-3 h-3 rounded-full border-2 border-white"></div>
+                                        <p class="text-[10px] md:text-xs text-gray-500 ml-4 mb-0.5">Fin Almuerzo</p>
+                                        <p class="text-xs md:text-sm font-bold text-gray-800 ml-4">13:35 <span class="text-[10px] md:text-xs font-normal text-orange-500 ml-1 md:ml-2">+5m exceso</span></p>
+                                    </div>
+                                    <div class="relative">
+                                        <div class="absolute -left-[21px] bg-red-500 w-3 h-3 rounded-full border-2 border-white shadow-[0_0_0_4px_rgba(239,68,68,0.2)] animate-pulse"></div>
+                                        <p class="text-[10px] md:text-xs text-red-500 font-bold ml-4 mb-0.5">Salida (Turno 16:00)</p>
+                                        <p class="text-xs md:text-sm font-bold text-red-600 ml-4">SIN MARCAJE</p>
+                                    </div>
+                                </div>
+
+                                <div class="border-t border-gray-100 pt-4">
+                                    <p class="text-xs md:text-sm font-bold text-gray-800 mb-2">Desglose de Penalización</p>
+                                    <div class="bg-orange-50 rounded p-2 md:p-3 text-xs md:text-sm space-y-1 text-gray-700 border border-orange-100">
+                                        <div class="flex justify-between"><span>Retraso al Ingreso:</span><span class="font-bold text-orange-600">15 min</span></div>
+                                        <div class="flex justify-between"><span>Exceso en Almuerzo:</span><span class="font-bold text-orange-600">5 min</span></div>
+                                        <div class="flex justify-between border-t border-orange-200 pt-1 mt-1"><span>Total Penalizable:</span><span class="font-bold text-red-600">20 min</span></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="bg-gray-50 p-3 md:p-4 border-t border-gray-200 flex justify-between items-center gap-2">
+                                <button class="text-[10px] md:text-xs text-gray-500 hover:text-red-500 font-medium transition-colors"><i class="fas fa-trash-alt mr-1"></i>Anular</button>
+                                <button onclick="solicitarClaveAdmin()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded shadow text-[10px] md:text-sm font-medium transition-colors flex items-center">
+                                    <i class="fas fa-lock mr-1 md:mr-2 text-blue-200"></i>Editar / Justificar
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <div class="flex justify-end space-x-3 mt-4 border-t border-gray-200 pt-6 pb-10">
-                    <button class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 font-medium text-sm transition-colors flex items-center shadow-sm">
-                        <i class="fas fa-file-excel text-green-600 mr-2 text-lg"></i>Exportar a Excel
-                    </button>
-                    <button class="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 font-medium text-sm transition-colors flex items-center shadow-sm">
-                        <i class="fas fa-file-pdf text-red-600 mr-2 text-lg"></i>Exportar a PDF
-                    </button>
-                </div>
+                    <div class="flex justify-end space-x-2 md:space-x-3 mt-4 border-t border-gray-200 pt-4 md:pt-6 pb-6 md:pb-10">
+                        <button class="bg-white border border-gray-300 text-gray-700 px-3 md:px-4 py-1.5 md:py-2 rounded-lg hover:bg-gray-50 font-medium text-xs md:text-sm transition-colors flex items-center shadow-sm">
+                            <i class="fas fa-file-excel text-green-600 mr-1 md:mr-2 text-base md:text-lg"></i>Excel
+                        </button>
+                        <button class="bg-white border border-gray-300 text-gray-700 px-3 md:px-4 py-1.5 md:py-2 rounded-lg hover:bg-gray-50 font-medium text-xs md:text-sm transition-colors flex items-center shadow-sm">
+                            <i class="fas fa-file-pdf text-red-600 mr-1 md:mr-2 text-base md:text-lg"></i>PDF
+                        </button>
+                    </div>
 
+                </div>
             </div>
         </div>
     </main>
 
     <script src="menu.js"></script>
-    <script src="menu.js"></script>
     <script>
-        // ⚡ Usamos nuestra función global del menu.js
         async function solicitarClaveAdmin() {
-            const password = await pedirClave("Ingrese la contraseña de Administrador para modificar el historial de asistencia.");
+            const password = await pedirClave("Ingrese la contraseña de Administrador para modificar el historial.");
             
             if (password) {
-                // Más adelante, aquí enviaremos "password" a Python para validarla
-                // Por ahora, simulamos el éxito usando otra de nuestras funciones globales:
                 mostrarExito("Desbloqueado con éxito. Modo edición activado.");
             }
         }
