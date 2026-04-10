@@ -301,6 +301,37 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
                 raw_data JSONB,                        -- El paquete de datos original por si hay que depurar
                 creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+                             
+            -- ⚡ NUEVA TABLA MAESTRA DE CÁLCULO DIARIO ⚡
+            CREATE TABLE {schema}.asistencia_diaria (
+                id SERIAL PRIMARY KEY, -- Usamos SERIAL para mantener el estándar de tu BD
+                empleado_id INT REFERENCES {schema}.empleados(id) NOT NULL,
+                fecha DATE NOT NULL,
+                turno_id INT REFERENCES {schema}.turnos(id), 
+                
+                -- Marcajes limpios
+                hora_entrada TIME,
+                hora_inicio_almuerzo TIME,
+                hora_fin_almuerzo TIME,
+                hora_salida TIME,
+                
+                -- Desglose de Cálculos
+                minutos_retraso_entrada INT DEFAULT 0,
+                minutos_exceso_almuerzo INT DEFAULT 0,
+                minutos_salida_temprano INT DEFAULT 0,
+                horas_trabajadas NUMERIC(5,2) DEFAULT 0.00,
+                
+                -- Veredicto y Finanzas
+                estado VARCHAR(20) NOT NULL DEFAULT 'Incompleto', 
+                deuda_generada_bs NUMERIC(10, 2) DEFAULT 0.00, 
+                
+                -- Auditoría
+                modificado_manualmente BOOLEAN DEFAULT FALSE,
+                observaciones TEXT,
+                actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                
+                UNIQUE(empleado_id, fecha) -- Evita duplicados del mismo día
+            );
 
             CREATE TABLE {schema}.asistencia (
                 id SERIAL PRIMARY KEY,
@@ -1385,50 +1416,229 @@ async def editar_ausencia(ausencia_id: int, data: dict, usuario = Depends(verifi
         conn.close()
 
 # ==============================================================================
-# 11. MÓDULO: SIMULADOR DE HARDWARE (DEV / QA)
+# 11. MOTOR MATEMÁTICO DE ASISTENCIA (CORE ERP)
+# ==============================================================================
+
+def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, salario_base: float):
+    """
+    Motor matemático que procesa una lista de objetos datetime (marcajes) 
+    y devuelve un diccionario listo para guardar en asistencia_diaria.
+    """
+    # 1. Filtro Anti-Ansiedad (Debounce de 3 minutos)
+    marcajes_limpios = []
+    for m in sorted(marcajes_brutos):
+        if not marcajes_limpios:
+            marcajes_limpios.append(m)
+        else:
+            if (m - marcajes_limpios[-1]).total_seconds() > 180:
+                marcajes_limpios.append(m)
+
+    resumen = {
+        "hora_entrada": marcajes_limpios[0].time() if len(marcajes_limpios) > 0 else None,
+        "hora_inicio_almuerzo": marcajes_limpios[1].time() if len(marcajes_limpios) > 1 else None,
+        "hora_fin_almuerzo": marcajes_limpios[2].time() if len(marcajes_limpios) > 2 else None,
+        "hora_salida": marcajes_limpios[-1].time() if len(marcajes_limpios) > 3 else (marcajes_limpios[-1].time() if len(marcajes_limpios) > 1 else None),
+        "minutos_retraso_entrada": 0,
+        "minutos_exceso_almuerzo": 0,
+        "estado": "Incompleto",
+        "deuda_generada_bs": 0.00
+    }
+
+    if not resumen["hora_entrada"]:
+        resumen["estado"] = "Falta"
+        return resumen
+
+    # 2. Evaluación de Tolerancia (Solo ingreso)
+    hora_oficial = turno['hora_ingreso']
+    min_llegada = (resumen["hora_entrada"].hour * 60) + resumen["hora_entrada"].minute
+    min_oficial = (hora_oficial.hour * 60) + hora_oficial.minute
+    
+    retraso = min_llegada - min_oficial
+    
+    if retraso > turno.get('tolerancia_min', 0):
+        resumen["minutos_retraso_entrada"] = retraso
+
+    # 3. Evaluación de Almuerzo (Duración Estricta)
+    if resumen["hora_inicio_almuerzo"] and resumen["hora_fin_almuerzo"]:
+        alm_in = (resumen["hora_inicio_almuerzo"].hour * 60) + resumen["hora_inicio_almuerzo"].minute
+        alm_out = (resumen["hora_fin_almuerzo"].hour * 60) + resumen["hora_fin_almuerzo"].minute
+        duracion = alm_out - alm_in
+        
+        limite_alm = turno.get('almuerzo_min', 0)
+        if duracion > limite_alm and limite_alm > 0:
+            resumen["minutos_exceso_almuerzo"] = duracion - limite_alm
+
+    # 4. Regla Estricta de Permisos (Neutraliza deuda si cubre la hora)
+    if permisos:
+        for p in permisos:
+            if p['hora_inicio'] and p['hora_fin']:
+                p_in = (p['hora_inicio'].hour * 60) + p['hora_inicio'].minute
+                p_out = (p['hora_fin'].hour * 60) + p['hora_fin'].minute
+                # Si el empleado llega tarde pero DENTRO de su permiso, perdonamos el retraso matutino
+                if min_llegada <= p_out:
+                    resumen["minutos_retraso_entrada"] = 0 
+                # NOTA: Si llega DESPUÉS de que acabe el permiso, el retraso ya fue sumado arriba y no se perdona.
+
+    # 5. Cálculo Financiero (Valor por minuto)
+    # Fórmula: Salario / 30 días / 8 horas / 60 minutos
+    valor_minuto = (float(salario_base) / 30 / 8 / 60) if salario_base > 0 else 0
+    total_min_deuda = resumen["minutos_retraso_entrada"] + resumen["minutos_exceso_almuerzo"]
+    
+    resumen["deuda_generada_bs"] = round(total_min_deuda * valor_minuto, 2)
+
+    # 6. Estado Final
+    if total_min_deuda > 0:
+        resumen["estado"] = "Tarde"
+    elif len(marcajes_limpios) >= 4 or (len(marcajes_limpios) >= 2 and not turno.get('almuerzo')):
+        resumen["estado"] = "Puntual"
+
+    return resumen
+
+# ==============================================================================
+# 12. LECTURA DE ASISTENCIA (PARA EL CALENDARIO FRONTEND)
+# ==============================================================================
+
+@app.get("/empleados/{empleado_id}/asistencia/{anio}/{mes}")
+async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    conn = conectar_bd(schema)
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        # 1. Traer todos los días calculados de ese mes específico
+        cur.execute(f"""
+            SELECT * FROM {schema}.asistencia_diaria 
+            WHERE empleado_id = %s 
+              AND EXTRACT(YEAR FROM fecha) = %s 
+              AND EXTRACT(MONTH FROM fecha) = %s
+            ORDER BY fecha ASC
+        """, (empleado_id, anio, mes))
+        dias_procesados = cur.fetchall()
+
+        # Convertir campos de tiempo (TIME/DATE) a strings para que el JSON no se rompa
+        for dia in dias_procesados:
+            dia['fecha'] = str(dia['fecha'])
+            dia['hora_entrada'] = str(dia['hora_entrada']) if dia['hora_entrada'] else None
+            dia['hora_inicio_almuerzo'] = str(dia['hora_inicio_almuerzo']) if dia['hora_inicio_almuerzo'] else None
+            dia['hora_fin_almuerzo'] = str(dia['hora_fin_almuerzo']) if dia['hora_fin_almuerzo'] else None
+            dia['hora_salida'] = str(dia['hora_salida']) if dia['hora_salida'] else None
+            dia['horas_trabajadas'] = float(dia['horas_trabajadas'] or 0)
+            dia['deuda_generada_bs'] = float(dia['deuda_generada_bs'] or 0)
+
+        # 2. Calcular los KPIs para las tarjetas de la parte superior
+        cur.execute(f"""
+            SELECT 
+                COUNT(id) as dias_trabajados,
+                SUM(horas_trabajadas) as total_horas,
+                SUM(minutos_retraso_entrada + minutos_exceso_almuerzo) as retraso_total_min,
+                SUM(deuda_generada_bs) as deuda_total
+            FROM {schema}.asistencia_diaria
+            WHERE empleado_id = %s AND EXTRACT(YEAR FROM fecha) = %s AND EXTRACT(MONTH FROM fecha) = %s
+        """, (empleado_id, anio, mes))
+        kpis = cur.fetchone()
+
+        # Limpieza de valores nulos en KPIs
+        kpis = {
+            "dias_trabajados": kpis["dias_trabajados"] or 0,
+            "total_horas": float(kpis["total_horas"] or 0),
+            "retraso_total_min": int(kpis["retraso_total_min"] or 0),
+            "deuda_total": float(kpis["deuda_total"] or 0)
+        }
+
+        return {
+            "dias": dias_procesados,
+            "kpis": kpis
+        }
+    finally:
+        cur.close()
+        conn.close()
+
+# ==============================================================================
+# 1x. MÓDULO: SIMULADOR DE HARDWARE (DEV / QA)
 # ==============================================================================
 
 @app.post("/simulador/evento")
 async def simular_evento_hardware(data: dict, usuario = Depends(verificar_token)):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
         device_no = data.get("device_no", "SIMULADOR-01")
         bio_id = data.get("bio_id")
-        verify_mode = data.get("verify_mode", "1") 
-        action = data.get("action", "0") 
-        
-        # Unificamos fecha y hora recibidas del frontend
         fecha = data.get("fecha")
         hora = data.get("hora")
-        fecha_hora_str = f"{fecha} {hora}:00" # Formato YYYY-MM-DD HH:MM:SS
+        fecha_hora_str = f"{fecha} {hora}:00" 
         
-        # Validar que el empleado (bio_id) exista en esta empresa
-        cur.execute(f"SELECT id, nombres, apellidos FROM {schema}.empleados WHERE bio_id = %s AND eliminado = FALSE", (bio_id,))
+        # 1. Validar Empleado y Turno
+        cur.execute(f"SELECT id, nombres, salario_base, turno_id FROM {schema}.empleados WHERE bio_id = %s AND eliminado = FALSE", (bio_id,))
         emp = cur.fetchone()
         if not emp:
-            raise HTTPException(status_code=404, detail=f"No se encontró ningún empleado activo con el ID Biométrico {bio_id}")
+            raise HTTPException(status_code=404, detail="Empleado inactivo o no encontrado.")
+            
+        cur.execute(f"SELECT * FROM {schema}.turnos WHERE id = %s", (emp['turno_id'],))
+        turno = cur.fetchone()
+        if not turno:
+            raise HTTPException(status_code=409, detail="El empleado no tiene un turno asignado para calcular.")
 
-        # ⚡ CREAMOS EL PAQUETE FALSO IDÉNTICO AL REAL DE ZKTECO
-        raw_string = f"{bio_id}\t{fecha_hora_str}\t{action}\t{verify_mode}\tSIMULADO"
-        
-        # Inyectamos en la tabla de Eventos Brutos
+        # 2. Guardar Marcaje Bruto (Caja Negra)
+        raw_string = f"{bio_id}\t{fecha_hora_str}\t0\t1\tSIMULADO"
         cur.execute(f"""
-            INSERT INTO {schema}.eventos_brutos 
-            (device_no, item, verify_mode, action, fecha_hora, raw_data)
-            VALUES (%s, %s, %s, %s, %s, %s)
-        """, (device_no, bio_id, verify_mode, action, fecha_hora_str, psycopg2.extras.Json({"raw": raw_string})))
-        
+            INSERT INTO {schema}.eventos_brutos (device_no, item, action, fecha_hora, raw_data)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (device_no, bio_id, "0", fecha_hora_str, psycopg2.extras.Json({"raw": raw_string})))
+
+        # 3. EXTRAER TODOS LOS MARCAJES DE ESE DÍA Y PROCESARLOS
+        cur.execute(f"""
+            SELECT fecha_hora FROM {schema}.eventos_brutos 
+            WHERE item = %s AND DATE(fecha_hora) = %s 
+            ORDER BY fecha_hora ASC
+        """, (bio_id, fecha))
+        marcajes_db = cur.fetchall()
+        marcajes_dt = [m['fecha_hora'] for m in marcajes_db]
+
+        # Extraer Permisos (Si tiene alguno para hoy)
+        cur.execute(f"""
+            SELECT hora_inicio, hora_fin FROM {schema}.ausencias 
+            WHERE empleado_id = %s AND tipo = 'permiso' AND estado = 'aprobado' AND eliminado = FALSE
+            AND %s BETWEEN fecha_inicio AND fecha_fin
+        """, (emp['id'], fecha))
+        permisos = cur.fetchall()
+
+        # 🚀 4. EJECUTAR EL MOTOR MATEMÁTICO 🚀
+        resumen = calcular_dia_asistencia(marcajes_dt, turno, permisos, emp['salario_base'])
+
+        # 5. ACTUALIZAR O INSERTAR EN ASISTENCIA DIARIA (UPSERT)
+        cur.execute(f"""
+            INSERT INTO {schema}.asistencia_diaria 
+            (empleado_id, fecha, turno_id, hora_entrada, hora_inicio_almuerzo, hora_fin_almuerzo, hora_salida, 
+             minutos_retraso_entrada, minutos_exceso_almuerzo, estado, deuda_generada_bs, actualizado_en)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+            ON CONFLICT (empleado_id, fecha) 
+            DO UPDATE SET 
+                hora_entrada = EXCLUDED.hora_entrada,
+                hora_inicio_almuerzo = EXCLUDED.hora_inicio_almuerzo,
+                hora_fin_almuerzo = EXCLUDED.hora_fin_almuerzo,
+                hora_salida = EXCLUDED.hora_salida,
+                minutos_retraso_entrada = EXCLUDED.minutos_retraso_entrada,
+                minutos_exceso_almuerzo = EXCLUDED.minutos_exceso_almuerzo,
+                estado = EXCLUDED.estado,
+                deuda_generada_bs = EXCLUDED.deuda_generada_bs,
+                actualizado_en = CURRENT_TIMESTAMP
+            WHERE {schema}.asistencia_diaria.modificado_manualmente = FALSE;
+        """, (
+            emp['id'], fecha, emp['turno_id'], resumen['hora_entrada'], resumen['hora_inicio_almuerzo'], 
+            resumen['hora_fin_almuerzo'], resumen['hora_salida'], resumen['minutos_retraso_entrada'], 
+            resumen['minutos_exceso_almuerzo'], resumen['estado'], resumen['deuda_generada_bs']
+        ))
+
         conn.commit()
-        return {"mensaje": f"Ping recibido. Marcaje de {emp[1]} registrado a las {hora}."}
-        
+        return {"mensaje": f"Marcaje registrado. Asistencia de {emp['nombres']} actualizada."}
+
     except HTTPException:
         conn.rollback()
         raise
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=f"Error del simulador: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
         conn.close()

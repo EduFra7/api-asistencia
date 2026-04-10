@@ -178,7 +178,7 @@ function renderizarMenu(pantallaActiva) {
                 <h2 class="text-lg font-bold text-blue-400 truncate"><i class="fas fa-fingerprint mr-2"></i>${empresaNombre}</h2>
                 <p class="text-[10px] md:text-xs text-slate-400 mt-1 uppercase tracking-wider truncate">${rol}</p>
             </div>
-            <button onclick="toggleMenu()" class="md:hidden text-slate-400 hover:text-white p-2 outline-none">
+            <button onclick="toggleMenu()" class="xl:hidden text-slate-400 hover:text-white p-2 outline-none">
                 <i class="fas fa-times text-xl"></i>
             </button>
         </div>

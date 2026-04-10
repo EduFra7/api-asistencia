@@ -29,16 +29,13 @@
 </head>
 <body class="bg-gray-50 font-sans flex h-screen overflow-hidden text-gray-800 relative">
 
-    <!-- ⚡ OVERLAY MÓVIL (Fondo oscuro al abrir el menú) -->
     <div id="overlay-menu" class="fixed inset-0 bg-slate-900/60 z-30 hidden backdrop-blur-sm transition-opacity" onclick="toggleMenu()"></div>
 
-    <!-- ⚡ MENÚ LATERAL (Oculto en móvil, fijo en PC) -->
-    <aside id="menu-lateral" class="w-64 bg-slate-900 text-white flex flex-col h-full shadow-2xl z-40 absolute md:relative transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out shrink-0"></aside>
+    <aside id="menu-lateral" class="w-64 bg-slate-900 text-white flex flex-col h-full shadow-2xl z-40 absolute xl:relative transform -translate-x-full xl:translate-x-0 transition-transform duration-300 ease-in-out shrink-0"></aside>
 
     <main class="flex-1 flex flex-col h-screen overflow-hidden w-full relative">
         
-        <!-- ⚡ BARRA SUPERIOR MÓVIL -->
-        <div class="md:hidden bg-slate-900 text-white p-4 flex items-center justify-between shadow-md shrink-0 z-20">
+        <div class="xl:hidden bg-slate-900 text-white p-4 flex items-center justify-between shadow-md shrink-0 z-20">
             <div class="flex items-center">
                 <button onclick="toggleMenu()" class="text-white hover:text-blue-400 focus:outline-none mr-4">
                     <i class="fas fa-bars text-xl"></i>
@@ -47,11 +44,10 @@
             </div>
         </div>
 
-        <!-- ⚡ CONTENEDOR DIVIDIDO -->
-        <div class="flex-1 flex flex-col md:flex-row h-full overflow-hidden">
+        <div class="flex-1 flex flex-col lg:flex-row h-full overflow-hidden">
             
-            <!-- 📱 PANEL IZQUIERDO -->
-            <div class="w-full md:w-80 lg:w-96 bg-white border-b md:border-b-0 md:border-r border-gray-200 flex flex-col h-[40vh] md:h-full shrink-0 z-10 shadow-sm relative">
+            <!-- ⚡ ID y Clases de Transición Añadidas para la Magia del Scroll -->
+            <div id="panel-directorio" class="w-full lg:w-80 xl:w-96 bg-white border-b lg:border-b-0 lg:border-r border-gray-200 flex flex-col h-[40vh] lg:h-full shrink-0 z-10 shadow-sm relative transition-all duration-500 ease-in-out overflow-hidden">
                 
                 <div class="p-3 md:p-5 border-b border-gray-200 bg-gray-50 space-y-3 md:space-y-4 shrink-0">
                     <h2 class="text-base md:text-lg font-bold text-gray-800 hidden md:block"><i class="fas fa-users mr-2 text-blue-600"></i>Directorio</h2>
@@ -80,6 +76,7 @@
                 </div>
 
                 <div class="flex-1 overflow-y-auto" id="listaEmpleados">
+                    <!-- ⚡ Onclick configurado para disparar el auto-collapse -->
                     <div onclick="seleccionarEmpleado(102)" class="p-3 md:p-4 border-b border-gray-100 hover:bg-blue-50 cursor-pointer flex items-center transition-colors border-l-4 border-transparent hover:border-blue-600 bg-blue-50/30">
                         <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gray-200 overflow-hidden mr-3 border border-gray-300 shrink-0">
                             <img src="https://ui-avatars.com/api/?name=Leonardo+Arispe&background=0D8ABC&color=fff" class="w-full h-full object-cover">
@@ -93,53 +90,52 @@
                 </div>
             </div>
 
-            <!-- 🖥️ PANEL DERECHO -->
-            <div class="flex-1 flex flex-col h-full bg-gray-50/50 relative overflow-y-auto w-full">
+            <!-- ⚡ ID Añadido al panel derecho para rastrear el scroll -->
+            <div id="panel-derecho" class="flex-1 flex flex-col h-full bg-gray-50/50 relative overflow-y-auto w-full">
                 
                 <header class="bg-white p-4 md:p-6 border-b border-gray-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shrink-0 shadow-sm">
                     <div class="flex items-center space-x-3 md:space-x-4">
-                        <div class="w-12 h-12 md:w-16 md:h-16 rounded-full border-2 border-white shadow-md bg-gray-200 overflow-hidden shrink-0">
-                            <img src="https://ui-avatars.com/api/?name=Leonardo+Arispe&background=0D8ABC&color=fff" class="w-full h-full object-cover">
+                        <div id="header-avatar-container" class="w-12 h-12 md:w-16 md:h-16 rounded-full border-2 border-white shadow-md bg-gray-200 overflow-hidden shrink-0 flex items-center justify-center">
+                            <i class="fas fa-user text-gray-400 text-2xl"></i>
                         </div>
                         <div>
-                            <h1 class="text-lg md:text-2xl font-bold text-gray-800 leading-tight">Leonardo Arispe</h1>
+                            <h1 class="text-lg md:text-2xl font-bold text-gray-800 leading-tight" id="header-nombre">Seleccione un empleado</h1>
                             <div class="flex flex-wrap items-center gap-2 mt-1 text-[10px] md:text-sm text-gray-500">
-                                <span><i class="fas fa-id-card mr-1"></i>CI: 1234567</span>
-                                <span class="text-blue-600 font-medium"><i class="fas fa-briefcase mr-1"></i>Soporte Técnico</span>
-                                <span class="text-gray-500 hidden sm:inline"><i class="fas fa-building mr-1"></i>Sucursal Central</span>
+                                <span id="header-ci"><i class="fas fa-id-card mr-1"></i>CI: -----</span>
+                                <span class="text-blue-600 font-medium" id="header-cargo"><i class="fas fa-briefcase mr-1"></i>Sin Cargo</span>
+                                <span class="text-gray-500 hidden sm:inline" id="header-sucursal"><i class="fas fa-building mr-1"></i>Sin Sucursal</span>
                             </div>
                         </div>
                     </div>
                     
                     <div class="bg-slate-800 text-white p-2 md:p-3 rounded-lg shadow-md w-full sm:w-auto text-left sm:text-right border border-slate-700">
                         <p class="text-[10px] md:text-xs text-slate-300 uppercase tracking-wide font-bold mb-0.5">Turno Asignado</p>
-                        <p class="text-xs md:text-sm font-medium"><i class="fas fa-clock mr-1 text-blue-400"></i>08:00 a 16:00 (Oficina)</p>
-                        <p class="text-[10px] md:text-xs text-orange-300 mt-0.5"><i class="fas fa-utensils mr-1"></i>Incluye 60 min Almuerzo</p>
+                        <p class="text-xs md:text-sm font-medium" id="header-turno"><i class="fas fa-clock mr-1 text-blue-400"></i>No asignado</p>
                     </div>
                 </header>
 
                 <div class="p-3 md:p-6 flex-1 flex flex-col gap-4 md:gap-6 w-full max-w-[1400px] mx-auto">
                     
-                    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-4 shrink-0">
+                    <div class="grid grid-cols-2 xl:grid-cols-4 gap-2 md:gap-4 shrink-0">
                         <div class="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-                            <div><p class="text-[10px] md:text-xs text-gray-500 font-bold uppercase">Días Trab.</p><p class="text-lg md:text-2xl font-black text-gray-800 mt-1">14 <span class="text-[10px] md:text-sm font-normal text-gray-400">/ 22</span></p></div>
+                            <div><p class="text-[10px] md:text-xs text-gray-500 font-bold uppercase">Días Trab.</p><p class="text-lg md:text-2xl font-black text-gray-800 mt-1" id="kpi-dias">0 <span class="text-[10px] md:text-sm font-normal text-gray-400">/ 30</span></p></div>
                             <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600"><i class="fas fa-calendar-check text-sm md:text-base"></i></div>
                         </div>
                         <div class="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-                            <div><p class="text-[10px] md:text-xs text-gray-500 font-bold uppercase">Horas Lab.</p><p class="text-lg md:text-2xl font-black text-gray-800 mt-1">112.5 <span class="text-[10px] md:text-sm font-normal text-gray-400">hrs</span></p></div>
+                            <div><p class="text-[10px] md:text-xs text-gray-500 font-bold uppercase">Horas Lab.</p><p class="text-lg md:text-2xl font-black text-gray-800 mt-1" id="kpi-horas">0 <span class="text-[10px] md:text-sm font-normal text-gray-400">hrs</span></p></div>
                             <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600"><i class="fas fa-stopwatch text-sm md:text-base"></i></div>
                         </div>
                         <div class="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-                            <div><p class="text-[10px] md:text-xs text-gray-500 font-bold uppercase">Retraso Acum.</p><p class="text-lg md:text-2xl font-black text-red-600 mt-1">45 <span class="text-[10px] md:text-sm font-normal text-red-400">min</span></p></div>
+                            <div><p class="text-[10px] md:text-xs text-gray-500 font-bold uppercase">Retraso Acum.</p><p class="text-lg md:text-2xl font-black text-red-600 mt-1" id="kpi-retraso">0 <span class="text-[10px] md:text-sm font-normal text-red-400">min</span></p></div>
                             <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600"><i class="fas fa-running text-sm md:text-base"></i></div>
                         </div>
                         <div class="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-                            <div><p class="text-[10px] md:text-xs text-gray-500 font-bold uppercase">Deuda</p><p class="text-lg md:text-2xl font-black text-gray-800 mt-1">Bs. 35.00</p></div>
+                            <div><p class="text-[10px] md:text-xs text-gray-500 font-bold uppercase">Deuda</p><p class="text-lg md:text-2xl font-black text-gray-800 mt-1" id="kpi-deuda">Bs. 0.00</p></div>
                             <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600"><i class="fas fa-file-invoice-dollar text-sm md:text-base"></i></div>
                         </div>
                     </div>
 
-                    <div class="flex flex-col xl:flex-row gap-4 md:gap-6 items-start">
+                    <div class="flex flex-col 2xl:flex-row gap-4 md:gap-6 items-start">
                         
                         <div class="flex-[2] bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col w-full">
                             <div class="p-3 md:p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50 shrink-0">
@@ -151,7 +147,6 @@
                                 </div>
                             </div>
 
-                            <!-- ⚡ SCROLL HORIZONTAL PROTECTOR EN MÓVIL -->
                             <div class="w-full overflow-x-auto">
                                 <div class="min-w-[700px] grid grid-cols-7 gap-px bg-gray-200 flex-1" id="cuadriculaCalendario">
                                     
@@ -199,7 +194,7 @@
                             </div>
                         </div>
 
-                        <div class="flex-1 w-full bg-white rounded-xl border border-gray-200 shadow-xl overflow-hidden xl:sticky top-6">
+                        <div class="flex-1 w-full bg-white rounded-xl border border-gray-200 shadow-xl overflow-hidden 2xl:sticky top-6">
                             <div class="bg-slate-800 p-3 md:p-4 text-white flex justify-between items-center border-b border-slate-900">
                                 <div>
                                     <p class="text-[10px] md:text-xs text-slate-300 uppercase tracking-wide">Detalle del Día</p>
@@ -267,15 +262,234 @@
 
     <script src="menu.js"></script>
     <script>
-        async function solicitarClaveAdmin() {
-            const password = await pedirClave("Ingrese la contraseña de Administrador para modificar el historial.");
-            
-            if (password) {
-                mostrarExito("Desbloqueado con éxito. Modo edición activado.");
+        //VARIABLES PÁRA CONEXIÓN CON SERVIDOR Y EDICIÓN DE PERESONAL
+        const API_URL = "https://asistencia-api.up.railway.app";
+        const token_api = localStorage.getItem('token'); // Usamos token_api para no chocar con tu const 'token' si la hay
+        
+        let fechaActual = new Date();
+        let empleadoIdActivo = null;
+        let listaEmpleadosGlobal = [];
+
+        // ⚡ 2. INICIALIZACIÓN DE LA PANTALLA
+        async function arrancarCalendario() {
+            renderizarMenu('asistencia');
+            await cargarDirectorioEmpleados();
+        }
+
+        // ⚡ 3. CARGAR EMPLEADOS REALES AL DIRECTORIO (Lado Izquierdo)
+        async function cargarDirectorioEmpleados() {
+            try {
+                const res = await fetch(`${API_URL}/empleados`, { headers: { 'Authorization': `Bearer ${token_api}` } });
+                if (!res.ok) throw new Error("Error al cargar empleados");
+                
+                listaEmpleadosGlobal = await res.json();
+                renderizarListaIzquierda(listaEmpleadosGlobal);
+
+                // Auto-seleccionar al primer empleado de la lista para no dejar la pantalla en blanco
+                if (listaEmpleadosGlobal.length > 0) {
+                    seleccionarEmpleado(listaEmpleadosGlobal[0].id);
+                }
+            } catch (error) {
+                console.error(error);
+                document.getElementById('listaEmpleados').innerHTML = '<p class="text-center text-red-500 text-sm mt-5">Error de conexión</p>';
             }
         }
 
-        renderizarMenu('asistencia');
+        // Dibuja los recuadros del panel izquierdo dinámicamente
+        function renderizarListaIzquierda(lista) {
+            const contenedor = document.getElementById('listaEmpleados');
+            contenedor.innerHTML = '';
+
+            lista.forEach(emp => {
+                if(!emp.activo) return; // Por ahora solo mostramos activos
+
+                const iniciales = (emp.nombres.charAt(0) + emp.apellidos.charAt(0)).toUpperCase();
+                let avatarHTML = emp.foto_perfil 
+                    ? `<img src="${emp.foto_perfil}" class="w-full h-full object-cover">`
+                    : `<div class="w-full h-full flex items-center justify-center bg-slate-800 text-white font-bold text-xs">${iniciales}</div>`;
+
+                contenedor.innerHTML += `
+                    <div onclick="seleccionarEmpleado(${emp.id})" id="btn-emp-${emp.id}" class="p-3 border-b border-gray-100 cursor-pointer flex items-center transition-colors hover:bg-blue-50 border-l-4 border-transparent empleado-item">
+                        <div class="w-10 h-10 rounded-full bg-gray-200 overflow-hidden mr-3 border border-gray-300 shrink-0">
+                            ${avatarHTML}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-bold text-gray-800 truncate">${emp.nombres} ${emp.apellidos}</p>
+                            <p class="text-[10px] text-gray-500 truncate">${emp.cargo || 'Sin cargo'} | CI: ${emp.ci}</p>
+                        </div>
+                        <i class="fas fa-chevron-right text-gray-300 text-xs hidden md:block"></i>
+                    </div>
+                `;
+            });
+        }
+
+        // ⚡ 4. AL SELECCIONAR UN EMPLEADO
+        window.seleccionarEmpleado = function(id) {
+            empleadoIdActivo = id;
+            const emp = listaEmpleadosGlobal.find(e => e.id === id);
+            if (!emp) return;
+
+            // -- A. Resaltar el seleccionado en el menú izquierdo --
+            document.querySelectorAll('.empleado-item').forEach(el => {
+                el.classList.remove('bg-blue-50/50', 'border-blue-600');
+                el.classList.add('border-transparent');
+            });
+            const itemActivo = document.getElementById(`btn-emp-${id}`);
+            if (itemActivo) {
+                itemActivo.classList.remove('border-transparent');
+                itemActivo.classList.add('bg-blue-50/50', 'border-blue-600');
+            }
+
+            // -- B. Actualizar la Cabecera Derecha --
+            const iniciales = (emp.nombres.charAt(0) + emp.apellidos.charAt(0)).toUpperCase();
+            document.getElementById('header-avatar-container').innerHTML = emp.foto_perfil 
+                ? `<img src="${emp.foto_perfil}" class="w-full h-full object-cover">`
+                : `<div class="w-full h-full flex items-center justify-center bg-slate-800 text-white font-bold text-xl">${iniciales}</div>`;
+            
+            document.getElementById('header-nombre').textContent = `${emp.nombres} ${emp.apellidos}`;
+            document.getElementById('header-ci').innerHTML = `<i class="fas fa-id-card mr-1"></i>CI: ${emp.ci}`;
+            document.getElementById('header-cargo').innerHTML = `<i class="fas fa-briefcase mr-1"></i>${emp.cargo || 'Sin Cargo'}`;
+            document.getElementById('header-sucursal').innerHTML = `<i class="fas fa-building mr-1"></i>${emp.sucursal_nombre || 'Sin Sucursal'}`;
+            document.getElementById('header-turno').innerHTML = `<i class="fas fa-clock mr-1 text-blue-400"></i>${emp.turno_nombre || 'Horario Libre / No Asignado'}`;
+
+            // -- C. Auto-Colapso Inteligente en Móviles --
+            if (window.innerWidth < 1024) {
+                const panelDirectorio = document.getElementById('panel-directorio');
+                const panelDerecho = document.getElementById('panel-derecho');
+                panelDirectorio.classList.add('!h-0', '!opacity-0', '!border-b-0');
+                setTimeout(() => { panelDerecho.scrollTop = 0; }, 200);
+            }
+
+            // -- D. Llamada a la Base de Datos para el Calendario --
+            cargarAsistenciaMensual();
+        };
+
+        // ⚡ 5. MOTOR DE CÁLCULO VISUAL (Conexión API)
+        async function cargarAsistenciaMensual() {
+            if (!empleadoIdActivo) return;
+
+            const anio = fechaActual.getFullYear();
+            const mes = fechaActual.getMonth() + 1;
+            
+            const nombresMeses = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+            document.getElementById('mesAnioTexto').innerText = `${nombresMeses[mes-1]} ${anio}`;
+
+            try {
+                const respuesta = await fetch(`${API_URL}/empleados/${empleadoIdActivo}/asistencia/${anio}/${mes}`, {
+                    headers: { 'Authorization': `Bearer ${token_api}` }
+                });
+
+                if (!respuesta.ok) throw new Error("Error al obtener datos");
+                const data = await respuesta.json();
+
+                // Actualizar las 4 Tarjetas (KPIs)
+                document.getElementById('kpi-dias').innerHTML = `${data.kpis.dias_trabajados} <span class="text-[10px] md:text-sm font-normal text-gray-400">días</span>`;
+                document.getElementById('kpi-horas').innerHTML = `${data.kpis.total_horas} <span class="text-[10px] md:text-sm font-normal text-gray-400">hrs</span>`;
+                document.getElementById('kpi-retraso').innerHTML = `${data.kpis.retraso_total_min} <span class="text-[10px] md:text-sm font-normal text-red-400">min</span>`;
+                document.getElementById('kpi-deuda').innerText = `Bs. ${data.kpis.deuda_total.toFixed(2)}`;
+
+                // Dibujar la Cuadrícula del mes
+                dibujarCuadricula(anio, mes, data.dias);
+
+            } catch (error) {
+                console.error(error);
+                mostrarError("No se pudo cargar el historial de asistencia.");
+            }
+        }
+
+        // Dibuja los días y colores
+        function dibujarCuadricula(anio, mes, diasBD) {
+            const cuadricula = document.getElementById('cuadriculaCalendario');
+            
+            const cabecerasHTML = `
+                <div class="cal-header">Lun</div><div class="cal-header">Mar</div><div class="cal-header">Mié</div>
+                <div class="cal-header">Jue</div><div class="cal-header">Vie</div><div class="cal-header">Sáb</div><div class="cal-header">Dom</div>
+            `;
+            cuadricula.innerHTML = cabecerasHTML;
+
+            const primerDiaDelMes = new Date(anio, mes - 1, 1).getDay();
+            const diasEnElMes = new Date(anio, mes, 0).getDate();
+            let espaciosVacios = primerDiaDelMes === 0 ? 6 : primerDiaDelMes - 1;
+
+            for (let i = 0; i < espaciosVacios; i++) {
+                cuadricula.innerHTML += `<div class="cal-day empty"></div>`;
+            }
+
+            const mapaDias = {};
+            diasBD.forEach(d => { mapaDias[d.fecha] = d; });
+
+            for (let dia = 1; dia <= diasEnElMes; dia++) {
+                const fechaStr = `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+                const datosDia = mapaDias[fechaStr];
+                
+                let claseEstado = "estado-futuro";
+                let infoExtra = "";
+
+                if (datosDia) {
+                    if (datosDia.estado === 'Puntual') {
+                        claseEstado = "estado-puntual";
+                        infoExtra = `<p class="text-green-700 font-semibold"><i class="fas fa-check-circle mr-1"></i>Puntual</p><p class="text-gray-500 text-[9px] md:text-[10px]">${datosDia.horas_trabajadas} hrs</p>`;
+                    } else if (datosDia.estado === 'Tarde') {
+                        claseEstado = "estado-tarde";
+                        infoExtra = `<p class="text-orange-600 font-semibold"><i class="fas fa-exclamation-triangle mr-1"></i>Tarde ${datosDia.minutos_retraso_entrada}m</p>`;
+                    } else if (datosDia.estado === 'Falta' || datosDia.estado === 'Incompleto') {
+                        claseEstado = "estado-falta";
+                        infoExtra = `<p class="text-red-600 font-bold uppercase mt-1">${datosDia.estado}</p>`;
+                    } else if (datosDia.estado === 'Vacacion' || datosDia.estado === 'Permiso') {
+                        claseEstado = "estado-vacacion text-center justify-center relative";
+                        infoExtra = `<i class="fas fa-umbrella-beach text-blue-400 text-xl md:text-2xl opacity-50 mb-1"></i><p class="text-[9px] md:text-xs text-blue-700 font-bold uppercase mt-1 md:mt-2">${datosDia.estado}</p>`;
+                    }
+                }
+
+                const diaHTML = `
+                    <div class="cal-day ${claseEstado}">
+                        <span class="text-xs md:text-sm font-bold text-gray-700 ${datosDia && (datosDia.estado === 'Vacacion' || datosDia.estado === 'Permiso') ? 'absolute top-1 md:top-2 left-1 md:left-2' : ''}">${dia}</span>
+                        <div class="text-[10px] md:text-xs mt-1">
+                            ${infoExtra}
+                        </div>
+                    </div>
+                `;
+                cuadricula.innerHTML += diaHTML;
+            }
+        }
+
+        // Navegación de Meses
+        function cambiarMes(offset) {
+            fechaActual.setMonth(fechaActual.getMonth() + offset);
+            cargarAsistenciaMensual();
+        }
+
+        // ⚡ 6. MOTOR DE DETECCIÓN DE SCROLL (Para ocultar la barra en móviles)
+        document.addEventListener("DOMContentLoaded", () => {
+            const panelDerecho = document.getElementById('panel-derecho');
+            const panelDirectorio = document.getElementById('panel-directorio');
+            let lastScroll = 0;
+
+            if(panelDerecho && panelDirectorio) {
+                panelDerecho.addEventListener('scroll', () => {
+                    if (window.innerWidth >= 1024) {
+                        panelDirectorio.classList.remove('!h-0', '!opacity-0', '!border-b-0');
+                        return;
+                    }
+                    const currentScroll = panelDerecho.scrollTop;
+                    if (currentScroll > lastScroll && currentScroll > 20) {
+                        panelDirectorio.classList.add('!h-0', '!opacity-0', '!border-b-0');
+                    } else if (currentScroll < lastScroll - 30 || currentScroll <= 0) {
+                        panelDirectorio.classList.remove('!h-0', '!opacity-0', '!border-b-0');
+                    }
+                    lastScroll = currentScroll <= 0 ? 0 : currentScroll;
+                });
+            }
+        });
+
+        // 7. SEGURIDAD
+        async function solicitarClaveAdmin() {
+            const password = await pedirClave("Ingrese la contraseña de Administrador para modificar el historial.");
+            if (password) mostrarExito("Desbloqueado con éxito. Modo edición activado.");
+        }
+
+        // 🚀 INICIAR LA MAGIA
+        arrancarCalendario();
     </script>
 </body>
 </html>
