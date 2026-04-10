@@ -25,6 +25,15 @@
             content: ''; @apply absolute inset-0 border-2 border-blue-400 pointer-events-none z-10;
         }
         .anomalia-marcaje { box-shadow: inset 0 0 0 2px #ef4444, inset 0 -4px 0 0 #f97316 !important; }
+
+        /* 🌟 Definición de la animación de entrada suave */
+        @keyframes fadeInRight {
+            from { opacity: 0; transform: translateX(20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        .animate-emerger {
+            animation: fadeInRight 0.3s ease-out forwards;
+        }
     </style>
 </head>
 <body class="bg-gray-50 font-sans flex h-screen overflow-hidden text-gray-800 relative">
@@ -76,187 +85,202 @@
                 </div>
 
                 <div class="flex-1 overflow-y-auto" id="listaEmpleados">
-                    <!-- ⚡ Onclick configurado para disparar el auto-collapse -->
-                    <div onclick="seleccionarEmpleado(102)" class="p-3 md:p-4 border-b border-gray-100 hover:bg-blue-50 cursor-pointer flex items-center transition-colors border-l-4 border-transparent hover:border-blue-600 bg-blue-50/30">
-                        <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gray-200 overflow-hidden mr-3 border border-gray-300 shrink-0">
-                            <img src="https://ui-avatars.com/api/?name=Leonardo+Arispe&background=0D8ABC&color=fff" class="w-full h-full object-cover">
+                    <!-- 🌟 SKELETON LOADER: Se muestra solo mientras Railway responde -->
+                    <div class="animate-pulse">
+                        <!-- Molde de Empleado 1 -->
+                        <div class="p-4 border-b border-gray-100 flex items-center">
+                            <div class="w-10 h-10 rounded-full bg-gray-200 mr-3 shrink-0"></div>
+                            <div class="flex-1 space-y-2">
+                                <div class="h-3 bg-gray-200 rounded w-3/4"></div>
+                                <div class="h-2 bg-gray-100 rounded w-1/2"></div>
+                            </div>
                         </div>
-                        <div class="flex-1 min-w-0">
-                            <p class="text-xs md:text-sm font-bold text-gray-800 truncate">Leonardo Arispe</p>
-                            <p class="text-[10px] md:text-xs text-gray-500 truncate">Soporte Técnico | Bio: 103</p>
+                        <!-- Molde de Empleado 2 -->
+                        <div class="p-4 border-b border-gray-100 flex items-center">
+                            <div class="w-10 h-10 rounded-full bg-gray-200 mr-3 shrink-0"></div>
+                            <div class="flex-1 space-y-2">
+                                <div class="h-3 bg-gray-200 rounded w-2/3"></div>
+                                <div class="h-2 bg-gray-100 rounded w-1/3"></div>
+                            </div>
                         </div>
-                        <i class="fas fa-chevron-right text-gray-300 text-xs md:block hidden"></i>
+                        <!-- Molde de Empleado 3 -->
+                        <div class="p-4 border-b border-gray-100 flex items-center">
+                            <div class="w-10 h-10 rounded-full bg-gray-200 mr-3 shrink-0"></div>
+                            <div class="flex-1 space-y-2">
+                                <div class="h-3 bg-gray-200 rounded w-4/5"></div>
+                                <div class="h-2 bg-gray-100 rounded w-2/5"></div>
+                            </div>
+                        </div>
+                        <!-- Molde de Empleado 4 -->
+                        <div class="p-4 border-b border-gray-100 flex items-center">
+                            <div class="w-10 h-10 rounded-full bg-gray-200 mr-3 shrink-0"></div>
+                            <div class="flex-1 space-y-2">
+                                <div class="h-3 bg-gray-200 rounded w-1/2"></div>
+                                <div class="h-2 bg-gray-100 rounded w-1/4"></div>
+                            </div>
+                        </div>
+                        <!-- Molde de Empleado 5 -->
+                        <div class="p-4 border-b border-gray-100 flex items-center">
+                            <div class="w-10 h-10 rounded-full bg-gray-200 mr-3 shrink-0"></div>
+                            <div class="flex-1 space-y-2">
+                                <div class="h-3 bg-gray-200 rounded w-3/4"></div>
+                                <div class="h-2 bg-gray-100 rounded w-1/3"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
 
             <!-- ⚡ ID Añadido al panel derecho para rastrear el scroll -->
+            <!-- PANEL DERECHO COMPLETO -->
             <div id="panel-derecho" class="flex-1 flex flex-col h-full bg-gray-50/50 relative overflow-y-auto w-full">
-                
-                <header class="bg-white p-4 md:p-6 border-b border-gray-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shrink-0 shadow-sm">
-                    <div class="flex items-center space-x-3 md:space-x-4">
-                        <div id="header-foto" class="w-12 h-12 md:w-16 md:h-16 rounded-full border-2 border-white shadow-md bg-gray-200 overflow-hidden shrink-0">
-                            <img src="https://ui-avatars.com/api/?name=?&background=ddd&color=999" class="w-full h-full object-cover">
-                        </div>
-                        <div>
-                            <h1 id="header-nombre" class="text-lg md:text-2xl font-bold text-gray-800 leading-tight">Seleccione un empleado</h1>
-                            <div class="flex flex-wrap items-center gap-2 mt-1 text-[10px] md:text-sm text-gray-500">
-                                <span id="header-ci"><i class="fas fa-id-card mr-1"></i>C.I. ---</span>
-                                <span id="header-cargo" class="text-blue-600 font-medium"><i class="fas fa-briefcase mr-1"></i>Cargo ---</span>
-                                <!-- ⚡ FIX: Agregamos el contenedor de la sucursal que el JS estaba buscando -->
-                                <span id="header-sucursal" class="text-gray-500 hidden sm:inline"><i class="fas fa-building mr-1"></i>Sin Sucursal</span>
-                            </div>
-                        </div>
+
+                <!-- 🌟 1. ESTADO VACÍO GLOBAL (Visible al entrar a la página) -->
+                <div id="estado-vacio-global" class="flex-1 flex flex-col items-center justify-center p-8 text-center h-full m-auto min-h-">
+                    <div class="w-24 h-24 bg-white border border-gray-200 text-blue-500 rounded-full flex items-center justify-center mb-6 shadow-sm mx-auto transition-transform hover:scale-105">
+                        <i class="fas fa-calendar-check text-4xl opacity-80"></i>
                     </div>
-                    
-                    <div class="bg-slate-800 text-white p-2 md:p-3 rounded-lg shadow-md w-full sm:w-auto text-left sm:text-right border border-slate-700">
-                        <p class="text-[10px] md:text-xs text-slate-300 uppercase tracking-wide font-bold mb-0.5">Turno Asignado</p>
-                        <p id="header-turno" class="text-xs md:text-sm font-medium"><i class="fas fa-clock mr-1 text-blue-400"></i>---</p>
-                    </div>
-                </header>
-
-                <div class="p-3 md:p-6 flex-1 flex flex-col gap-4 md:gap-6 w-full max-w-[1400px] mx-auto">
-                    
-                    <div class="grid grid-cols-2 xl:grid-cols-4 gap-2 md:gap-4 shrink-0">
-                        <div class="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-                            <div><p class="text-[10px] md:text-xs text-gray-500 font-bold uppercase">Días Trab.</p><p class="text-lg md:text-2xl font-black text-gray-800 mt-1" id="kpi-dias">0 <span class="text-[10px] md:text-sm font-normal text-gray-400">/ 30</span></p></div>
-                            <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600"><i class="fas fa-calendar-check text-sm md:text-base"></i></div>
-                        </div>
-                        <div class="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-                            <div><p class="text-[10px] md:text-xs text-gray-500 font-bold uppercase">Horas Lab.</p><p class="text-lg md:text-2xl font-black text-gray-800 mt-1" id="kpi-horas">0 <span class="text-[10px] md:text-sm font-normal text-gray-400">hrs</span></p></div>
-                            <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600"><i class="fas fa-stopwatch text-sm md:text-base"></i></div>
-                        </div>
-                        <div class="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-                            <div><p class="text-[10px] md:text-xs text-gray-500 font-bold uppercase">Retraso Acum.</p><p class="text-lg md:text-2xl font-black text-red-600 mt-1" id="kpi-retraso">0 <span class="text-[10px] md:text-sm font-normal text-red-400">min</span></p></div>
-                            <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600"><i class="fas fa-running text-sm md:text-base"></i></div>
-                        </div>
-                        <div class="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-                            <div><p class="text-[10px] md:text-xs text-gray-500 font-bold uppercase">Deuda</p><p class="text-lg md:text-2xl font-black text-gray-800 mt-1" id="kpi-deuda">Bs. 0.00</p></div>
-                            <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600"><i class="fas fa-file-invoice-dollar text-sm md:text-base"></i></div>
-                        </div>
-                    </div>
-
-                    <div class="flex flex-col 2xl:flex-row gap-4 md:gap-6 items-start">
-                        
-                        <div class="flex-[2] bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col w-full">
-                            <div class="p-3 md:p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50 shrink-0">
-                                <h3 class="text-base md:text-lg font-bold text-gray-800" id="mesAnioTexto">Abril 2026</h3>
-                                <div class="flex space-x-1 md:space-x-2">
-                                    <input type="month" id="selectorMes" class="border border-gray-300 rounded px-1 md:px-2 py-1 text-[10px] md:text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 hidden sm:block">
-                                    <button class="p-1.5 px-2 md:px-3 bg-white border border-gray-300 rounded hover:bg-gray-100 transition-colors"><i class="fas fa-chevron-left text-gray-600 text-xs md:text-sm"></i></button>
-                                    <button class="p-1.5 px-2 md:px-3 bg-white border border-gray-300 rounded hover:bg-gray-100 transition-colors"><i class="fas fa-chevron-right text-gray-600 text-xs md:text-sm"></i></button>
-                                </div>
-                            </div>
-
-                            <div class="w-full overflow-x-auto">
-                                <div class="min-w-[700px] grid grid-cols-7 gap-px bg-gray-200 flex-1" id="cuadriculaCalendario">
-                                    
-                                    <div class="cal-header">Lun</div><div class="cal-header">Mar</div><div class="cal-header">Mié</div>
-                                    <div class="cal-header">Jue</div><div class="cal-header">Vie</div><div class="cal-header">Sáb</div><div class="cal-header">Dom</div>
-
-                                    <div class="cal-day empty"></div> <div class="cal-day empty"></div>
-                                    
-                                    <div class="cal-day estado-puntual">
-                                        <span class="text-xs md:text-sm font-bold text-gray-700">1</span>
-                                        <div class="text-[10px] md:text-xs mt-1">
-                                            <p class="text-green-700 font-semibold"><i class="fas fa-check-circle mr-1"></i>Puntual</p>
-                                            <p class="text-gray-500 text-[9px] md:text-[10px]">8.0 hrs</p>
-                                        </div>
-                                    </div>
-
-                                    <div class="cal-day estado-tarde anomalia-marcaje">
-                                        <span class="text-xs md:text-sm font-bold text-gray-700">2</span>
-                                        <div class="text-[10px] md:text-xs mt-1">
-                                            <p class="text-orange-600 font-semibold"><i class="fas fa-exclamation-triangle mr-1"></i>Tarde 15m</p>
-                                            <p class="text-red-500 text-[9px] md:text-[10px] font-bold">Falta Salida</p>
-                                        </div>
-                                    </div>
-
-                                    <div class="cal-day estado-vacacion text-center justify-center relative">
-                                        <span class="text-xs md:text-sm font-bold text-gray-700 absolute top-1 md:top-2 left-1 md:left-2">3</span>
-                                        <i class="fas fa-umbrella-beach text-blue-400 text-xl md:text-2xl opacity-50 mb-1"></i>
-                                        <p class="text-[9px] md:text-xs text-blue-700 font-bold uppercase mt-1 md:mt-2">Vacación</p>
-                                    </div>
-
-                                    <div class="cal-day estado-inhabiles"><span class="text-xs md:text-sm font-bold text-gray-500">4</span></div>
-                                    <div class="cal-day estado-inhabiles"><span class="text-xs md:text-sm font-bold text-gray-500">5</span></div>
-                                    
-                                    <div class="cal-day estado-futuro"><span class="text-xs md:text-sm font-bold text-gray-700">6</span></div>
-                                    <div class="cal-day estado-futuro"><span class="text-xs md:text-sm font-bold text-gray-700">7</span></div>
-                                    <div class="cal-day estado-futuro"><span class="text-xs md:text-sm font-bold text-gray-700">8</span></div>
-                                    <div class="cal-day estado-futuro"><span class="text-xs md:text-sm font-bold text-gray-700">9</span></div>
-                                    <div class="cal-day estado-futuro"><span class="text-xs md:text-sm font-bold text-gray-700">10</span></div>
-                                    <div class="cal-day estado-inhabiles"><span class="text-xs md:text-sm font-bold text-gray-500">11</span></div>
-                                    <div class="cal-day estado-inhabiles"><span class="text-xs md:text-sm font-bold text-gray-500">12</span></div>
-                                    
-                                    <div class="cal-day empty"></div><div class="cal-day empty"></div><div class="cal-day empty"></div>
-                                    <div class="cal-day empty"></div><div class="cal-day empty"></div><div class="cal-day empty"></div><div class="cal-day empty"></div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="flex-1 w-full bg-white rounded-xl border border-gray-200 shadow-xl overflow-hidden 2xl:sticky top-6">
-                            <div class="bg-slate-800 p-3 md:p-4 text-white flex justify-between items-center border-b border-slate-900">
-                                <div>
-                                    <p class="text-[10px] md:text-xs text-slate-300 uppercase tracking-wide">Detalle del Día</p>
-                                    <h4 class="text-base md:text-lg font-bold text-white"><i class="far fa-calendar-check mr-2"></i>Jueves 2, Abril</h4>
-                                </div>
-                                <span class="px-2 py-1 bg-orange-500 text-white text-[10px] md:text-xs font-bold rounded shadow-sm">TARDE</span>
-                            </div>
-                            
-                            <div class="p-4 md:p-5 space-y-4">
-                                <div class="relative border-l-2 border-gray-200 ml-3 space-y-4 md:space-y-5 pb-2">
-                                    <div class="relative">
-                                        <div class="absolute -left-[21px] bg-green-500 w-3 h-3 rounded-full border-2 border-white"></div>
-                                        <p class="text-[10px] md:text-xs text-gray-500 ml-4 mb-0.5">Entrada (Turno 08:00)</p>
-                                        <p class="text-sm md:text-lg font-bold text-gray-800 ml-4">08:15 <span class="text-[10px] md:text-xs font-normal text-orange-500 ml-1 md:ml-2">+15m retraso</span></p>
-                                    </div>
-                                    <div class="relative">
-                                        <div class="absolute -left-[21px] bg-blue-400 w-3 h-3 rounded-full border-2 border-white"></div>
-                                        <p class="text-[10px] md:text-xs text-gray-500 ml-4 mb-0.5">Inicio Almuerzo</p>
-                                        <p class="text-xs md:text-sm font-bold text-gray-800 ml-4">12:30</p>
-                                    </div>
-                                    <div class="relative">
-                                        <div class="absolute -left-[21px] bg-blue-400 w-3 h-3 rounded-full border-2 border-white"></div>
-                                        <p class="text-[10px] md:text-xs text-gray-500 ml-4 mb-0.5">Fin Almuerzo</p>
-                                        <p class="text-xs md:text-sm font-bold text-gray-800 ml-4">13:35 <span class="text-[10px] md:text-xs font-normal text-orange-500 ml-1 md:ml-2">+5m exceso</span></p>
-                                    </div>
-                                    <div class="relative">
-                                        <div class="absolute -left-[21px] bg-red-500 w-3 h-3 rounded-full border-2 border-white shadow-[0_0_0_4px_rgba(239,68,68,0.2)] animate-pulse"></div>
-                                        <p class="text-[10px] md:text-xs text-red-500 font-bold ml-4 mb-0.5">Salida (Turno 16:00)</p>
-                                        <p class="text-xs md:text-sm font-bold text-red-600 ml-4">SIN MARCAJE</p>
-                                    </div>
-                                </div>
-
-                                <div class="border-t border-gray-100 pt-4">
-                                    <p class="text-xs md:text-sm font-bold text-gray-800 mb-2">Desglose de Penalización</p>
-                                    <div class="bg-orange-50 rounded p-2 md:p-3 text-xs md:text-sm space-y-1 text-gray-700 border border-orange-100">
-                                        <div class="flex justify-between"><span>Retraso al Ingreso:</span><span class="font-bold text-orange-600">15 min</span></div>
-                                        <div class="flex justify-between"><span>Exceso en Almuerzo:</span><span class="font-bold text-orange-600">5 min</span></div>
-                                        <div class="flex justify-between border-t border-orange-200 pt-1 mt-1"><span>Total Penalizable:</span><span class="font-bold text-red-600">20 min</span></div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="bg-gray-50 p-3 md:p-4 border-t border-gray-200 flex justify-between items-center gap-2">
-                                <button class="text-[10px] md:text-xs text-gray-500 hover:text-red-500 font-medium transition-colors"><i class="fas fa-trash-alt mr-1"></i>Anular</button>
-                                <button onclick="solicitarClaveAdmin()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded shadow text-[10px] md:text-sm font-medium transition-colors flex items-center">
-                                    <i class="fas fa-lock mr-1 md:mr-2 text-blue-200"></i>Editar / Justificar
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="flex justify-end space-x-2 md:space-x-3 mt-4 border-t border-gray-200 pt-4 md:pt-6 pb-6 md:pb-10">
-                        <button class="bg-white border border-gray-300 text-gray-700 px-3 md:px-4 py-1.5 md:py-2 rounded-lg hover:bg-gray-50 font-medium text-xs md:text-sm transition-colors flex items-center shadow-sm">
-                            <i class="fas fa-file-excel text-green-600 mr-1 md:mr-2 text-base md:text-lg"></i>Excel
-                        </button>
-                        <button class="bg-white border border-gray-300 text-gray-700 px-3 md:px-4 py-1.5 md:py-2 rounded-lg hover:bg-gray-50 font-medium text-xs md:text-sm transition-colors flex items-center shadow-sm">
-                            <i class="fas fa-file-pdf text-red-600 mr-1 md:mr-2 text-base md:text-lg"></i>PDF
-                        </button>
-                    </div>
-
+                    <h2 class="text-2xl font-bold text-gray-800 mb-2">Módulo de Asistencia</h2>
+                    <p class="text-gray-500 max-w-sm mx-auto text-sm">Busque o seleccione a un empleado desde el directorio para cargar sus métricas, reportes y calendario detallado.</p>
                 </div>
+
+                <!-- 🌟 2. CONTENIDO REAL (Oculto por defecto hasta que haces clic) -->
+                <div id="contenido-asistencia" class="hidden flex-col w-full">
+
+                    <!-- HEADER -->
+                    <header class="bg-white p-4 md:p-6 border-b border-gray-200 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 shrink-0 shadow-sm relative z-10">
+                        <div class="flex items-center space-x-3 md:space-x-4">
+                            <div id="header-foto" class="w-12 h-12 md:w-16 md:h-16 rounded-full border-2 border-white shadow-md bg-gray-200 overflow-hidden shrink-0 flex items-center justify-center">
+                                <i class="fas fa-user text-gray-400 text-2xl"></i>
+                            </div>
+                            <div>
+                                <h1 id="header-nombre" class="text-lg md:text-2xl font-bold text-gray-800 leading-tight">Cargando...</h1>
+                                <div class="flex flex-wrap items-center gap-2 mt-1 text-xs md:text-sm text-gray-500">
+                                    <span id="header-ci"><i class="fas fa-id-card mr-1"></i>---</span>
+                                    <span id="header-cargo" class="text-blue-600 font-medium"><i class="fas fa-briefcase mr-1"></i>---</span>
+                                    <span id="header-sucursal" class="text-gray-500 hidden sm:inline"><i class="fas fa-building mr-1"></i>---</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col sm:flex-row items-end sm:items-center gap-4 w-full xl:w-auto mt-2 xl:mt-0">
+                            <!-- EXPORTAR -->
+                            <div class="flex flex-col items-end border-r border-gray-200 pr-4 hidden sm:flex">
+                                <span class="text- font-bold text-gray-400 uppercase tracking-wider mb-1">Generar Reporte:</span>
+                                <div class="flex space-x-2">
+                                    <button class="bg-green-50 text-green-700 border border-green-200 px-3 py-1.5 rounded hover:bg-green-100 font-medium text-xs transition-colors flex items-center shadow-sm">
+                                        <i class="fas fa-file-excel mr-1.5"></i>Excel
+                                    </button>
+                                    <button class="bg-red-50 text-red-700 border border-red-200 px-3 py-1.5 rounded hover:bg-red-100 font-medium text-xs transition-colors flex items-center shadow-sm">
+                                        <i class="fas fa-file-pdf mr-1.5"></i>PDF
+                                    </button>
+                                </div>
+                            </div>
+                            <!-- TURNO -->
+                            <div class="bg-slate-800 text-white p-2 md:p-3 rounded-lg shadow-md w-full sm:w-auto text-left sm:text-right border border-slate-700">
+                                <p class="text- md:text-xs text-slate-400 uppercase tracking-wide font-bold mb-1">Turno Asignado</p>
+                                <div id="header-turno">
+                                    <p class="text-xs md:text-sm font-medium"><i class="fas fa-spinner fa-spin mr-1"></i>Cargando...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </header>
+
+                    <!-- CUERPO CENTRAL (KPIs + CALENDARIO) -->
+                    <div class="p-3 md:p-6 flex-1 flex flex-col gap-4 md:gap-6 w-full max-w- mx-auto">
+
+                        <!-- KPIs Limpios por defecto -->
+                        <div class="grid grid-cols-2 xl:grid-cols-4 gap-2 md:gap-4 shrink-0">
+                            <div class="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+                                <div><p class="text- md:text-xs text-gray-500 font-bold uppercase">Días Trab.</p><p id="kpi-dias" class="text-lg md:text-2xl font-black text-gray-800 mt-1">-</p></div>
+                                <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600"><i class="fas fa-calendar-check"></i></div>
+                            </div>
+                            <div class="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+                                <div><p class="text- md:text-xs text-gray-500 font-bold uppercase">Horas Lab.</p><p id="kpi-horas" class="text-lg md:text-2xl font-black text-gray-800 mt-1">-</p></div>
+                                <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600"><i class="fas fa-stopwatch"></i></div>
+                            </div>
+                            <div class="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+                                <div><p class="text- md:text-xs text-gray-500 font-bold uppercase">Retraso</p><p id="kpi-retraso" class="text-lg md:text-2xl font-black text-red-600 mt-1">-</p></div>
+                                <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600"><i class="fas fa-running"></i></div>
+                            </div>
+                            <div class="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+                                <div><p class="text- md:text-xs text-gray-500 font-bold uppercase">Deuda</p><p id="kpi-deuda" class="text-lg md:text-2xl font-black text-gray-800 mt-1">-</p></div>
+                                <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600"><i class="fas fa-file-invoice-dollar"></i></div>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col lg:flex-row gap-4 md:gap-6 items-start w-full relative">
+                            
+                            <div class="w-full lg:w-[65%] xl:w-[70%] bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col shrink-0">
+                                <div class="p-3 md:p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50 shrink-0">
+                                    <h3 class="text-base md:text-lg font-bold text-gray-800" id="mesAnioTexto">---</h3>
+                                    <div class="flex items-center space-x-2 md:space-x-3">
+                                        <input type="month" id="selectorMesRapido" onchange="irAMesEspecifico(this.value)" class="border border-gray-300 rounded px-2 md:px-3 py-1.5 text-xs md:text-sm text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer hover:bg-white transition-colors shadow-sm w-full sm:w-auto">
+                                        <div class="flex space-x-1 md:space-x-2">
+                                            <button onclick="cambiarMes(-1)" class="p-1.5 px-2 md:px-3 bg-white border border-gray-300 rounded hover:bg-gray-100 transition-colors"><i class="fas fa-chevron-left text-gray-600"></i></button>
+                                            <button onclick="cambiarMes(1)" class="p-1.5 px-2 md:px-3 bg-white border border-gray-300 rounded hover:bg-gray-100 transition-colors"><i class="fas fa-chevron-right text-gray-600"></i></button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="w-full overflow-x-auto">
+                                    <div class="min-w- grid grid-cols-7 gap-px bg-gray-200 flex-1" id="cuadriculaCalendario">
+                                        </div>
+                                </div>
+                            </div>
+
+                            <div id="panel-radiografia" class="w-full lg:w-[35%] xl:w-[30%] bg-white rounded-xl border border-gray-200 shadow-xl overflow-hidden sticky top-6 hidden z-20">
+                                <div class="bg-slate-800 p-3 md:p-4 text-white flex justify-between items-center border-b border-slate-900">
+                                    <div>
+                                        <p class="text-[10px] md:text-xs text-slate-300 uppercase tracking-wide">Detalle del Día</p>
+                                        <h4 class="text-base md:text-lg font-bold text-white" id="det-fecha">---</h4>
+                                    </div>
+                                    <span id="det-estado-badge" class="px-2 py-1 text-[10px] md:text-xs font-bold rounded shadow-sm bg-gray-500">---</span>
+                                </div>
+                                
+                                <div class="p-4 md:p-5 space-y-4">
+                                    
+                                    <div id="det-ausencia-container" class="hidden rounded p-3 text-xs md:text-sm space-y-1 shadow-sm">
+                                        <p class="font-bold border-b pb-1 mb-1" id="det-ausencia-titulo">Detalle</p>
+                                        <div class="flex justify-between"><span>Motivo:</span><span id="det-ausencia-motivo" class="font-medium text-right max-w-[65%] truncate">---</span></div>
+                                        <div class="flex justify-between"><span>Duración:</span><span id="det-ausencia-duracion" class="font-bold">---</span></div>
+                                    </div>
+
+                                    <div id="det-marcajes-container" class="relative border-l-2 border-gray-200 ml-3 space-y-4 md:space-y-5 pb-2">
+                                        <div class="relative">
+                                            <div class="absolute -left-[21px] bg-green-500 w-3 h-3 rounded-full border-2 border-white"></div>
+                                            <p class="text-[10px] md:text-xs text-gray-500 ml-4 mb-0.5">Entrada</p>
+                                            <p class="text-sm md:text-lg font-bold text-gray-800 ml-4" id="det-entrada">--:--</p>
+                                        </div>
+                                        <div class="relative">
+                                            <div class="absolute -left-[21px] bg-blue-400 w-3 h-3 rounded-full border-2 border-white"></div>
+                                            <p class="text-[10px] md:text-xs text-gray-500 ml-4 mb-0.5">Salida Almuerzo</p>
+                                            <p class="text-xs md:text-sm font-bold text-gray-800 ml-4" id="det-alm-ini">--:--</p>
+                                        </div>
+                                        <div class="relative">
+                                            <div class="absolute -left-[21px] bg-blue-400 w-3 h-3 rounded-full border-2 border-white"></div>
+                                            <p class="text-[10px] md:text-xs text-gray-500 ml-4 mb-0.5">Retorno Almuerzo</p>
+                                            <p class="text-xs md:text-sm font-bold text-gray-800 ml-4" id="det-alm-fin">--:--</p>
+                                        </div>
+                                        <div class="relative">
+                                            <div class="absolute -left-[21px] bg-red-500 w-3 h-3 rounded-full border-2 border-white"></div>
+                                            <p class="text-[10px] md:text-xs text-gray-500 ml-4 mb-0.5">Salida Final</p>
+                                            <p class="text-xs md:text-sm font-bold text-gray-800 ml-4" id="det-salida">--:--</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="border-t border-gray-100 pt-4">
+                                        <p class="text-xs md:text-sm font-bold text-gray-800 mb-2">Resumen Económico</p>
+                                        <div class="bg-gray-50 rounded p-2 md:p-3 text-xs md:text-sm space-y-1 text-gray-700 border border-gray-100">
+                                            <div class="flex justify-between"><span>Retraso:</span><span id="det-min-retraso" class="font-bold">-</span></div>
+                                            <div class="flex justify-between border-t border-gray-200 pt-1 mt-1"><span>Descuento:</span><span id="det-deuda" class="font-bold text-red-600">-</span></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
     </main>
@@ -267,44 +291,48 @@
         const API_URL = "https://asistencia-api.up.railway.app";
         const token_api = localStorage.getItem('token'); // Usamos token_api para no chocar con tu const 'token' si la hay
         
-        let listaEmpleadosGlobal = [];
+        let listaEmpleadosGlobal = new Array();
+        let turnosGlobal = new Array(); // ⚡ NUEVO: Guardaremos los turnos aquí
         let empleadoSeleccionadoId = null;
         let fechaVisualizada = new Date();
-        let filtroEstadoActual = 'activos'; // Estado por defecto para el filtro superior
+        let filtroEstadoActual = 'activos'; 
 
-        // --- 2. INICIO ---
         async function arrancarPantalla() {
             renderizarMenu('asistencia');
-            // Inicializar botones de filtro superior
             configurarBotonesFiltro();
-            await Promise.all([cargarCatalogos(), cargarEmpleados()]);
+            const promesasInicio = new Array(cargarCatalogos(), cargarEmpleados());
+            await Promise.all(promesasInicio);
         }
 
         function configurarBotonesFiltro() {
-            // Asignar el evento onclick a los botones del panel izquierdo
             const botones = document.querySelectorAll('.flex.bg-gray-200.p-1.rounded-lg button');
             if(botones.length >= 3) {
-                botones[0].onclick = () => cambiarFiltroEstado('activos', botones[0]);
-                botones[1].onclick = () => cambiarFiltroEstado('inactivos', botones[1]);
-                botones[2].onclick = () => cambiarFiltroEstado('todos', botones[2]);
+                botones.item(0).onclick = () => cambiarFiltroEstado('activos', botones.item(0));
+                botones.item(1).onclick = () => cambiarFiltroEstado('inactivos', botones.item(1));
+                botones.item(2).onclick = () => cambiarFiltroEstado('todos', botones.item(2));
             }
         }
 
         async function cargarCatalogos() {
             try {
-                const [resS, resSec] = await Promise.all([
+                // ⚡ AHORA TAMBIÉN DESCARGAMOS LOS TURNOS EXISTENTES
+                const promesas = new Array(
                     fetch(`${API_URL}/sucursales`, { headers: { 'Authorization': `Bearer ${token_api}` } }),
-                    fetch(`${API_URL}/secciones`, { headers: { 'Authorization': `Bearer ${token_api}` } })
-                ]);
-                const sucursales = await resS.json();
-                const secciones = await resSec.json();
-
+                    fetch(`${API_URL}/secciones`, { headers: { 'Authorization': `Bearer ${token_api}` } }),
+                    fetch(`${API_URL}/turnos`, { headers: { 'Authorization': `Bearer ${token_api}` } }) 
+                );
+                const res = await Promise.all(promesas);
+                
+                const sucursales = await res.at(0).json();
+                const secciones = await res.at(1).json();
+                turnosGlobal = await res.at(2).json(); // Guardamos los turnos en memoria
+                
                 const sSucursal = document.getElementById('filtro_sucursal');
                 const sSeccion = document.getElementById('filtro_seccion');
                 
                 sucursales.forEach(s => sSucursal.innerHTML += `<option value="${s.id}">${s.nombre}</option>`);
                 secciones.forEach(s => sSeccion.innerHTML += `<option value="${s.id}">${s.nombre}</option>`);
-            } catch (e) { console.error("Error catálogos", e); }
+            } catch (e) { console.error("Error catalogos", e); }
         }
 
         async function cargarEmpleados() {
@@ -313,24 +341,17 @@
                 listaEmpleadosGlobal = await res.json();
                 filtrarDirectorio();
                 
-                // Seleccionar al primero por defecto que coincida con el filtro actual
-                const filtrados = listaEmpleadosGlobal.filter(e => e.activo);
-                if (filtrados.length > 0) seleccionarEmpleado(filtrados[0].id);
+                // ⚡ ELIMINADO: Ya no auto-seleccionamos a nadie. 
+                // La pantalla quedará en su "Estado Vacío" esperando la acción del usuario.
             } catch (e) { console.error("Error empleados", e); }
         }
 
-        // --- 3. UI DIRECTORIO Y FILTROS INTEGRADADOS ---
-
         function cambiarFiltroEstado(nuevoEstado, botonPresionado) {
             filtroEstadoActual = nuevoEstado;
-            
-            // Actualizar UI de los botones
-            const botones = document.querySelectorAll('.flex.bg-gray-200.p-1.rounded-lg button');
-            botones.forEach(btn => {
-                btn.className = "flex-1 text-[10px] md:text-xs font-medium py-1.5 px-1 rounded-md text-gray-600 hover:text-gray-800 transition-colors truncate";
+            document.querySelectorAll('.flex.bg-gray-200.p-1.rounded-lg button').forEach(btn => {
+                btn.className = "flex-1 text- md:text-xs font-medium py-1.5 px-1 rounded-md text-gray-600 hover:text-gray-800 transition-colors truncate";
             });
-            botonPresionado.className = "flex-1 text-[10px] md:text-xs font-bold py-1.5 px-1 rounded-md bg-white shadow-sm text-blue-600 truncate";
-
+            botonPresionado.className = "flex-1 text- md:text-xs font-bold py-1.5 px-1 rounded-md bg-white shadow-sm text-blue-600 truncate";
             filtrarDirectorio();
         }
 
@@ -341,106 +362,147 @@
             const contenedor = document.getElementById('listaEmpleados');
             
             const filtrados = listaEmpleadosGlobal.filter(e => {
-                // 1. Filtro de Estado (Botones superiores)
                 if (filtroEstadoActual === 'activos' && !e.activo) return false;
                 if (filtroEstadoActual === 'inactivos' && e.activo) return false;
-
-                // 2. Filtros Desplegables
-                if (sucursal && e.sucursal_id != sucursal) return false;
-                if (seccion && e.seccion_id != seccion) return false;
-
-                // 3. Buscador de Texto (Ahora incluye bio_id)
-                const matchTexto = `${e.nombres} ${e.apellidos} ${e.ci} ${e.bio_id || ''}`.toLowerCase().includes(buscador);
-                return matchTexto;
+                if (sucursal && String(e.sucursal_id) !== String(sucursal)) return false;
+                if (seccion && String(e.seccion_id) !== String(seccion)) return false;
+                return `${e.nombres} ${e.apellidos} ${e.ci} ${e.bio_id || ''}`.toLowerCase().includes(buscador);
             });
 
             contenedor.innerHTML = '';
-
             if (filtrados.length === 0) {
-                contenedor.innerHTML = '<div class="p-8 text-center text-gray-500"><i class="fas fa-search mb-2"></i><p class="text-xs">No se encontraron resultados</p></div>';
+                contenedor.innerHTML = '<div class="p-8 text-center text-gray-500"><i class="fas fa-search mb-2"></i><p class="text-xs">No hay resultados</p></div>';
                 return;
             }
 
             filtrados.forEach(emp => {
-                const iniciales = (emp.nombres[0] + emp.apellidos[0]).toUpperCase();
+                const iniciales = (emp.nombres.charAt(0) + emp.apellidos.charAt(0)).toUpperCase();
                 const img = emp.foto_perfil ? `<img src="${emp.foto_perfil}" class="w-full h-full object-cover">` : `<div class="w-full h-full flex items-center justify-center bg-slate-800 text-white font-bold text-xs">${iniciales}</div>`;
                 
-                // Marcador visual si está inactivo
-                const badgeInactivo = !emp.activo ? `<span class="ml-2 px-1.5 py-0.5 text-[8px] bg-red-100 text-red-600 rounded font-bold">INACTIVO</span>` : '';
-
+                // 🌟 DISEÑO UX: Lógica de colores para el estado
+                const colorEstado = emp.activo ? 'bg-green-500' : 'bg-red-500';
+                const tituloEstado = emp.activo ? 'Activo' : 'Inactivo';
+                const badgeInactivo = !emp.activo ? `<span class="ml-2 px-1.5 py-0.5 text- bg-red-100 text-red-600 rounded font-bold">INACTIVO</span>` : '';
+                
                 contenedor.innerHTML += `
                     <div onclick="seleccionarEmpleado(${emp.id})" id="item-emp-${emp.id}" class="p-3 border-b border-gray-100 hover:bg-blue-50 cursor-pointer flex items-center transition-colors border-l-4 border-transparent emp-item">
-                        <div class="w-10 h-10 rounded-full bg-gray-200 overflow-hidden mr-3 shrink-0">${img}</div>
+                        
+                        <!-- Contenedor del Avatar con el Indicador de Estado estilo Slack -->
+                        <div class="relative w-10 h-10 mr-3 shrink-0">
+                            <div class="w-full h-full rounded-full bg-gray-200 overflow-hidden border border-gray-300">
+                                ${img}
+                            </div>
+                            <span class="absolute bottom-0 right-0 w-3 h-3 border-2 border-white rounded-full ${colorEstado}" title="${tituloEstado}"></span>
+                        </div>
+
                         <div class="truncate flex-1">
                             <div class="flex items-center">
                                 <p class="text-sm font-bold text-gray-800 truncate">${emp.nombres} ${emp.apellidos}</p>
                                 ${badgeInactivo}
                             </div>
-                            <!-- ⚡ AHORA EL BIO_ID ES VISIBLE JUNTO AL C.I. -->
-                            <p class="text-[10px] text-gray-500"><span class="font-bold text-blue-600">Bio: ${emp.bio_id || '-'}</span> | CI: ${emp.ci}</p>
+                            <!-- Reemplazo de 'Bio:' por 'ID:' -->
+                            <p class="text-xs text-gray-500"><span class="font-bold text-blue-600">ID: ${emp.bio_id || '-'}</span> | CI: ${emp.ci}</p>
                         </div>
                     </div>
                 `;
             });
         }
 
-        // --- 4. SELECCIÓN Y ASISTENCIA ---
         async function seleccionarEmpleado(id) {
             empleadoSeleccionadoId = id;
             const emp = listaEmpleadosGlobal.find(e => e.id === id);
-            
             if (!emp) return;
 
-            // UI Selección
+            // 🌟 MAGIA UI: Ocultamos el mensaje gigante y revelamos el contenido de asistencia
+            document.getElementById('estado-vacio-global').classList.add('hidden');
+            document.getElementById('contenido-asistencia').classList.remove('hidden');
+            document.getElementById('contenido-asistencia').classList.add('flex'); // Lo activamos como Flexbox
+            
+            // 🌟 Aseguramos que el "Detalle del Día" derecho permanezca oculto hasta hacer clic en el calendario
+            document.getElementById('panel-radiografia').classList.add('hidden');
+
             document.querySelectorAll('.emp-item').forEach(i => i.classList.remove('bg-blue-50', 'border-blue-600'));
             const actual = document.getElementById(`item-emp-${id}`);
             if(actual) actual.classList.add('bg-blue-50', 'border-blue-600');
 
-            // Header (Sincronizado milimétricamente con los IDs del HTML)
             document.getElementById('header-nombre').textContent = `${emp.nombres} ${emp.apellidos}`;
             document.getElementById('header-ci').innerHTML = `<i class="fas fa-id-card mr-1"></i>CI: ${emp.ci}`;
             document.getElementById('header-cargo').innerHTML = `<i class="fas fa-briefcase mr-1"></i>${emp.cargo || 'Sin cargo'}`;
             document.getElementById('header-sucursal').innerHTML = `<i class="fas fa-building mr-1"></i>${emp.sucursal_nombre || 'Sin Sucursal'}`;
-            document.getElementById('header-turno').innerHTML = `<i class="fas fa-clock mr-1 text-blue-400"></i>${emp.turno_nombre || 'No asignado'}`;
             
-            const iniciales = (emp.nombres[0] + emp.apellidos[0]).toUpperCase();
-            document.getElementById('header-foto').innerHTML = emp.foto_perfil 
-                ? `<img src="${emp.foto_perfil}" class="w-full h-full object-cover">` 
-                : `<div class="w-full h-full flex items-center justify-center bg-slate-800 text-white font-bold text-xl">${iniciales}</div>`;
+            const turnoEmp = turnosGlobal.find(t => t.id === emp.turno_id);
+            let turnoDetalleHTML = `<p class="text-xs md:text-sm font-medium"><i class="fas fa-clock mr-1 text-gray-400"></i>No asignado</p>`;
+            if (turnoEmp) {
+                const hIngreso = String(turnoEmp.hora_ingreso).substring(0,5);
+                const hSalida = String(turnoEmp.hora_salida).substring(0,5);
+                const txtAlmuerzo = turnoEmp.almuerzo ? `Incluye ${turnoEmp.almuerzo_min}m Almuerzo` : 'Sin horario de almuerzo';
+                
+                turnoDetalleHTML = `
+                    <p class="text-xs md:text-sm font-medium mb-1"><i class="fas fa-clock mr-1 text-blue-400"></i>${turnoEmp.nombre} (${hIngreso} - ${hSalida})</p>
+                    <p class="text- md:text-xs text-orange-300 font-normal"><i class="fas fa-utensils mr-1"></i>${txtAlmuerzo}</p>
+                `;
+            }
+            document.getElementById('header-turno').innerHTML = turnoDetalleHTML;
 
-            // Ocultar panel en móvil si se selecciona
+            const iniciales = (emp.nombres.charAt(0) + emp.apellidos.charAt(0)).toUpperCase();
+            document.getElementById('header-foto').innerHTML = emp.foto_perfil ? `<img src="${emp.foto_perfil}" class="w-full h-full object-cover">` : `<div class="w-full h-full flex items-center justify-center bg-slate-800 text-white font-bold text-xl">${iniciales}</div>`;
+
             if (window.innerWidth < 1024) {
-                const dir = document.getElementById('panel-directorio');
-                if (dir) dir.classList.add('!h-0', '!opacity-0');
+                const panelDirect = document.getElementById('panel-directorio');
+                if(panelDirect) panelDirect.classList.add('!h-0', '!opacity-0');
             }
 
-            await cargarCalendario();
+            await cargarCalendario(turnoEmp);
         }
 
-        async function cargarCalendario() {
+        async function cargarCalendario(turnoEmpleado) {
             if (!empleadoSeleccionadoId) return;
             const anio = fechaVisualizada.getFullYear();
             const mes = fechaVisualizada.getMonth() + 1;
             
+            // ⚡ ESTADO DE CARGA PARA LA TABLA Y KPIs
+            document.getElementById('kpi-dias').innerHTML = '<i class="fas fa-spinner fa-spin text-gray-300"></i>';
+            document.getElementById('kpi-horas').innerHTML = '<i class="fas fa-spinner fa-spin text-gray-300"></i>';
+            document.getElementById('kpi-retraso').innerHTML = '<i class="fas fa-spinner fa-spin text-gray-300"></i>';
+            document.getElementById('kpi-deuda').innerHTML = '<i class="fas fa-spinner fa-spin text-gray-300"></i>';
+            
+            const cuadricula = document.getElementById('cuadriculaCalendario');
+            cuadricula.innerHTML = `
+                <div class="col-span-7 p-16 flex flex-col items-center justify-center text-blue-500 bg-white">
+                    <i class="fas fa-circle-notch fa-spin text-4xl mb-3"></i>
+                    <p class="text-sm font-bold text-gray-500">Calculando asistencia mensual...</p>
+                </div>
+            `;
+
             try {
-                const res = await fetch(`${API_URL}/empleados/${empleadoSeleccionadoId}/asistencia/${anio}/${mes}`, {
-                    headers: { 'Authorization': `Bearer ${token_api}` }
-                });
-                const data = await res.json();
+                const promesasDatos = new Array(
+                    fetch(`${API_URL}/empleados/${empleadoSeleccionadoId}/asistencia/${anio}/${mes}`, { headers: { 'Authorization': `Bearer ${token_api}` } }),
+                    fetch(`${API_URL}/empleados/${empleadoSeleccionadoId}/ausencias`, { headers: { 'Authorization': `Bearer ${token_api}` } })
+                );
+                
+                const res = await Promise.all(promesasDatos);
+                const dataAsistencia = await res.at(0).json();
+                const listaAusencias = await res.at(1).json(); 
 
-                // KPIs
-                document.getElementById('kpi-dias').textContent = data.kpis.dias_trabajados;
-                document.getElementById('kpi-horas').textContent = data.kpis.total_horas;
-                document.getElementById('kpi-retraso').textContent = `${data.kpis.retraso_total_min} min`;
-                document.getElementById('kpi-deuda').textContent = `Bs. ${data.kpis.deuda_total.toFixed(2)}`;
+                document.getElementById('kpi-dias').textContent = dataAsistencia.kpis.dias_trabajados;
+                document.getElementById('kpi-horas').textContent = dataAsistencia.kpis.total_horas;
+                document.getElementById('kpi-retraso').textContent = `${dataAsistencia.kpis.retraso_total_min} min`;
+                document.getElementById('kpi-deuda').textContent = `Bs. ${Number(dataAsistencia.kpis.deuda_total).toFixed(2)}`;
 
-                renderizarDias(anio, mes, data.dias);
-            } catch (e) { console.error("Error asistencia", e); }
+                renderizarDias(anio, mes, dataAsistencia.dias, turnoEmpleado ? turnoEmpleado.dias : null, listaAusencias);
+            } catch (e) { 
+                console.error("Error asistencia", e); 
+                cuadricula.innerHTML = '<div class="col-span-7 p-10 text-center text-red-500 font-bold">Error al cargar datos del servidor</div>';
+            }
         }
 
-        function renderizarDias(anio, mes, diasBD) {
-            const meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
-            document.getElementById('mesAnioTexto').textContent = `${meses[mes-1]} ${anio}`;
+        function renderizarDias(anio, mes, diasBD, diasLaboralesJSON, ausencias) {
+            const nombresMeses = new Array("Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre");
+            document.getElementById('mesAnioTexto').textContent = `${nombresMeses.at(mes - 1)} ${anio}`;
+            
+            const mesFormateado = String(mes).padStart(2, '0');
+            const selectorMes = document.getElementById('selectorMesRapido');
+            if (selectorMes) selectorMes.value = `${anio}-${mesFormateado}`;
 
             const cuadricula = document.getElementById('cuadriculaCalendario');
             cuadricula.innerHTML = '<div class="cal-header">Lun</div><div class="cal-header">Mar</div><div class="cal-header">Mié</div><div class="cal-header">Jue</div><div class="cal-header">Vie</div><div class="cal-header">Sáb</div><div class="cal-header">Dom</div>';
@@ -451,53 +513,188 @@
 
             for(let i=0; i<vacios; i++) cuadricula.innerHTML += '<div class="cal-day empty"></div>';
 
-            const mapa = {};
-            diasBD.forEach(d => mapa[d.fecha] = d);
+            const mapaDatos = new Map();
+            if (diasBD && Array.isArray(diasBD)) diasBD.forEach(d => mapaDatos.set(d.fecha, d));
+
+            const mapaDiasLetras = new Map();
+            mapaDiasLetras.set(1, 'L'); mapaDiasLetras.set(2, 'M'); mapaDiasLetras.set(3, 'X');
+            mapaDiasLetras.set(4, 'J'); mapaDiasLetras.set(5, 'V'); mapaDiasLetras.set(6, 'S'); mapaDiasLetras.set(0, 'D');
+
+            const hoy = new Date();
+            hoy.setHours(0,0,0,0);
 
             for(let d=1; d<=totalDias; d++) {
-                const fecha = `${anio}-${String(mes).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                const datos = mapa[fecha];
+                const fechaActualLoop = new Date(anio, mes - 1, d);
+                const fechaStr = `${anio}-${String(mes).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                const letraDia = mapaDiasLetras.get(fechaActualLoop.getDay());
+                
+                const datos = mapaDatos.get(fechaStr);
+                
+                let ausenciaActiva = null;
+                if (ausencias && Array.isArray(ausencias)) {
+                    ausenciaActiva = ausencias.find(a => a.estado === 'aprobado' && fechaStr >= String(a.fecha_inicio).substring(0,10) && fechaStr <= String(a.fecha_fin).substring(0,10));
+                }
+
+                let esDiaLaboral = false;
+                if (diasLaboralesJSON && typeof diasLaboralesJSON === 'object') {
+                    esDiaLaboral = Reflect.get(diasLaboralesJSON, letraDia) === true;
+                }
+
                 let clases = "estado-futuro";
                 let htmlInner = `<span class="text-xs font-bold text-gray-700">${d}</span>`;
 
-                if(datos) {
-                    if(datos.estado === 'Puntual') clases = "estado-puntual";
-                    if(datos.estado === 'Tarde') clases = "estado-tarde";
-                    if(datos.estado === 'Falta') clases = "estado-falta";
-                    if(datos.estado === 'Vacacion') clases = "estado-vacacion";
-                    
-                    htmlInner += `<div class="text-[9px] mt-1 font-bold">${datos.estado === 'Puntual' ? 'Puntual' : (datos.estado === 'Tarde' ? 'Retraso' : datos.estado)}</div>`;
+                if (datos) {
+                    if(datos.estado === 'Puntual') {
+                        clases = "estado-puntual";
+                        htmlInner += `<div class="text-xs mt-1"><p class="text-green-700 font-semibold"><i class="fas fa-check-circle mr-1"></i>Puntual</p><p class="text-gray-500">${datos.horas_trabajadas} hrs</p></div>`;
+                    } else if(datos.estado === 'Tarde') {
+                        clases = "estado-tarde";
+                        htmlInner += `<div class="text-xs mt-1"><p class="text-orange-600 font-semibold"><i class="fas fa-exclamation-triangle mr-1"></i>Tarde ${datos.minutos_retraso_entrada}m</p><p class="text-gray-500">Desc: Bs.${datos.deuda_generada_bs}</p></div>`;
+                    } else if(datos.estado === 'Falta') {
+                        clases = "estado-falta";
+                        htmlInner += `<div class="text-xs mt-1"><p class="text-red-600 font-bold uppercase mt-1">Falta</p></div>`;
+                    }
+                } else if (ausenciaActiva) {
+                    clases = ausenciaActiva.tipo === 'vacacion' ? "estado-vacacion text-center justify-center relative" : "estado-permiso text-center justify-center relative";
+                    const icono = ausenciaActiva.tipo === 'vacacion' ? 'fa-umbrella-beach text-blue-400' : 'fa-user-md text-yellow-500';
+                    const textColor = ausenciaActiva.tipo === 'vacacion' ? 'text-blue-700' : 'text-yellow-700';
+                    htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-1 md:top-2 left-1 md:left-2">${d}</span>
+                                 <i class="fas ${icono} text-xl md:text-2xl opacity-50 mb-1"></i>
+                                 <p class="text-xs md:text-xs ${textColor} font-bold uppercase mt-1 md:mt-2">${ausenciaActiva.tipo}</p>`;
+                } else if (!esDiaLaboral && diasLaboralesJSON && Object.keys(diasLaboralesJSON).length > 0) {
+                    clases = "estado-inhabiles";
+                    htmlInner = `<span class="text-xs font-bold text-gray-400">${d}</span>`;
+                } else if (fechaActualLoop < hoy) {
+                    clases = "estado-falta";
+                    htmlInner += `<div class="text-xs mt-1"><p class="text-red-600 font-bold uppercase mt-1">Falta</p><p class="text-red-400">Sin registro</p></div>`;
                 }
 
                 const div = document.createElement('div');
                 div.className = `cal-day ${clases}`;
                 div.innerHTML = htmlInner;
-                if(datos) div.onclick = () => verDetalleDia(datos);
+
+                // 🌟 MAGIA UX: Adjuntar datos completos del permiso/vacación al hacer clic
+                let datosClick = datos ? Object.assign({}, datos) : null;
+                
+                if (!datosClick) {
+                    let estadoSintetico = 'Sin marcaje';
+                    if (ausenciaActiva) estadoSintetico = ausenciaActiva.tipo;
+                    else if (fechaActualLoop < hoy && esDiaLaboral) estadoSintetico = 'Falta';
+                    
+                    datosClick = {
+                        fecha: fechaStr,
+                        estado: estadoSintetico,
+                        minutos_retraso_entrada: 0,
+                        deuda_generada_bs: '0.00'
+                    };
+                }
+
+                // Le guardamos el detalle completo en el bolsillo
+                if (ausenciaActiva) datosClick.ausencia_detalle = ausenciaActiva;
+
+                if (clases !== "estado-inhabiles" && clases !== "estado-futuro") {
+                    div.onclick = () => verDetalleDia(datosClick);
+                    div.classList.add("cursor-pointer", "hover:ring-2", "hover:ring-blue-400", "transition-all");
+                } else {
+                    div.classList.remove("cursor-pointer");
+                }
+
                 cuadricula.appendChild(div);
             }
         }
 
         function verDetalleDia(d) {
-            document.getElementById('panel-radiografia').classList.remove('hidden');
+            const panel = document.getElementById('panel-radiografia');
+            panel.classList.remove('hidden', 'animate-emerger');
+            void panel.offsetWidth; 
+            panel.classList.add('animate-emerger');
+            
             document.getElementById('det-fecha').textContent = d.fecha;
-            document.getElementById('det-entrada').textContent = d.hora_entrada || '--:--';
-            document.getElementById('det-alm-ini').textContent = d.hora_inicio_almuerzo || '--:--';
-            document.getElementById('det-alm-fin').textContent = d.hora_fin_almuerzo || '--:--';
-            document.getElementById('det-salida').textContent = d.hora_salida || '--:--';
-            document.getElementById('det-min-retraso').textContent = `${d.minutos_retraso_entrada} min`;
-            document.getElementById('det-deuda').textContent = `Bs. ${d.deuda_generated_bs || d.deuda_generada_bs || '0.00'}`;
             
             const badge = document.getElementById('det-estado-badge');
-            badge.textContent = d.estado.toUpperCase();
-            badge.className = `px-2 py-1 text-[10px] font-bold rounded shadow-sm ${d.estado === 'Puntual' ? 'bg-green-500 text-white' : 'bg-orange-500 text-white'}`;
+            const estadoTexto = d.estado ? String(d.estado).toUpperCase() : 'SIN DATOS';
+            badge.textContent = estadoTexto;
+            
+            // 🌟 1. CORRECCIÓN DE COLORES EXACTOS
+            badge.className = "px-2 py-1 text-xs font-bold rounded shadow-sm text-white";
+            if (estadoTexto === 'PUNTUAL') badge.classList.add('bg-green-500');
+            else if (estadoTexto === 'VACACION') badge.classList.add('bg-blue-500');
+            else if (estadoTexto === 'PERMISO') badge.classList.add('bg-yellow-500'); // ⚡ Amarillo para Permisos
+            else if (estadoTexto === 'TARDE') badge.classList.add('bg-orange-500');
+            else badge.classList.add('bg-red-500'); 
+
+            // 🌟 2. INYECCIÓN DEL DETALLE DE AUSENCIA (Motivos y Horas)
+            const contAusencia = document.getElementById('det-ausencia-container');
+            const contMarcajes = document.getElementById('det-marcajes-container');
+            
+            if (d.ausencia_detalle) {
+                contAusencia.classList.remove('hidden');
+                
+                // Darle color a la caja según el tipo
+                if (d.ausencia_detalle.tipo === 'vacacion') {
+                    contAusencia.className = "rounded p-3 text-xs md:text-sm space-y-1 mb-4 shadow-sm bg-blue-50 border border-blue-200 text-blue-800";
+                    document.getElementById('det-ausencia-titulo').innerHTML = '<i class="fas fa-umbrella-beach mr-1"></i> Detalle de Vacación';
+                } else {
+                    contAusencia.className = "rounded p-3 text-xs md:text-sm space-y-1 mb-4 shadow-sm bg-yellow-50 border border-yellow-200 text-yellow-800";
+                    document.getElementById('det-ausencia-titulo').innerHTML = '<i class="fas fa-user-md mr-1"></i> Detalle de Permiso';
+                }
+
+                // Inyectamos el motivo real que escribió RRHH
+                document.getElementById('det-ausencia-motivo').textContent = d.ausencia_detalle.motivo || 'Sin comentarios registrados';
+                document.getElementById('det-ausencia-motivo').title = d.ausencia_detalle.motivo || ''; // Por si es muy largo, se ve al pasar el mouse
+                
+                // Formateo de las horas (Día Completo vs Por Horas)
+                let textoDuracion = 'Día Completo (8 hrs)';
+                if (d.ausencia_detalle.hora_inicio && d.ausencia_detalle.hora_fin) {
+                    textoDuracion = `${String(d.ausencia_detalle.hora_inicio).substring(0,5)} a ${String(d.ausencia_detalle.hora_fin).substring(0,5)} (${d.ausencia_detalle.horas_totales} hrs)`;
+                }
+                document.getElementById('det-ausencia-duracion').textContent = textoDuracion;
+
+                // ⚡ LÓGICA DE INTERFAZ: Ocultar marcajes si es todo el día y no marcó huella
+                if (textoDuracion.includes('Día Completo') && (!d.hora_entrada && !d.hora_salida)) {
+                    contMarcajes.classList.add('hidden');
+                } else {
+                    contMarcajes.classList.remove('hidden');
+                }
+            } else {
+                // Si es un día normal, apagamos la caja de ausencias
+                contAusencia.classList.add('hidden');
+                contMarcajes.classList.remove('hidden');
+            }
+
+            // 3. INYECCIÓN DE HORAS DE MARCAJE Y DEUDAS
+            document.getElementById('det-entrada').textContent = d.hora_entrada ? String(d.hora_entrada).substring(0,5) : '--:--';
+            document.getElementById('det-alm-ini').textContent = d.hora_inicio_almuerzo ? String(d.hora_inicio_almuerzo).substring(0,5) : '--:--';
+            document.getElementById('det-alm-fin').textContent = d.hora_fin_almuerzo ? String(d.hora_fin_almuerzo).substring(0,5) : '--:--';
+            document.getElementById('det-salida').textContent = d.hora_salida ? String(d.hora_salida).substring(0,5) : '--:--';
+            
+            document.getElementById('det-min-retraso').textContent = `${d.minutos_retraso_entrada || 0} min`;
+            document.getElementById('det-deuda').textContent = `Bs. ${Number(d.deuda_generada_bs || 0).toFixed(2)}`;
         }
 
         function cambiarMes(dir) {
             fechaVisualizada.setMonth(fechaVisualizada.getMonth() + dir);
-            cargarCalendario();
+            cargarCalendario( turnosGlobal.find(t => t.id === empleadoSeleccionadoId) );
         }
 
-        // Smart Scroll
+        // 🌟 NUEVA FUNCIÓN: Salto en el tiempo exacto
+        function irAMesEspecifico(valorYyyyMm) {
+            if(!valorYyyyMm) return; // Si el usuario cancela, no hacemos nada
+            
+            // Separamos el "2024-05" en Año y Mes
+            const partes = String(valorYyyyMm).split('-');
+            const anio = parseInt(partes.at(0));
+            const mes = parseInt(partes.at(1)) - 1; // JS cuenta los meses del 0 al 11
+            
+            // Actualizamos la variable global del reloj
+            fechaVisualizada.setFullYear(anio);
+            fechaVisualizada.setMonth(mes);
+            
+            // Disparamos la recarga del calendario
+            const turnoEmp = turnosGlobal.find(t => t.id === empleadoSeleccionadoId);
+            cargarCalendario(turnoEmp);
+        }
+
         document.getElementById('panel-derecho').addEventListener('scroll', function() {
             if(window.innerWidth >= 1024) return;
             const dir = document.getElementById('panel-directorio');
@@ -505,7 +702,13 @@
             else dir.classList.remove('!h-0', '!opacity-0');
         });
 
+        async function solicitarClaveAdmin() {
+            const password = await pedirClave("Ingrese la contraseña de Administrador para modificar el historial.");
+            if (password) mostrarExito("Desbloqueado con éxito. Modo edición activado.");
+        }
+
         arrancarPantalla();
+    </script>
     </script>
 </body>
 </html>

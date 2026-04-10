@@ -707,12 +707,16 @@ async def obtener_empleados(usuario = Depends(verificar_token)):
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        # ⚡ MAGIA ENTERPRISE: Agregamos una subconsulta para saber el estado EXACTO de HOY
+        # ⚡ AHORA TRAEMOS HORA_INGRESO, HORA_SALIDA Y ALMUERZO DEL TURNO
         cur.execute(f"""
             SELECT e.*, 
                    s.nombre as sucursal_nombre, 
                    sec.nombre as seccion_nombre,
                    t.nombre as turno_nombre,
+                   t.hora_ingreso as turno_ingreso,
+                   t.hora_salida as turno_salida,
+                   t.almuerzo as turno_almuerzo,
+                   t.almuerzo_min as turno_almuerzo_min,
                    (SELECT tipo 
                     FROM {schema}.ausencias a 
                     WHERE a.empleado_id = e.id 
@@ -728,6 +732,10 @@ async def obtener_empleados(usuario = Depends(verificar_token)):
             ORDER BY e.id ASC
         """)
         empleados = cur.fetchall()
+        # Convertimos las horas a string para evitar errores JSON
+        for emp in empleados:
+            if emp: emp = str(emp)
+            if emp: emp = str(emp)
         return empleados
     finally:
         cur.close()
@@ -1504,49 +1512,49 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        # 1. Traer todos los días calculados de ese mes específico
-        cur.execute(f"""
-            SELECT * FROM {schema}.asistencia_diaria 
-            WHERE empleado_id = %s 
-              AND EXTRACT(YEAR FROM fecha) = %s 
-              AND EXTRACT(MONTH FROM fecha) = %s
-            ORDER BY fecha ASC
-        """, (empleado_id, anio, mes))
+        # 1. Traer todos los días calculados (Sin cambios)
+        cur.execute(f"SELECT * FROM {schema}.asistencia_diaria WHERE empleado_id = %s AND EXTRACT(YEAR FROM fecha) = %s AND EXTRACT(MONTH FROM fecha) = %s ORDER BY fecha ASC", (empleado_id, anio, mes))
         dias_procesados = cur.fetchall()
-
-        # Convertir campos de tiempo (TIME/DATE) a strings para que el JSON no se rompa
         for dia in dias_procesados:
-            dia['fecha'] = str(dia['fecha'])
-            dia['hora_entrada'] = str(dia['hora_entrada']) if dia['hora_entrada'] else None
-            dia['hora_inicio_almuerzo'] = str(dia['hora_inicio_almuerzo']) if dia['hora_inicio_almuerzo'] else None
-            dia['hora_fin_almuerzo'] = str(dia['hora_fin_almuerzo']) if dia['hora_fin_almuerzo'] else None
-            dia['hora_salida'] = str(dia['hora_salida']) if dia['hora_salida'] else None
-            dia['horas_trabajadas'] = float(dia['horas_trabajadas'] or 0)
-            dia['deuda_generada_bs'] = float(dia['deuda_generada_bs'] or 0)
+            dia = str(dia)
+            dia = str(dia) if dia else None
+            dia = str(dia) if dia else None
+            dia = str(dia) if dia else None
+            dia = str(dia) if dia else None
+            dia = float(dia or 0)
+            dia = float(dia or 0)
 
-        # 2. Calcular los KPIs para las tarjetas de la parte superior
-        cur.execute(f"""
-            SELECT 
-                COUNT(id) as dias_trabajados,
-                SUM(horas_trabajadas) as total_horas,
-                SUM(minutos_retraso_entrada + minutos_exceso_almuerzo) as retraso_total_min,
-                SUM(deuda_generada_bs) as deuda_total
-            FROM {schema}.asistencia_diaria
-            WHERE empleado_id = %s AND EXTRACT(YEAR FROM fecha) = %s AND EXTRACT(MONTH FROM fecha) = %s
-        """, (empleado_id, anio, mes))
+        # 2. Calcular KPIs (Sin cambios)
+        cur.execute(f"SELECT COUNT(id) as dias_trabajados, SUM(horas_trabajadas) as total_horas, SUM(minutos_retraso_entrada + minutos_exceso_almuerzo) as retraso_total_min, SUM(deuda_generada_bs) as deuda_total FROM {schema}.asistencia_diaria WHERE empleado_id = %s AND EXTRACT(YEAR FROM fecha) = %s AND EXTRACT(MONTH FROM fecha) = %s", (empleado_id, anio, mes))
         kpis = cur.fetchone()
+        kpis = {"dias_trabajados": kpis or 0, "total_horas": float(kpis or 0), "retraso_total_min": int(kpis or 0), "deuda_total": float(kpis or 0)}
 
-        # Limpieza de valores nulos en KPIs
-        kpis = {
-            "dias_trabajados": kpis["dias_trabajados"] or 0,
-            "total_horas": float(kpis["total_horas"] or 0),
-            "retraso_total_min": int(kpis["retraso_total_min"] or 0),
-            "deuda_total": float(kpis["deuda_total"] or 0)
-        }
+        # ⚡ 3. TRAER DÍAS LABORALES DEL TURNO (Para pintar fines de semana de gris)
+        cur.execute(f"SELECT t.dias FROM {schema}.empleados e LEFT JOIN {schema}.turnos t ON e.turno_id = t.id WHERE e.id = %s", (empleado_id,))
+        turno_data = cur.fetchone()
+        dias_laborales = turno_data if turno_data and turno_data else {}
 
+        # ⚡ 4. TRAER AUSENCIAS DEL MES (Vacaciones, Permisos, Bajas médicas)
+        cur.execute(f"""
+            SELECT tipo, fecha_inicio, fecha_fin, estado 
+            FROM {schema}.ausencias 
+            WHERE empleado_id = %s AND eliminado = FALSE AND estado = 'aprobado'
+            AND (
+                (EXTRACT(YEAR FROM fecha_inicio) = %s AND EXTRACT(MONTH FROM fecha_inicio) = %s)
+                OR (EXTRACT(YEAR FROM fecha_fin) = %s AND EXTRACT(MONTH FROM fecha_fin) = %s)
+            )
+        """, (empleado_id, anio, mes, anio, mes))
+        ausencias = cur.fetchall()
+        for a in ausencias:
+            a = str(a)
+            a = str(a)
+
+        # Enviamos el paquete completo al Frontend
         return {
-            "dias": dias_procesados,
-            "kpis": kpis
+            "dias": dias_procesados, 
+            "kpis": kpis, 
+            "dias_laborales": dias_laborales, 
+            "ausencias": ausencias
         }
     finally:
         cur.close()
