@@ -1526,9 +1526,15 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
 
         # 2. Calcular KPIs (Sin cambios)
         cur.execute(f"SELECT COUNT(id) as dias_trabajados, SUM(horas_trabajadas) as total_horas, SUM(minutos_retraso_entrada + minutos_exceso_almuerzo) as retraso_total_min, SUM(deuda_generada_bs) as deuda_total FROM {schema}.asistencia_diaria WHERE empleado_id = %s AND EXTRACT(YEAR FROM fecha) = %s AND EXTRACT(MONTH FROM fecha) = %s", (empleado_id, anio, mes))
-        kpis = cur.fetchone()
-        kpis = {"dias_trabajados": kpis or 0, "total_horas": float(kpis or 0), "retraso_total_min": int(kpis or 0), "deuda_total": float(kpis or 0)}
-
+        kpis_raw = cur.fetchone()
+        
+        kpis = {
+            "dias_trabajados": kpis_raw.get("dias_trabajados") or 0 if kpis_raw else 0,
+            "total_horas": float(kpis_raw.get("total_horas") or 0) if kpis_raw else 0.0,
+            "retraso_total_min": int(kpis_raw.get("retraso_total_min") or 0) if kpis_raw else 0,
+            "deuda_total": float(kpis_raw.get("deuda_total") or 0) if kpis_raw else 0.0
+        }
+        
         # ⚡ 3. TRAER DÍAS LABORALES DEL TURNO (Para pintar fines de semana de gris)
         cur.execute(f"SELECT t.dias FROM {schema}.empleados e LEFT JOIN {schema}.turnos t ON e.turno_id = t.id WHERE e.id = %s", (empleado_id,))
         turno_data = cur.fetchone()
