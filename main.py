@@ -214,12 +214,36 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
             -- ==========================================
             -- 1. TABLAS DE CATÁLOGOS (Datos Fijos)
             -- ==========================================
+                             
+            -- ⚡ NUEVA TABLA DE FERIADOS
+            CREATE TABLE {schema}.feriados (
+                id SERIAL PRIMARY KEY,
+                fecha DATE NOT NULL,
+                descripcion VARCHAR(150) NOT NULL,
+                tipo VARCHAR(50) DEFAULT 'nacional',
+                recurrente BOOLEAN DEFAULT FALSE,
+                eliminado BOOLEAN DEFAULT FALSE
+            );
+            
+            INSERT INTO {schema}.feriados (fecha, descripcion, tipo, recurrente) VALUES
+            ('2026-01-01', 'Año Nuevo', 'nacional', TRUE),
+            ('2026-01-22', 'Día del Estado Plurinacional', 'nacional', TRUE),
+            ('2026-02-16', 'Lunes de Carnaval', 'nacional', FALSE),
+            ('2026-02-17', 'Martes de Carnaval', 'nacional', FALSE),
+            ('2026-04-03', 'Viernes Santo', 'nacional', FALSE),
+            ('2026-05-01', 'Día del Trabajo', 'nacional', TRUE),
+            ('2026-06-04', 'Corpus Christi', 'nacional', FALSE),
+            ('2026-06-21', 'Año Nuevo Aymara', 'nacional', TRUE),
+            ('2026-08-06', 'Día de la Independencia', 'nacional', TRUE),
+            ('2026-11-02', 'Todos Santos', 'nacional', TRUE),
+            ('2026-12-25', 'Navidad', 'nacional', TRUE);
+                             
             CREATE TABLE {schema}.sucursales (
                 id SERIAL PRIMARY KEY,
                 nombre VARCHAR(100) NOT NULL,
                 direccion TEXT,
                 telefono VARCHAR(50) DEFAULT '',
-                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 eliminado BOOLEAN DEFAULT FALSE
             );
 
@@ -229,7 +253,7 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
                 nombre VARCHAR(100) NOT NULL,
                 descripcion TEXT,
                 estado BOOLEAN DEFAULT TRUE,
-                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 eliminado BOOLEAN DEFAULT FALSE
             );
              
@@ -248,7 +272,7 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
                 tolerancia_mensual_min INTEGER DEFAULT 0,
                 descuento BOOLEAN DEFAULT TRUE,
                 horas_extras BOOLEAN DEFAULT FALSE,
-                medio_tiempo_fines BOOLEAN DEFAULT FALSE
+                medio_tiempo_fines BOOLEAN DEFAULT FALSE,
                 eliminado BOOLEAN DEFAULT FALSE
             )
 
@@ -1534,7 +1558,7 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
             "retraso_total_min": int(kpis_raw.get("retraso_total_min") or 0) if kpis_raw else 0,
             "deuda_total": float(kpis_raw.get("deuda_total") or 0) if kpis_raw else 0.0
         }
-        
+
         # ⚡ 3. TRAER DÍAS LABORALES DEL TURNO (Para pintar fines de semana de gris)
         cur.execute(f"SELECT t.dias FROM {schema}.empleados e LEFT JOIN {schema}.turnos t ON e.turno_id = t.id WHERE e.id = %s", (empleado_id,))
         turno_data = cur.fetchone()
@@ -1562,6 +1586,29 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
             "dias_laborales": dias_laborales, 
             "ausencias": ausencias
         }
+    finally:
+        cur.close()
+        conn.close()
+
+
+# ==============================================================================
+# 13. MÓDULO: FERIADOS
+# ==============================================================================
+@app.get("/feriados")
+async def obtener_feriados(usuario = Depends(verificar_token)):
+    schema = usuario.get("schema_name")
+    conn = conectar_bd(schema)
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        # Traemos todos los feriados activos
+        cur.execute(f"SELECT fecha, descripcion, recurrente FROM {schema}.feriados WHERE eliminado = FALSE")
+        feriados_db = cur.fetchall()
+        
+        # Blindaje de formato de fechas para JSON
+        for f in feriados_db:
+            if f.get("fecha"):
+                f.update({"fecha": str(f.get("fecha"))})
+        return feriados_db
     finally:
         cur.close()
         conn.close()

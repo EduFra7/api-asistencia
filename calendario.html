@@ -296,6 +296,7 @@
         let empleadoSeleccionadoId = null;
         let fechaVisualizada = new Date();
         let filtroEstadoActual = 'activos'; 
+        let feriadosBolivia = new Map(); // Ahora nace vacío, lo llenará la BD
 
         async function arrancarPantalla() {
             renderizarMenu('asistencia');
@@ -315,17 +316,31 @@
 
         async function cargarCatalogos() {
             try {
-                // ⚡ AHORA TAMBIÉN DESCARGAMOS LOS TURNOS EXISTENTES
                 const promesas = new Array(
                     fetch(`${API_URL}/sucursales`, { headers: { 'Authorization': `Bearer ${token_api}` } }),
                     fetch(`${API_URL}/secciones`, { headers: { 'Authorization': `Bearer ${token_api}` } }),
-                    fetch(`${API_URL}/turnos`, { headers: { 'Authorization': `Bearer ${token_api}` } }) 
+                    fetch(`${API_URL}/turnos`, { headers: { 'Authorization': `Bearer ${token_api}` } }),
+                    fetch(`${API_URL}/feriados`, { headers: { 'Authorization': `Bearer ${token_api}` } }) // ⚡ Nueva ruta
                 );
                 const res = await Promise.all(promesas);
                 
                 const sucursales = await res.at(0).json();
                 const secciones = await res.at(1).json();
-                turnosGlobal = await res.at(2).json(); // Guardamos los turnos en memoria
+                turnosGlobal = await res.at(2).json();
+                const feriadosDB = await res.at(3).json(); 
+                
+                // ⚡ Llenamos la memoria con la Base de Datos
+                feriadosBolivia.clear();
+                if (feriadosDB && Array.isArray(feriadosDB)) {
+                    feriadosDB.forEach(f => {
+                        const fechaCompleta = String(f.fecha); // "2026-05-01"
+                        const mesDia = fechaCompleta.substring(5, 10); // "05-01"
+                        
+                        // Si es recurrente guarda solo el mes-día, si no, la fecha exacta
+                        if (f.recurrente) feriadosBolivia.set(mesDia, f.descripcion);
+                        else feriadosBolivia.set(fechaCompleta, f.descripcion);
+                    });
+                }
                 
                 const sSucursal = document.getElementById('filtro_sucursal');
                 const sSeccion = document.getElementById('filtro_seccion');
@@ -460,7 +475,9 @@
             const anio = fechaVisualizada.getFullYear();
             const mes = fechaVisualizada.getMonth() + 1;
             
-            // ⚡ ESTADO DE CARGA PARA LA TABLA Y KPIs
+            // ⚡ NUEVO: Buscamos al empleado para saber su fecha de ingreso
+            const empleadoActual = listaEmpleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
+            
             document.getElementById('kpi-dias').innerHTML = '<i class="fas fa-spinner fa-spin text-gray-300"></i>';
             document.getElementById('kpi-horas').innerHTML = '<i class="fas fa-spinner fa-spin text-gray-300"></i>';
             document.getElementById('kpi-retraso').innerHTML = '<i class="fas fa-spinner fa-spin text-gray-300"></i>';
@@ -489,14 +506,15 @@
                 document.getElementById('kpi-retraso').textContent = `${dataAsistencia.kpis.retraso_total_min} min`;
                 document.getElementById('kpi-deuda').textContent = `Bs. ${Number(dataAsistencia.kpis.deuda_total).toFixed(2)}`;
 
-                renderizarDias(anio, mes, dataAsistencia.dias, turnoEmpleado ? turnoEmpleado.dias : null, listaAusencias);
+                // ⚡ NUEVO: Pasamos el empleadoActual al final
+                renderizarDias(anio, mes, dataAsistencia.dias, turnoEmpleado ? turnoEmpleado.dias : null, listaAusencias, empleadoActual);
             } catch (e) { 
                 console.error("Error asistencia", e); 
                 cuadricula.innerHTML = '<div class="col-span-7 p-10 text-center text-red-500 font-bold">Error al cargar datos del servidor</div>';
             }
         }
 
-        function renderizarDias(anio, mes, diasBD, diasLaboralesJSON, ausencias) {
+        function renderizarDias(anio, mes, diasBD, diasLaboralesJSON, ausencias, empleadoActual) {
             const nombresMeses = new Array("Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre");
             document.getElementById('mesAnioTexto').textContent = `${nombresMeses.at(mes - 1)} ${anio}`;
             
@@ -523,17 +541,31 @@
             const hoy = new Date();
             hoy.setHours(0,0,0,0);
 
+            // ⚡ Fecha de Ingreso del Empleado (Para no ponerle faltas antes de que trabajara aquí)
+            let fechaIngreso = null;
+            if (empleadoActual && empleadoActual.fecha_ingreso) {
+                // Forzamos la zona horaria para evitar desfases
+                fechaIngreso = new Date(empleadoActual.fecha_ingreso + 'T00:00:00');
+                fechaIngreso.setHours(0,0,0,0);
+            }
+
             for(let d=1; d<=totalDias; d++) {
                 const fechaActualLoop = new Date(anio, mes - 1, d);
-                const fechaStr = `${anio}-${String(mes).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                const letraDia = mapaDiasLetras.get(fechaActualLoop.getDay());
+                const diaFormateado = String(d).padStart(2, '0');
+                const fechaStr = `${anio}-${mesFormateado}-${diaFormateado}`;
+                const mesDiaStr = `${mesFormateado}-${diaFormateado}`; // Ej: "05-01"
                 
+                const letraDia = mapaDiasLetras.get(fechaActualLoop.getDay());
                 const datos = mapaDatos.get(fechaStr);
                 
                 let ausenciaActiva = null;
                 if (ausencias && Array.isArray(ausencias)) {
                     ausenciaActiva = ausencias.find(a => a.estado === 'aprobado' && fechaStr >= String(a.fecha_inicio).substring(0,10) && fechaStr <= String(a.fecha_fin).substring(0,10));
                 }
+
+                // 🌟 LECTURA DE FERIADOS DESDE LA BD (Tu código requerido)
+                let nombreFeriado = feriadosBolivia.get(fechaStr);
+                if (!nombreFeriado) nombreFeriado = feriadosBolivia.get(mesDiaStr);
 
                 let esDiaLaboral = false;
                 if (diasLaboralesJSON && typeof diasLaboralesJSON === 'object') {
@@ -542,57 +574,83 @@
 
                 let clases = "estado-futuro";
                 let htmlInner = `<span class="text-xs font-bold text-gray-700">${d}</span>`;
+                let datosClick = datos ? Object.assign({}, datos) : null;
+                let permiteClic = true;
 
-                if (datos) {
+                // ---------------------------------------------------------
+                // 🌟 ÁRBOL DE DECISIONES DE NEGOCIO (Jerarquía Estricta)
+                // ---------------------------------------------------------
+
+                // 1. ANTES DE SER CONTRATADO
+                if (fechaIngreso && fechaActualLoop < fechaIngreso) {
+                    clases = "bg-gray-100 opacity-50"; 
+                    htmlInner = `<span class="text-xs font-bold text-gray-400">${d}</span><p class="text-[10px] text-gray-400 mt-2 text-center leading-tight">Previo a contrato</p>`;
+                    permiteClic = false;
+                }
+                
+                // 2. FERIADOS (Si el empleado NO marcó asistencia ese día)
+                else if (nombreFeriado && !datos) {
+                    clases = "bg-purple-50 text-center justify-center relative";
+                    htmlInner = `<span class="text-xs font-bold text-purple-900 absolute top-1 md:top-2 left-1 md:left-2">${d}</span>
+                                 <i class="fas fa-flag text-xl md:text-2xl text-purple-300 mb-1"></i>
+                                 <p class="text-[10px] md:text-[11px] text-purple-700 font-bold uppercase mt-1 leading-tight">${nombreFeriado}</p>`;
+                    permiteClic = false;
+                }
+
+                // 3. TIENE MARCAJE EN LA BD (El empleado vino)
+                else if (datos) {
                     if(datos.estado === 'Puntual') {
                         clases = "estado-puntual";
-                        htmlInner += `<div class="text-xs mt-1"><p class="text-green-700 font-semibold"><i class="fas fa-check-circle mr-1"></i>Puntual</p><p class="text-gray-500">${datos.horas_trabajadas} hrs</p></div>`;
+                        htmlInner += `<div class="text-[10px] md:text-xs mt-1"><p class="text-green-700 font-semibold"><i class="fas fa-check-circle mr-1"></i>Puntual</p><p class="text-gray-500">${datos.horas_trabajadas} hrs</p></div>`;
                     } else if(datos.estado === 'Tarde') {
                         clases = "estado-tarde";
-                        htmlInner += `<div class="text-xs mt-1"><p class="text-orange-600 font-semibold"><i class="fas fa-exclamation-triangle mr-1"></i>Tarde ${datos.minutos_retraso_entrada}m</p><p class="text-gray-500">Desc: Bs.${datos.deuda_generada_bs}</p></div>`;
+                        htmlInner += `<div class="text-[10px] md:text-xs mt-1"><p class="text-orange-600 font-semibold"><i class="fas fa-exclamation-triangle mr-1"></i>Tarde ${datos.minutos_retraso_entrada}m</p><p class="text-gray-500">Desc: Bs.${datos.deuda_generada_bs}</p></div>`;
                     } else if(datos.estado === 'Falta') {
                         clases = "estado-falta";
-                        htmlInner += `<div class="text-xs mt-1"><p class="text-red-600 font-bold uppercase mt-1">Falta</p></div>`;
+                        htmlInner += `<div class="text-[10px] md:text-xs mt-1"><p class="text-red-600 font-bold uppercase mt-1">Falta</p></div>`;
                     }
-                } else if (ausenciaActiva) {
+                    
+                    // ⚡ DETALLE VISUAL: Si es Feriado pero vino a trabajar
+                    if (nombreFeriado) {
+                        htmlInner += `<div class="absolute top-1 right-1 text-purple-600" title="Feriado Trabajado: ${nombreFeriado}"><i class="fas fa-star text-xs"></i></div>`;
+                    }
+                } 
+                
+                // 4. AUSENCIAS APROBADAS (Permisos y Vacaciones)
+                else if (ausenciaActiva) {
                     clases = ausenciaActiva.tipo === 'vacacion' ? "estado-vacacion text-center justify-center relative" : "estado-permiso text-center justify-center relative";
                     const icono = ausenciaActiva.tipo === 'vacacion' ? 'fa-umbrella-beach text-blue-400' : 'fa-user-md text-yellow-500';
                     const textColor = ausenciaActiva.tipo === 'vacacion' ? 'text-blue-700' : 'text-yellow-700';
                     htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-1 md:top-2 left-1 md:left-2">${d}</span>
                                  <i class="fas ${icono} text-xl md:text-2xl opacity-50 mb-1"></i>
-                                 <p class="text-xs md:text-xs ${textColor} font-bold uppercase mt-1 md:mt-2">${ausenciaActiva.tipo}</p>`;
-                } else if (!esDiaLaboral && diasLaboralesJSON && Object.keys(diasLaboralesJSON).length > 0) {
+                                 <p class="text-[10px] md:text-xs ${textColor} font-bold uppercase mt-1 md:mt-2">${ausenciaActiva.tipo}</p>`;
+                    
+                    datosClick = { fecha: fechaStr, estado: ausenciaActiva.tipo, ausencia_detalle: ausenciaActiva };
+                } 
+                
+                // 5. FIN DE SEMANA O DÍA INHÁBIL
+                else if (!esDiaLaboral && diasLaboralesJSON && Object.keys(diasLaboralesJSON).length > 0) {
                     clases = "estado-inhabiles";
                     htmlInner = `<span class="text-xs font-bold text-gray-400">${d}</span>`;
-                } else if (fechaActualLoop < hoy) {
+                    permiteClic = false;
+                } 
+                
+                // 6. DÍA LABORAL, PASADO, SIN MARCAJE, SIN FERIADO, SIN PERMISO -> ¡FALTA!
+                else if (fechaActualLoop < hoy) {
                     clases = "estado-falta";
-                    htmlInner += `<div class="text-xs mt-1"><p class="text-red-600 font-bold uppercase mt-1">Falta</p><p class="text-red-400">Sin registro</p></div>`;
+                    htmlInner += `<div class="text-[10px] md:text-xs mt-1"><p class="text-red-600 font-bold uppercase mt-1">Falta</p><p class="text-red-400 leading-tight">Sin registro</p></div>`;
+                    datosClick = { fecha: fechaStr, estado: 'Falta', minutos_retraso_entrada: 0, deuda_generada_bs: '0.00' };
                 }
 
+                // Renderizamos
                 const div = document.createElement('div');
                 div.className = `cal-day ${clases}`;
                 div.innerHTML = htmlInner;
 
-                // 🌟 MAGIA UX: Adjuntar datos completos del permiso/vacación al hacer clic
-                let datosClick = datos ? Object.assign({}, datos) : null;
-                
-                if (!datosClick) {
-                    let estadoSintetico = 'Sin marcaje';
-                    if (ausenciaActiva) estadoSintetico = ausenciaActiva.tipo;
-                    else if (fechaActualLoop < hoy && esDiaLaboral) estadoSintetico = 'Falta';
-                    
-                    datosClick = {
-                        fecha: fechaStr,
-                        estado: estadoSintetico,
-                        minutos_retraso_entrada: 0,
-                        deuda_generada_bs: '0.00'
-                    };
-                }
+                // Le guardamos el detalle completo en el bolsillo si existe
+                if (ausenciaActiva && datosClick) datosClick.ausencia_detalle = ausenciaActiva;
 
-                // Le guardamos el detalle completo en el bolsillo
-                if (ausenciaActiva) datosClick.ausencia_detalle = ausenciaActiva;
-
-                if (clases !== "estado-inhabiles" && clases !== "estado-futuro") {
+                if (permiteClic && clases !== "estado-futuro") {
                     div.onclick = () => verDetalleDia(datosClick);
                     div.classList.add("cursor-pointer", "hover:ring-2", "hover:ring-blue-400", "transition-all");
                 } else {
@@ -708,7 +766,6 @@
         }
 
         arrancarPantalla();
-    </script>
     </script>
 </body>
 </html>
