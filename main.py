@@ -600,10 +600,11 @@ async def actualizar_sucursal(sucursal_id: int, data: dict, usuario = Depends(ve
         # Ejecutamos la actualización de los 3 campos principales
         cur.execute(f"""
             UPDATE {schema}.sucursales 
-            SET nombre = %s, direccion = %s, telefono = %s 
+            SET nombre = %s, ciudad = %s, direccion = %s, telefono = %s 
             WHERE id = %s
         """, (
-            data.get("nombre"), 
+            data.get("nombre"),
+            data.get("ciudad"),  
             data.get("direccion"), 
             data.get("telefono", ""), 
             sucursal_id
