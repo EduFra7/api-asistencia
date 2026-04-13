@@ -153,6 +153,14 @@ window.toggleMenu = function() {
 };
 
 // ==============================================================================
+// 🚪 CONTROLADOR GLOBAL DE SESIÓN
+// ==============================================================================
+window.cerrarSesion = function() {
+    localStorage.clear(); // Borra el token y los datos del usuario
+    window.location.href = 'index.html'; // Lo manda a la pantalla de login
+};
+
+// ==============================================================================
 // COMPONENTE: MENÚ LATERAL DINÁMICO
 // ==============================================================================
 
