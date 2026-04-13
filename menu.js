@@ -208,12 +208,15 @@ function renderizarMenu(pantallaActiva) {
                 </a>
 
                 <!-- ── SECCIÓN: ORGANIZACIÓN ── -->
-                <div class="text-[10px] md:text-xs font-bold uppercase tracking-wider mb-2 mt-6 px-3 ${(pantallaActiva === 'organizacion' || pantallaActiva === 'turnos')? 'text-blue-400' : 'text-slate-500'}">Organización</div>
+                <div class="text-[10px] md:text-xs font-bold uppercase tracking-wider mb-2 mt-6 px-3 ${(pantallaActiva === 'organizacion' || pantallaActiva === 'turnos' || pantallaActiva === 'feriados')? 'text-blue-400' : 'text-slate-500'}">Organización</div>
                 <a href="organizacion.html" class="${pantallaActiva === 'organizacion' ? claseActiva : claseInactiva}">
                     <i class="fas fa-sitemap w-5 mr-2 text-center"></i> Sucursales y Secciones
                 </a>
                 <a href="turnos.html" class="${pantallaActiva === 'turnos' ? claseActiva : claseInactiva}">
                     <i class="fas fa-clock w-5 mr-2 text-center"></i> Horarios y Turnos
+                </a>
+                <a href="feriados.html" class="${pantallaActiva === 'feriados' ? claseActiva : claseInactiva}">
+                    <i class="fas fa-calendar-plus w-5 mr-2 text-center"></i> Feriados
                 </a>
 
                 <!-- ── SECCIÓN: AJUSTES ── -->

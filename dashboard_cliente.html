@@ -3,200 +3,227 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panel de Control - Empresa</title>
-    
+    <title>Panel de Control - C.A Lector</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 
 <body class="bg-gray-50 font-sans flex h-screen overflow-hidden text-gray-800">
 
-    <aside id="menu-lateral" class="w-64 bg-slate-900 text-white flex flex-col h-full shadow-xl z-20"></aside>
+    <div id="overlay-menu" class="fixed inset-0 bg-slate-900/60 z-30 hidden backdrop-blur-sm transition-opacity" onclick="toggleMenu()"></div>
+
+    <aside id="menu-lateral" class="w-64 bg-slate-900 text-white flex flex-col h-full shadow-2xl z-40 absolute xl:relative transform -translate-x-full xl:translate-x-0 transition-transform duration-300 ease-in-out shrink-0"></aside>
 
     <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
         
-        <header class="bg-white shadow-sm border-b border-gray-200 p-4 flex justify-between items-center z-10">
-            <div>
-                <h1 class="text-2xl font-bold text-gray-800">Resumen de Hoy</h1>
-                <p class="text-sm text-gray-500" id="relojTop">Cargando fecha y hora...</p>
-            </div>
-            
-            <button onclick="togglePanelDerecho()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center">
-                <i class="fas fa-plus mr-2"></i> Nuevo Empleado
-            </button>
-        </header>
-
-        <div class="flex-1 overflow-y-auto p-6">
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <p class="text-sm font-medium text-gray-500">Personal de la Empresa</p>
-                            <h3 class="text-3xl font-bold text-gray-800 mt-1">45</h3>
-                        </div>
-                        <div class="p-3 bg-blue-50 text-blue-600 rounded-lg"><i class="fas fa-user-tie text-xl"></i></div>
-                    </div>
-                    <div class="mt-4 flex items-center text-sm">
-                        <span class="text-green-600 font-medium"><i class="fas fa-circle text-[8px] mr-1"></i> 42 Activos</span>
-                        <span class="mx-3 text-gray-300">|</span>
-                        <span class="text-red-500 font-medium"><i class="fas fa-circle text-[8px] mr-1"></i> 3 Retirados</span>
-                    </div>
-                </div>
-
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                    <div class="flex justify-between items-start mb-4">
-                        <div>
-                            <p class="text-sm font-medium text-gray-500">Asistencia de Hoy</p>
-                            <h3 class="text-3xl font-bold text-gray-800 mt-1">38 <span class="text-sm font-normal text-gray-500">/ 42</span></h3>
-                        </div>
-                        <div class="p-3 bg-green-50 text-green-600 rounded-lg"><i class="fas fa-check-circle text-xl"></i></div>
-                    </div>
-                    <div class="w-full bg-gray-200 rounded-full h-2.5 mb-1">
-                        <div class="bg-green-500 h-2.5 rounded-full" style="width: 90%"></div>
-                    </div>
-                    <p class="text-xs text-gray-500 text-right">90% de asistencia</p>
-                </div>
-
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <p class="text-sm font-medium text-gray-500">Alertas del Día</p>
-                            <h3 class="text-3xl font-bold text-orange-500 mt-1">4</h3>
-                        </div>
-                        <div class="p-3 bg-orange-50 text-orange-600 rounded-lg"><i class="fas fa-exclamation-triangle text-xl"></i></div>
-                    </div>
-                    <div class="mt-4 space-y-2">
-                        <p class="text-sm text-gray-600"><i class="fas fa-clock text-orange-500 w-4"></i> 3 Llegadas tarde</p>
-                        <p class="text-sm text-gray-600"><i class="fas fa-user-times text-red-500 w-4"></i> 1 Falta sin marcar</p>
-                    </div>
-                </div>
-
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 lg:col-span-2">
-                    <h3 class="text-sm font-bold text-gray-800 mb-4 border-b pb-2">Turnos y Horarios Vigentes</h3>
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="p-4 bg-gray-50 rounded-lg border border-gray-100">
-                            <p class="font-semibold text-gray-800">Administración</p>
-                            <p class="text-sm text-gray-600 mt-1"><i class="far fa-clock mr-1"></i> 08:00 AM - 16:00 PM</p>
-                            <p class="text-xs text-green-600 mt-1">Activo ahora</p>
-                        </div>
-                        <div class="p-4 bg-gray-50 rounded-lg border border-gray-100">
-                            <p class="font-semibold text-gray-800">Planta Nocturno</p>
-                            <p class="text-sm text-gray-600 mt-1"><i class="far fa-clock mr-1"></i> 22:00 PM - 06:00 AM</p>
-                            <p class="text-xs text-gray-400 mt-1">Próximo</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-center space-y-4">
-                    <h3 class="text-sm font-bold text-gray-800 mb-2">Conexión con Lectores</h3>
-                    
-                    <button class="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 py-3 px-4 rounded-lg flex items-center justify-center transition-colors shadow-sm">
-                        <i class="fas fa-wifi mr-2"></i>
-                        <span class="text-sm font-semibold">Sincronizar Huellas a Red</span>
-                    </button>
-                    
-                    <button class="w-full bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 py-3 px-4 rounded-lg flex items-center justify-center transition-colors shadow-sm">
-                        <i class="fas fa-download mr-2"></i>
-                        <span class="text-sm font-semibold">Extraer Eventos Locales</span>
-                    </button>
-                </div>
-
+        <div class="xl:hidden bg-slate-900 text-white p-4 flex items-center justify-between shadow-md shrink-0 z-20">
+            <div class="flex items-center">
+                <button onclick="toggleMenu()" class="text-white hover:text-blue-400 focus:outline-none mr-4"><i class="fas fa-bars text-xl"></i></button>
+                <h1 class="font-bold tracking-wide"><i class="fas fa-fingerprint text-blue-500 mr-2"></i>BITECH</h1>
             </div>
         </div>
 
-        <div id="overlayPanel" class="fixed inset-0 bg-gray-900 bg-opacity-50 z-30 hidden transition-opacity" onclick="togglePanelDerecho()"></div>
-        
-        <div id="panelDerecho" class="fixed inset-y-0 right-0 w-full md:w-96 bg-white shadow-2xl z-40 transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col">
+        <header class="bg-white shadow-sm border-b border-gray-200 p-4 md:p-6 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 z-10 shrink-0">
+            <div>
+                <h1 class="text-xl md:text-2xl font-bold text-gray-800">Resumen Operativo</h1>
+                <p class="text-xs md:text-sm text-gray-500 font-medium" id="relojTop">Cargando fecha y hora...</p>
+            </div>
             
-            <div class="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50">
-                <h3 class="text-lg font-bold text-gray-800">Registrar Nuevo Empleado</h3>
-                <button onclick="togglePanelDerecho()" class="text-gray-400 hover:text-red-500 transition-colors">
-                    <i class="fas fa-times text-xl"></i>
+            <div class="flex gap-2">
+                <a href="calendario.html" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center">
+                    <i class="fas fa-calendar-check mr-2 text-blue-500"></i> Asistencia
+                </a>
+                <button onclick="mostrarExito('Sincronizando con dispositivo biométrico...')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center">
+                    <i class="fas fa-sync-alt mr-2"></i> Sincronizar Reloj
                 </button>
             </div>
+        </header>
+
+        <div class="flex-1 overflow-y-auto p-4 md:p-6 scrollbar-thin scrollbar-thumb-gray-300">
             
-            <div class="flex-1 overflow-y-auto p-6">
-                <form class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Nombre Completo</label>
-                        <input type="text" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+            <div id="alerta-feriados" class="hidden mb-6 bg-amber-50 border border-amber-200 p-4 rounded-xl shadow-sm animate-pulse">
+                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div class="flex items-center">
+                        <div class="p-2 bg-amber-100 rounded-full mr-3 shrink-0"><i class="fas fa-exclamation-triangle text-amber-500 text-lg"></i></div>
+                        <div>
+                            <p class="text-sm text-amber-900 font-bold">¡Atención RRHH!</p>
+                            <p class="text-xs text-amber-700">Los feriados móviles de la gestión <span id="anio-alerta" class="font-bold"></span> aún no han sido sincronizados.</p>
+                        </div>
                     </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Documento de Identidad</label>
-                        <input type="text" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">ID en Lector Biométrico</label>
-                        <input type="number" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700">Horario Asignado</label>
-                        <select class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
-                            <option>Administración (08:00 - 16:00)</option>
-                            <option>Planta Nocturno (22:00 - 06:00)</option>
-                        </select>
-                    </div>
-                </form>
+                    <a href="feriados.html" class="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-lg text-xs font-bold transition-colors shadow-sm shrink-0 flex items-center">
+                        <i class="fas fa-cog mr-2"></i> Configurar Ahora
+                    </a>
+                </div>
             </div>
 
-            <div class="p-6 border-t border-gray-200 bg-gray-50 flex space-x-3">
-                <button onclick="togglePanelDerecho()" class="flex-1 bg-white border border-gray-300 text-gray-700 py-2 rounded-md hover:bg-gray-50 font-medium">Cancelar</button>
-                <button class="flex-1 bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 font-medium shadow-sm">Guardar</button>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+                
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-xs font-bold text-gray-500 uppercase tracking-wide">Fuerza Laboral</p>
+                            <h3 class="text-3xl font-black text-gray-800 mt-1" id="dash-total-emp">--</h3>
+                        </div>
+                        <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center"><i class="fas fa-users text-xl"></i></div>
+                    </div>
+                    <div class="mt-4 flex items-center text-xs md:text-sm bg-gray-50 p-2 rounded-lg border border-gray-100">
+                        <span class="text-green-600 font-bold flex-1 text-center"><i class="fas fa-circle text-[8px] mr-1"></i> <span id="dash-activos">--</span> Activos</span>
+                        <div class="w-px h-4 bg-gray-300"></div>
+                        <span class="text-red-500 font-bold flex-1 text-center"><i class="fas fa-circle text-[8px] mr-1"></i> <span id="dash-inactivos">--</span> Inactivos</span>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow relative overflow-hidden group">
+                    <div class="absolute inset-0 bg-gray-50/80 backdrop-blur-[1px] flex flex-col items-center justify-center z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <i class="fas fa-tools text-gray-400 text-2xl mb-2"></i>
+                        <span class="text-xs font-bold text-gray-500">Módulo en construcción</span>
+                    </div>
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <p class="text-xs font-bold text-gray-500 uppercase tracking-wide">Asistencia de Hoy</p>
+                            <h3 class="text-3xl font-black text-gray-300 mt-1">-- <span class="text-sm font-bold text-gray-300">/ --</span></h3>
+                        </div>
+                        <div class="w-12 h-12 bg-green-50 text-green-300 rounded-full flex items-center justify-center"><i class="fas fa-fingerprint text-xl"></i></div>
+                    </div>
+                    <div class="w-full bg-gray-100 rounded-full h-2 mb-1">
+                        <div class="bg-gray-300 h-2 rounded-full" style="width: 0%"></div>
+                    </div>
+                    <p class="text-[10px] text-gray-400 text-right font-bold">Esperando datos en vivo...</p>
+                </div>
+
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-xs font-bold text-gray-500 uppercase tracking-wide">Ausencias Aprobadas</p>
+                            <h3 class="text-3xl font-black text-yellow-500 mt-1">0</h3>
+                        </div>
+                        <div class="w-12 h-12 bg-yellow-50 text-yellow-600 rounded-full flex items-center justify-center"><i class="fas fa-plane-departure text-xl"></i></div>
+                    </div>
+                    <div class="mt-4 space-y-2">
+                        <p class="text-xs text-gray-500 italic"><i class="fas fa-info-circle mr-1"></i> Todo el personal se encuentra disponible el día de hoy.</p>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 md:p-6 rounded-xl shadow-sm border border-gray-200 lg:col-span-2 flex flex-col">
+                    <div class="flex justify-between items-center mb-4 border-b border-gray-100 pb-3">
+                        <h3 class="text-sm font-bold text-gray-800"><i class="fas fa-clock text-blue-500 mr-2"></i>Horarios Vigentes de la Empresa</h3>
+                        <a href="turnos.html" class="text-xs text-blue-600 font-bold hover:underline">Gestionar</a>
+                    </div>
+                    
+                    <div id="contenedor-turnos" class="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1">
+                        <div class="p-3 bg-gray-50 rounded-lg border border-gray-100 animate-pulse"><div class="h-4 bg-gray-200 rounded w-1/2 mb-2"></div><div class="h-3 bg-gray-200 rounded w-1/3"></div></div>
+                        <div class="p-3 bg-gray-50 rounded-lg border border-gray-100 animate-pulse"><div class="h-4 bg-gray-200 rounded w-1/2 mb-2"></div><div class="h-3 bg-gray-200 rounded w-1/3"></div></div>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 md:p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-center space-y-3">
+                    <h3 class="text-sm font-bold text-gray-800 mb-2 border-b border-gray-100 pb-2">Accesos Rápidos</h3>
+                    
+                    <a href="planilla.html" class="w-full bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 border border-slate-200 hover:border-blue-200 py-2.5 px-4 rounded-lg flex items-center transition-all shadow-sm group">
+                        <div class="w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm mr-3 group-hover:bg-blue-600 group-hover:text-white transition-colors"><i class="fas fa-user-plus text-xs"></i></div>
+                        <span class="text-sm font-bold">Gestión de Personal</span>
+                    </a>
+                    
+                    <a href="ausencias.html" class="w-full bg-slate-50 hover:bg-yellow-50 text-slate-700 hover:text-yellow-700 border border-slate-200 hover:border-yellow-200 py-2.5 px-4 rounded-lg flex items-center transition-all shadow-sm group">
+                        <div class="w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-sm mr-3 group-hover:bg-yellow-500 group-hover:text-white transition-colors"><i class="fas fa-file-signature text-xs"></i></div>
+                        <span class="text-sm font-bold">Aprobar Permisos</span>
+                    </a>
+                </div>
+
             </div>
         </div>
-
     </main>
 
-<!-- Conectamos nuestro archivo JS maestro -->
     <script src="menu.js"></script>
 
     <script>
-        // ── A. SEGURIDAD DEL FRONTEND ──
+        // ── CONFIGURACIÓN DE API ──
+        const API_URL = "https://asistencia-api.up.railway.app";
+        const token_api = localStorage.getItem('token');
+
+        // ── SEGURIDAD Y RELOJ ──
         const userDataStr = localStorage.getItem('userData');
-        if (!userDataStr) window.location.href = 'index.html'; // Lo expulsa si no inició sesión
-        
-        // Convertimos el texto guardado a objeto y pintamos el nombre en el menú
-        const userData = JSON.parse(userDataStr);
-        document.getElementById('empresaNameDisplay').textContent = userData.empresa;
-        document.getElementById('rolDisplay').textContent = `Rol: ${userData.rol}`;
+        if (!userDataStr) window.location.href = 'index.html'; 
 
-        function cerrarSesion() {
-            localStorage.clear(); // Borra todo
-            window.location.href = 'index.html';
-        }
-
-        // ── B. EL RELOJ DINÁMICO ──
         function actualizarReloj() {
             const ahora = new Date();
-            // Formatea la fecha para que se vea bonita (ej. LUNES, 1 DE ABRIL DE 2024, 14:30:00)
             const opciones = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
             document.getElementById('relojTop').textContent = ahora.toLocaleDateString('es-ES', opciones).toUpperCase();
         }
-        // Le decimos a JavaScript que ejecute esta función cada 1000 milisegundos (1 segundo)
         setInterval(actualizarReloj, 1000);
-        actualizarReloj(); // Ejecutamos la primera vez inmediatamente
+        actualizarReloj(); 
 
-        // ── C. MAGIA DEL PANEL LATERAL DERECHO ──
-        function togglePanelDerecho() {
-            const panel = document.getElementById('panelDerecho');
-            const overlay = document.getElementById('overlayPanel');
-            
-            // Si el panel tiene la clase "translate-x-full" (que lo tira a la derecha fuera de la pantalla)
-            if (panel.classList.contains('translate-x-full')) {
-                // Se la quitamos para que entre a la pantalla
-                panel.classList.remove('translate-x-full');
-                // Al fondo oscuro le quitamos el "hidden" para que aparezca
-                overlay.classList.remove('hidden');
-            } else {
-                // Si ya está abierto, hacemos lo opuesto para cerrarlo
-                panel.classList.add('translate-x-full');
-                overlay.classList.add('hidden');
+        // ── VERIFICADOR INTELIGENTE DE FERIADOS (El que armamos en la sesión) ──
+        async function verificarEstadoFeriados() {
+            const anioActual = new Date().getFullYear();
+            try {
+                const res = await fetch(`${API_URL}/feriados`, { headers: { 'Authorization': `Bearer ${token_api}` } });
+                if (!res.ok) return; 
+                const feriados = await res.json();
+                const añoSincronizado = feriados.some(f => f.recurrente === false && String(f.fecha).startsWith(anioActual.toString()));
+                
+                if (!añoSincronizado) {
+                    document.getElementById('alerta-feriados').classList.remove('hidden');
+                    document.getElementById('anio-alerta').textContent = anioActual;
+                }
+            } catch (e) { console.error("Error al verificar feriados", e); }
+        }
+
+        // ── LLENADO DE KPIs DINÁMICOS ──
+        async function cargarDatosOperativos() {
+            try {
+                // Hacemos 2 llamadas en paralelo para máxima velocidad
+                const promesas = new Array(
+                    fetch(`${API_URL}/empleados`, { headers: { 'Authorization': `Bearer ${token_api}` } }),
+                    fetch(`${API_URL}/turnos`, { headers: { 'Authorization': `Bearer ${token_api}` } })
+                );
+                
+                const res = await Promise.all(promesas);
+                const empleados = await res.at(0).json();
+                const turnos = await res.at(1).json();
+
+                // 1. Calcular KPIs de Personal
+                const activos = empleados.filter(e => e.activo).length;
+                const inactivos = empleados.filter(e => !e.activo).length;
+                
+                document.getElementById('dash-total-emp').textContent = empleados.length;
+                document.getElementById('dash-activos').textContent = activos;
+                document.getElementById('dash-inactivos').textContent = inactivos;
+
+                // 2. Pintar Turnos Reales
+                const contenedorTurnos = document.getElementById('contenedor-turnos');
+                contenedorTurnos.innerHTML = ''; // Limpiar Skeletons
+
+                if(turnos.length === 0) {
+                    contenedorTurnos.innerHTML = `<div class="col-span-2 text-center p-4 text-sm text-gray-400 italic">No hay turnos configurados.</div>`;
+                } else {
+                    turnos.forEach(t => {
+                        const hIn = String(t.hora_ingreso).substring(0,5);
+                        const hOut = String(t.hora_salida).substring(0,5);
+                        contenedorTurnos.innerHTML += `
+                            <div class="p-3 bg-blue-50/30 rounded-lg border border-blue-100 hover:border-blue-300 transition-colors flex justify-between items-center">
+                                <div>
+                                    <p class="font-bold text-gray-800 text-sm truncate">${t.nombre}</p>
+                                    <p class="text-xs text-gray-600 mt-0.5"><i class="far fa-clock mr-1 text-blue-400"></i> ${hIn} - ${hOut}</p>
+                                </div>
+                                <div class="w-8 h-8 rounded-full bg-white shadow-sm flex justify-center items-center text-blue-500"><i class="fas fa-chevron-right text-[10px]"></i></div>
+                            </div>
+                        `;
+                    });
+                }
+            } catch (e) {
+                console.error("Error cargando dashboard:", e);
+                mostrarError("No se pudieron cargar las métricas operativas.");
             }
         }
 
-        // Llamamos al creador del menú indicando que estamos en "dashboard_cliente"
+        // Llamamos al creador del menú indicando que estamos en "dashboard"
         renderizarMenu('dashboard');
+        
+        // Arrancamos los motores
+        verificarEstadoFeriados();
+        cargarDatosOperativos();
 
     </script>
 </body>

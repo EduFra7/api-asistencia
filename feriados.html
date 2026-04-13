@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Feriados - C.A Lector</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+
+<body class="bg-gray-50 font-sans flex h-screen overflow-hidden text-gray-800">
+
+    <div id="overlay-menu" class="fixed inset-0 bg-slate-900/60 z-30 hidden backdrop-blur-sm transition-opacity" onclick="toggleMenu()"></div>
+    <aside id="menu-lateral" class="w-64 bg-slate-900 text-white flex flex-col h-full shadow-2xl z-40 absolute xl:relative transform -translate-x-full xl:translate-x-0 transition-transform duration-300 ease-in-out shrink-0"></aside>
+
+    <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
+        
+        <div class="xl:hidden bg-slate-900 text-white p-4 flex items-center justify-between shadow-md shrink-0 z-20">
+            <div class="flex items-center">
+                <button onclick="toggleMenu()" class="text-white hover:text-blue-400 focus:outline-none mr-4"><i class="fas fa-bars text-xl"></i></button>
+                <h1 class="font-bold tracking-wide"><i class="fas fa-fingerprint text-blue-500 mr-2"></i>BITECH</h1>
+            </div>
+        </div>
+
+        <header class="bg-white shadow-sm border-b border-gray-200 p-4 md:p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 z-10 shrink-0">
+            <div>
+                <h1 class="text-xl md:text-2xl font-bold text-gray-800">Gestión de Feriados</h1>
+                <p class="text-xs md:text-sm text-gray-500 font-medium">Administra los días festivos nacionales y regionales</p>
+            </div>
+            
+            <div class="flex flex-wrap gap-2 w-full sm:w-auto">
+                <select id="selectorAnio" onchange="cargarTablaFeriados()" class="bg-gray-50 border border-gray-300 text-gray-700 py-2 px-3 rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="2024">2024</option>
+                    <option value="2025">2025</option>
+                    <option value="2026" selected>2026</option>
+                    <option value="2027">2027</option>
+                </select>
+                <button onclick="sincronizarFeriadosManual()" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-colors flex items-center">
+                    <i class="fas fa-robot mr-2 text-blue-500"></i> Sincronizar IA
+                </button>
+                <button onclick="abrirModalNuevoFeriado()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-colors flex items-center">
+                    <i class="fas fa-plus mr-2"></i> Agregar Manual
+                </button>
+            </div>
+        </header>
+
+        <div class="flex-1 overflow-y-auto p-4 md:p-6">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-800 text-white text-xs uppercase tracking-wider">
+                                <th class="p-3 md:p-4 font-medium">Fecha</th>
+                                <th class="p-3 md:p-4 font-medium">Descripción</th>
+                                <th class="p-3 md:p-4 font-medium">Alcance</th>
+                                <th class="p-3 md:p-4 font-medium">Tipo</th>
+                                <th class="p-3 md:p-4 font-medium text-center">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-feriados" class="text-sm divide-y divide-gray-100">
+                            </tbody>
+                    </table>
+                </div>
+                <div id="loader-tabla" class="hidden p-8 flex flex-col items-center justify-center">
+                    <i class="fas fa-circle-notch fa-spin text-blue-500 text-3xl mb-2"></i>
+                    <p class="text-gray-500 text-sm font-medium">Cargando feriados...</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="menu.js"></script>
+    <script>
+        const API_URL = "https://asistencia-api.up.railway.app";
+        const token_api = localStorage.getItem('token');
+        let feriadosGlobales = [];
+
+        // Inicializamos la vista
+        renderizarMenu('feriados');
+        
+        // Establecer el año actual en el selector por defecto
+        document.getElementById('selectorAnio').value = new Date().getFullYear();
+
+        async function cargarTablaFeriados() {
+            const tbody = document.getElementById('tabla-feriados');
+            const loader = document.getElementById('loader-tabla');
+            const anioSeleccionado = document.getElementById('selectorAnio').value;
+            
+            tbody.innerHTML = '';
+            loader.classList.remove('hidden');
+
+            try {
+                const res = await fetch(`${API_URL}/feriados`, { headers: { 'Authorization': `Bearer ${token_api}` } });
+                feriadosGlobales = await res.json();
+                
+                // Filtramos: Mostramos los del año seleccionado + los recurrentes (fijos)
+                const filtrados = feriadosGlobales.filter(f => {
+                    if (f.recurrente) return true; // Siempre mostrar Navidad, Año Nuevo, etc.
+                    return String(f.fecha).startsWith(anioSeleccionado);
+                });
+
+                // Ordenamos por mes y día
+                filtrados.sort((a, b) => {
+                    const mesDiaA = String(a.fecha).substring(5);
+                    const mesDiaB = String(b.fecha).substring(5);
+                    return mesDiaA.localeCompare(mesDiaB);
+                });
+
+                loader.classList.add('hidden');
+
+                if (filtrados.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-gray-500 italic">No hay feriados registrados para este año. Pulsa "Sincronizar IA".</td></tr>`;
+                    return;
+                }
+
+                filtrados.forEach(f => {
+                    const mesDia = String(f.fecha).substring(5); // Ej: "01-01"
+                    const fechaMostrar = f.recurrente ? `Cada año (${mesDia})` : f.fecha;
+                    
+                    const badgeAlcance = f.tipo === 'nacional' 
+                        ? `<span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-globe-americas mr-1"></i>Nacional</span>`
+                        : `<span class="bg-amber-100 text-amber-700 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-map-marker-alt mr-1"></i>${f.tipo}</span>`;
+                    
+                    const badgeTipo = f.recurrente 
+                        ? `<span class="text-gray-500 font-medium text-xs"><i class="fas fa-lock mr-1"></i>Fijo</span>`
+                        : `<span class="text-purple-600 font-medium text-xs"><i class="fas fa-calendar-day mr-1"></i>Móvil / Específico</span>`;
+
+                    const btnEliminar = f.recurrente 
+                        ? `<button disabled class="text-gray-300 cursor-not-allowed" title="Los feriados fijos no se pueden borrar"><i class="fas fa-trash"></i></button>`
+                        : `<button onclick="eliminarFeriado(${f.id})" class="text-red-500 hover:text-red-700 transition-colors p-2"><i class="fas fa-trash"></i></button>`;
+
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-gray-50 transition-colors group">
+                            <td class="p-3 md:p-4 font-bold text-gray-700 whitespace-nowrap">${fechaMostrar}</td>
+                            <td class="p-3 md:p-4 font-medium text-gray-800">${f.descripcion}</td>
+                            <td class="p-3 md:p-4">${badgeAlcance}</td>
+                            <td class="p-3 md:p-4">${badgeTipo}</td>
+                            <td class="p-3 md:p-4 text-center">${btnEliminar}</td>
+                        </tr>
+                    `;
+                });
+
+            } catch (e) {
+                loader.classList.add('hidden');
+                mostrarError("No se pudieron cargar los feriados.");
+            }
+        }
+
+        async function sincronizarFeriadosManual() {
+            const anio = document.getElementById('selectorAnio').value;
+            const confirmar = await pedirConfirmacion(`¿Deseas que la IA calcule e inserte los feriados móviles (Carnaval, Semana Santa) para el año ${anio}?`, 'Sincronización Inteligente');
+            
+            if (confirmar) {
+                try {
+                    Swal.fire({ title: 'Sincronizando...', allowOutsideClick: false, didOpen: () => { Swal.showLoading() } });
+                    
+                    const res = await fetch(`${API_URL}/sincronizar-feriados/${anio}`, {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${token_api}` }
+                    });
+                    
+                    const data = await res.json();
+                    if(res.ok) {
+                        mostrarExito(`Se agregaron ${data.insertados || 0} feriados nuevos.`);
+                        cargarTablaFeriados();
+                    } else {
+                        mostrarError(data.detail || "Error en la sincronización.");
+                    }
+                } catch (e) {
+                    mostrarError("Error de conexión con el servidor.");
+                }
+            }
+        }
+
+        function abrirModalNuevoFeriado() {
+            mostrarError("Esta función requiere que conectemos el endpoint de creación en Python primero.", "Próximamente");
+        }
+
+        function eliminarFeriado(id) {
+            mostrarError("Esta función requiere que conectemos el endpoint de eliminación en Python primero.", "Próximamente");
+        }
+
+        // Arrancamos
+        cargarTablaFeriados();
+    </script>
+</body>
+</html>

@@ -24,6 +24,10 @@ import os                # Librería para leer variables del sistema operativo
 import re                # Librería para buscar y limpiar textos (Expresiones regulares)
 import json              # Asegúrate de que esto esté al inicio de tu main.py
 
+# -- Librerías para feriados --
+import holidays
+from datetime import date
+
 # ==============================================================================
 # 2. CONFIGURACIÓN INICIAL DE LA APLICACIÓN
 # ==============================================================================
@@ -1600,8 +1604,8 @@ async def obtener_feriados(usuario = Depends(verificar_token)):
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        # Traemos todos los feriados activos
-        cur.execute(f"SELECT fecha, descripcion, recurrente FROM {schema}.feriados WHERE eliminado = FALSE")
+        # ⚡ CORRECCIÓN: Agregamos 'id' y 'tipo' a la consulta para que el frontend no muestre UNDEFINED
+        cur.execute(f"SELECT id, fecha, descripcion, tipo, recurrente FROM {schema}.feriados WHERE eliminado = FALSE")
         feriados_db = cur.fetchall()
         
         # Blindaje de formato de fechas para JSON
@@ -1609,6 +1613,47 @@ async def obtener_feriados(usuario = Depends(verificar_token)):
             if f.get("fecha"):
                 f.update({"fecha": str(f.get("fecha"))})
         return feriados_db
+    finally:
+        cur.close()
+        conn.close()
+
+@app.post("/sincronizar-feriados/{anio}")
+async def sincronizar_feriados_moviles(anio: int, usuario = Depends(verificar_token)):
+    schema = usuario.get("schema_name")
+    conn = conectar_bd(schema)
+    cur = conn.cursor()
+    
+    try:
+        # 1. Obtener feriados calculados por la librería
+        feriados_bolivia = holidays.Bolivia(years=anio)
+        insertados = 0
+        omitidos = 0
+
+        for fecha, desc in feriados_bolivia.items():
+            # Solo procesamos los móviles conocidos
+            if any(m in desc for m in ["Carnival", "Good Friday", "Corpus Christi"]):
+                # Traducir descripción
+                desc_es = "Viernes Santo" if "Good Friday" in desc else "Corpus Christi"
+                if "Carnival" in desc: desc_es = "Feriado de Carnaval"
+
+                # ⚡ LA CLAVE DE SEGURIDAD: Verificar antes de insertar
+                cur.execute(f"SELECT id FROM {schema}.feriados WHERE fecha = %s", (fecha,))
+                if cur.fetchone():
+                    omitidos += 1
+                    continue # Si ya existe, saltar al siguiente
+                
+                # 2. Insertar solo si no existe
+                cur.execute(f"""
+                    INSERT INTO {schema}.feriados (fecha, descripcion, tipo, recurrente)
+                    VALUES (%s, %s, 'nacional', FALSE)
+                """, (fecha, desc_es))
+                insertados += 1
+        
+        conn.commit()
+        return {"status": "success", "insertados": insertados, "omitidos": omitidos}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
         conn.close()

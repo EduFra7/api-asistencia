@@ -297,6 +297,7 @@
         let fechaVisualizada = new Date();
         let filtroEstadoActual = 'activos'; 
         let feriadosBolivia = new Map(); // Ahora nace vacío, lo llenará la BD
+        let aniosSincronizados = new Set(); // ⚡ Memoria para no saturar al servidor
 
         async function arrancarPantalla() {
             renderizarMenu('asistencia');
@@ -470,12 +471,34 @@
             await cargarCalendario(turnoEmp);
         }
 
+        // ⚡ NUEVA FUNCIÓN: El espía silencioso
+        async function verificarSincronizacionFeriados(anio) {
+            // Si ya lo sincronizamos en esta sesión de navegación, no hacemos nada
+            if (aniosSincronizados.has(anio)) return; 
+
+            try {
+                // Llamamos a la API de Python para que calcule la matemática
+                await fetch(`${API_URL}/sincronizar-feriados/${anio}`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token_api}` }
+                });
+                
+                // Lo guardamos en la memoria para no volver a pedirlo
+                aniosSincronizados.add(anio);
+                
+                // Recargamos el catálogo interno para que el calendario tenga los nuevos datos
+                await cargarCatalogos(); 
+            } catch(e) {
+                console.error("Error sincronizando feriados del año " + anio, e);
+            }
+        }
+
+        // 🛠️ TU FUNCIÓN ACTUALIZADA
         async function cargarCalendario(turnoEmpleado) {
             if (!empleadoSeleccionadoId) return;
             const anio = fechaVisualizada.getFullYear();
             const mes = fechaVisualizada.getMonth() + 1;
             
-            // ⚡ NUEVO: Buscamos al empleado para saber su fecha de ingreso
             const empleadoActual = listaEmpleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
             
             document.getElementById('kpi-dias').innerHTML = '<i class="fas fa-spinner fa-spin text-gray-300"></i>';
@@ -492,6 +515,9 @@
             `;
 
             try {
+                // 🌟 MAGIA: Antes de pedir la asistencia, aseguramos que el año tenga sus feriados
+                await verificarSincronizacionFeriados(anio);
+
                 const promesasDatos = new Array(
                     fetch(`${API_URL}/empleados/${empleadoSeleccionadoId}/asistencia/${anio}/${mes}`, { headers: { 'Authorization': `Bearer ${token_api}` } }),
                     fetch(`${API_URL}/empleados/${empleadoSeleccionadoId}/ausencias`, { headers: { 'Authorization': `Bearer ${token_api}` } })
@@ -506,7 +532,6 @@
                 document.getElementById('kpi-retraso').textContent = `${dataAsistencia.kpis.retraso_total_min} min`;
                 document.getElementById('kpi-deuda').textContent = `Bs. ${Number(dataAsistencia.kpis.deuda_total).toFixed(2)}`;
 
-                // ⚡ NUEVO: Pasamos el empleadoActual al final
                 renderizarDias(anio, mes, dataAsistencia.dias, turnoEmpleado ? turnoEmpleado.dias : null, listaAusencias, empleadoActual);
             } catch (e) { 
                 console.error("Error asistencia", e); 
