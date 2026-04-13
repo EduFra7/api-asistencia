@@ -27,6 +27,8 @@ import json              # Asegúrate de que esto esté al inicio de tu main.py
 # -- Librerías para feriados --
 import holidays
 from datetime import date
+from pydantic import BaseModel
+from typing import Optional
 
 # ==============================================================================
 # 2. CONFIGURACIÓN INICIAL DE LA APLICACIÓN
@@ -1624,36 +1626,107 @@ async def sincronizar_feriados_moviles(anio: int, usuario = Depends(verificar_to
     cur = conn.cursor()
     
     try:
-        # 1. Obtener feriados calculados por la librería
         feriados_bolivia = holidays.Bolivia(years=anio)
         insertados = 0
-        omitidos = 0
 
         for fecha, desc in feriados_bolivia.items():
-            # Solo procesamos los móviles conocidos
-            if any(m in desc for m in ["Carnival", "Good Friday", "Corpus Christi"]):
-                # Traducir descripción
-                desc_es = "Viernes Santo" if "Good Friday" in desc else "Corpus Christi"
-                if "Carnival" in desc: desc_es = "Feriado de Carnaval"
+            # Convertimos todo a minúsculas para que no falle por mayúsculas
+            desc_lower = desc.lower()
+            
+            # ⚡ CORRECCIÓN: Buscamos tanto en Inglés como en Español
+            es_movil = any(m in desc_lower for m in ["carnival", "carnaval", "good friday", "viernes", "corpus"])
+            
+            if es_movil:
+                # Estandarizamos el nombre para tu base de datos
+                desc_es = "Corpus Christi"
+                if "carnival" in desc_lower or "carnaval" in desc_lower:
+                    desc_es = "Feriado de Carnaval"
+                elif "good friday" in desc_lower or "viernes" in desc_lower:
+                    desc_es = "Viernes Santo"
 
-                # ⚡ LA CLAVE DE SEGURIDAD: Verificar antes de insertar
-                cur.execute(f"SELECT id FROM {schema}.feriados WHERE fecha = %s", (fecha,))
-                if cur.fetchone():
-                    omitidos += 1
-                    continue # Si ya existe, saltar al siguiente
-                
-                # 2. Insertar solo si no existe
-                cur.execute(f"""
-                    INSERT INTO {schema}.feriados (fecha, descripcion, tipo, recurrente)
-                    VALUES (%s, %s, 'nacional', FALSE)
-                """, (fecha, desc_es))
-                insertados += 1
+                # Verificamos si ya existe antes de insertar
+                cur.execute(f"SELECT id FROM {schema}.feriados WHERE fecha = %s AND eliminado = FALSE", (fecha,))
+                if not cur.fetchone():
+                    cur.execute(f"""
+                        INSERT INTO {schema}.feriados (fecha, descripcion, tipo, recurrente)
+                        VALUES (%s, %s, 'nacional', FALSE)
+                    """, (fecha, desc_es))
+                    insertados += 1
         
         conn.commit()
-        return {"status": "success", "insertados": insertados, "omitidos": omitidos}
+        return {"status": "success", "insertados": insertados}
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+class FeriadoCreate(BaseModel):
+    fecha: str
+    descripcion: str
+    tipo: str
+    recurrente: bool = False
+
+@app.post("/feriados")
+async def crear_feriado_manual(feriado: FeriadoCreate, usuario = Depends(verificar_token)):
+    # Seguridad: Solo admins pueden crear feriados
+    if usuario.get("rol") not in ["admin", "superadmin"]:
+        raise HTTPException(status_code=403, detail="Sin permisos para crear feriados.")
+        
+    schema = usuario.get("schema_name")
+    conn = conectar_bd(schema)
+    cur = conn.cursor()
+    
+    try:
+        # Verificamos que no exista un feriado exactamente en esa fecha
+        cur.execute(f"SELECT id FROM {schema}.feriados WHERE fecha = %s AND eliminado = FALSE", (feriado.fecha,))
+        if cur.fetchone():
+            raise HTTPException(status_code=400, detail="Ya existe un feriado registrado en esta fecha.")
+
+        cur.execute(f"""
+            INSERT INTO {schema}.feriados (fecha, descripcion, tipo, recurrente)
+            VALUES (%s, %s, %s, %s) RETURNING id
+        """, (feriado.fecha, feriado.descripcion, feriado.tipo, feriado.recurrente))
+        
+        nuevo_id = cur.fetchone()[0]
+        conn.commit()
+        return {"mensaje": "Feriado guardado exitosamente", "id": nuevo_id}
+    except psycopg2.Error as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Error en la base de datos.")
+    finally:
+        cur.close()
+        conn.close()
+
+
+@app.delete("/feriados/{feriado_id}")
+async def eliminar_feriado(feriado_id: int, usuario = Depends(verificar_token)):
+    if usuario.get("rol") not in ["admin", "superadmin"]:
+        raise HTTPException(status_code=403, detail="Sin permisos para eliminar feriados.")
+        
+    schema = usuario.get("schema_name")
+    conn = conectar_bd(schema)
+    cur = conn.cursor()
+    
+    try:
+        # Seguridad: Evitamos que borren los feriados fijos base (recurrente = TRUE)
+        cur.execute(f"SELECT recurrente FROM {schema}.feriados WHERE id = %s", (feriado_id,))
+        resultado = cur.fetchone()
+        
+        if not resultado:
+            raise HTTPException(status_code=404, detail="Feriado no encontrado.")
+            
+        if resultado[0] is True: # Si recurrente es True
+            raise HTTPException(status_code=403, detail="Los feriados fijos nacionales no se pueden eliminar.")
+
+        # Borrado Lógico (Soft Delete)
+        cur.execute(f"UPDATE {schema}.feriados SET eliminado = TRUE WHERE id = %s", (feriado_id,))
+        conn.commit()
+        return {"mensaje": "Feriado eliminado exitosamente."}
+    except psycopg2.Error as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Error en la base de datos.")
     finally:
         cur.close()
         conn.close()

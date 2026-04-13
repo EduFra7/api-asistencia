@@ -13,7 +13,32 @@
 
     <div id="overlay-menu" class="fixed inset-0 bg-slate-900/60 z-30 hidden backdrop-blur-sm transition-opacity" onclick="toggleMenu()"></div>
     <aside id="menu-lateral" class="w-64 bg-slate-900 text-white flex flex-col h-full shadow-2xl z-40 absolute xl:relative transform -translate-x-full xl:translate-x-0 transition-transform duration-300 ease-in-out shrink-0"></aside>
-
+    <div id="modal-feriado" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center backdrop-blur-sm transition-opacity opacity-0">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden transform scale-95 transition-transform" id="modal-feriado-content">
+                <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                    <h3 class="font-bold text-gray-800"><i class="fas fa-calendar-plus text-blue-500 mr-2"></i>Agregar Feriado Regional</h3>
+                    <button onclick="cerrarModalFeriado()" class="text-gray-400 hover:text-red-500 outline-none"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="p-5 space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Fecha</label>
+                        <input type="date" id="f-fecha" class="w-full border border-gray-300 rounded-lg p-2 text-sm outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Descripción</label>
+                        <input type="text" id="f-desc" placeholder="Ej: Aniversario de La Paz" class="w-full border border-gray-300 rounded-lg p-2 text-sm outline-none focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Alcance (Ciudad/Sucursal)</label>
+                        <input type="text" id="f-tipo" placeholder="Ej: La Paz, Santa Cruz, Nacional..." class="w-full border border-gray-300 rounded-lg p-2 text-sm outline-none focus:border-blue-500">
+                    </div>
+                </div>
+                <div class="p-5 border-t border-gray-100 bg-gray-50 flex gap-3">
+                    <button onclick="cerrarModalFeriado()" class="flex-1 bg-white border border-gray-300 text-gray-700 py-2 rounded-lg font-bold text-sm hover:bg-gray-100 transition-colors">Cancelar</button>
+                    <button onclick="guardarFeriadoManual()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-bold text-sm shadow-sm transition-colors">Guardar</button>
+                </div>
+            </div>
+        </div>
     <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
         
         <div class="xl:hidden bg-slate-900 text-white p-4 flex items-center justify-between shadow-md shrink-0 z-20">
@@ -153,7 +178,14 @@
             
             if (confirmar) {
                 try {
-                    Swal.fire({ title: 'Sincronizando...', allowOutsideClick: false, didOpen: () => { Swal.showLoading() } });
+                    // ⚡ FIX: heightAuto y scrollbarPadding evitan que el menú lateral se deforme
+                    Swal.fire({ 
+                        title: 'Sincronizando...', 
+                        allowOutsideClick: false, 
+                        heightAuto: false, 
+                        scrollbarPadding: false,
+                        didOpen: () => { Swal.showLoading() } 
+                    });
                     
                     const res = await fetch(`${API_URL}/sincronizar-feriados/${anio}`, {
                         method: 'POST',
@@ -173,14 +205,70 @@
             }
         }
 
+        // ── LÓGICA DEL MODAL MANUAL ──
         function abrirModalNuevoFeriado() {
-            mostrarError("Esta función requiere que conectemos el endpoint de creación en Python primero.", "Próximamente");
+            const modal = document.getElementById('modal-feriado');
+            const content = document.getElementById('modal-feriado-content');
+            modal.classList.remove('hidden');
+            // Pequeño retraso para que la animación fluya
+            setTimeout(() => { modal.classList.remove('opacity-0'); content.classList.remove('scale-95'); }, 10);
         }
 
-        function eliminarFeriado(id) {
-            mostrarError("Esta función requiere que conectemos el endpoint de eliminación en Python primero.", "Próximamente");
+        function cerrarModalFeriado() {
+            const modal = document.getElementById('modal-feriado');
+            const content = document.getElementById('modal-feriado-content');
+            modal.classList.add('opacity-0'); content.classList.add('scale-95');
+            setTimeout(() => { modal.classList.add('hidden'); }, 300);
         }
 
+        async function guardarFeriadoManual() {
+            const fecha = document.getElementById('f-fecha').value;
+            const desc = document.getElementById('f-desc').value;
+            const tipo = document.getElementById('f-tipo').value || 'Nacional';
+
+            if(!fecha || !desc) return mostrarError("La fecha y descripción son obligatorias.");
+
+            try {
+                const res = await fetch(`${API_URL}/feriados`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token_api}` },
+                    body: JSON.stringify({ fecha: fecha, descripcion: desc, tipo: tipo, recurrente: false })
+                });
+                const data = await res.json();
+                
+                if(res.ok) {
+                    mostrarExito("Feriado guardado correctamente");
+                    cerrarModalFeriado();
+                    // Limpiar campos
+                    document.getElementById('f-fecha').value = '';
+                    document.getElementById('f-desc').value = '';
+                    document.getElementById('f-tipo').value = '';
+                    cargarTablaFeriados(); // Recargar la tabla
+                } else {
+                    mostrarError(data.detail);
+                }
+            } catch(e) { mostrarError("Error al guardar en el servidor"); }
+        }
+
+        async function eliminarFeriado(id) {
+            const confirmar = await pedirConfirmacion("¿Estás seguro de eliminar este feriado? Esto podría afectar la asistencia ya calculada.");
+            if (confirmar) {
+                try {
+                    const res = await fetch(`${API_URL}/feriados/${id}`, {
+                        method: 'DELETE',
+                        headers: { 'Authorization': `Bearer ${token_api}` }
+                    });
+                    if(res.ok) {
+                        mostrarExito("Feriado eliminado");
+                        cargarTablaFeriados();
+                    } else {
+                        const data = await res.json();
+                        mostrarError(data.detail);
+                    }
+                } catch(e) { mostrarError("Error de conexión"); }
+            }
+        }
+        
         // Arrancamos
         cargarTablaFeriados();
     </script>
