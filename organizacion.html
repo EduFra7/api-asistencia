@@ -130,6 +130,22 @@
                             <input type="text" id="suc_nombre" placeholder="Ej. Tienda Centro" required class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500">
                         </div>
                         <div>
+                            <label class="block text-sm font-medium text-gray-700">Ciudad / Ubicación Geográfica <span class="text-red-500">*</span></label>
+                            <select id="suc_ciudad" class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500 bg-white">
+                                <option value="Nacional">Todo el País (Nacional)</option>
+                                <option value="La Paz">La Paz</option>
+                                <option value="Santa Cruz">Santa Cruz</option>
+                                <option value="Cochabamba">Cochabamba</option>
+                                <option value="Oruro">Oruro</option>
+                                <option value="Potosí">Potosí</option>
+                                <option value="Chuquisaca">Chuquisaca</option>
+                                <option value="Tarija">Tarija</option>
+                                <option value="Beni">Beni</option>
+                                <option value="Pando">Pando</option>
+                            </select>
+                            <p class="text-[10px] text-gray-400 mt-1 italic">Determina qué feriados regionales aplican aquí.</p>
+                        </div>
+                        <div>
                             <label class="block text-sm font-medium text-gray-700">Dirección Física</label>
                             <!-- MODIFICACIÓN: Añadido ID suc_direccion -->
                             <textarea id="suc_direccion" rows="2" placeholder="Calle, Número, Ciudad..." class="mt-1 w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-blue-500 focus:border-blue-500"></textarea>
@@ -212,7 +228,7 @@
                             <td class="p-4 font-mono text-gray-500 font-semibold">${codigo}</td>
                             <td class="p-4">
                                 <p class="font-bold text-gray-800 group-hover:text-blue-600">${suc.nombre}</p>
-                                <p class="text-xs text-gray-500">${suc.direccion || 'Sin dirección'}</p>
+                                <p class="text-xs text-gray-500"><i class="fas fa-map-marker-alt text-red-400 mr-1"></i> ${suc.ciudad || 'Nacional'} | ${suc.direccion || 'Sin dirección'}</p>
                             </td>
                             <td class="p-4 text-gray-600">${suc.telefono || 'Sin registro'}</td>
                             <td class="p-4 text-right"><i class="fas fa-chevron-right text-gray-300"></i></td>
@@ -259,6 +275,7 @@
             document.getElementById('formSeccion').reset();
             
             if(document.getElementById('suc_codigo')) document.getElementById('suc_codigo').value = 'Autogenerado';
+            if(document.getElementById('suc_ciudad')) document.getElementById('suc_ciudad').value = 'Nacional';
             document.getElementById('drawerTitle').textContent = tipo === 'sucursal' ? "Nueva Sucursal" : "Nueva Sección";
             document.getElementById('formSucursal').classList.toggle('hidden', tipo !== 'sucursal');
             document.getElementById('formSeccion').classList.toggle('hidden', tipo !== 'seccion');
@@ -293,6 +310,7 @@
                 const item = listaSucursalesGlobal.find(s => s.id === id);
                 document.getElementById('suc_codigo').value = codigo;
                 document.getElementById('suc_nombre').value = item.nombre || '';
+                document.getElementById('suc_ciudad').value = item.ciudad || 'Nacional'; // ⚡ ESTA ES LA LÍNEA NUEVA
                 document.getElementById('suc_direccion').value = item.direccion || '';
                 document.getElementById('suc_telefono').value = item.telefono || '';
             } else {
@@ -345,6 +363,7 @@
 
             let payload = tipoContextoActual === 'sucursal' ? {
                 nombre: document.getElementById('suc_nombre').value,
+                ciudad: document.getElementById('suc_ciudad').value,
                 direccion: document.getElementById('suc_direccion').value,
                 telefono: document.getElementById('suc_telefono').value
             } : {

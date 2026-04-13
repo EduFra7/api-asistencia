@@ -247,6 +247,7 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
             CREATE TABLE {schema}.sucursales (
                 id SERIAL PRIMARY KEY,
                 nombre VARCHAR(100) NOT NULL,
+                ciudad VARCHAR(50) DEFAULT 'Nacional', -- ⚡ NUEVA COLUMNA
                 direccion TEXT,
                 telefono VARCHAR(50) DEFAULT '',
                 creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -571,8 +572,8 @@ async def crear_sucursal(data: dict, usuario = Depends(verificar_token)):
     try:
         # Asegúrate de que el query tenga 3 campos y 3 %s
         cur.execute(f"""
-            INSERT INTO {schema}.sucursales (nombre, direccion, telefono) 
-            VALUES (%s, %s, %s)
+            INSERT INTO {schema}.sucursales (nombre, ciudad, direccion, telefono) 
+            VALUES (%s, %s, %s, %s)
         """, (
             data.get("nombre"), 
             data.get("direccion"), 
@@ -1665,7 +1666,7 @@ async def sincronizar_feriados_moviles(anio: int, usuario = Depends(verificar_to
 class FeriadoCreate(BaseModel):
     fecha: str
     descripcion: str
-    tipo: str
+    tipo: str # Aquí guardaremos 'Nacional', 'La Paz', 'Santa Cruz', etc.
     recurrente: bool = False
 
 @app.post("/feriados")
