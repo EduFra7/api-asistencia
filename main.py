@@ -452,6 +452,88 @@ def crear_superadmin():
 
 
 # ==============================================================================
+# X. CEREBRO DE CECÁLCULO - EVENT - DRIVEN
+# ==============================================================================
+
+# ⚡ FUNCIÓN MAESTRA: EL CEREBRO EVENT-DRIVEN
+def procesar_asistencia_dia(schema: str, empleado_id: int, fecha: date):
+    """
+    Esta función es el único lugar donde se calcula la asistencia.
+    Se dispara ante CUALQUIER evento (Huella, Permiso, Edición).
+    """
+    conn = conectar_bd(schema)
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    
+    try:
+        # 1. Obtener datos básicos (Empleado, Turno y Salario)
+        cur.execute(f"""
+            SELECT e.id, e.salario_base, e.turno_id, t.* FROM {schema}.empleados e 
+            JOIN {schema}.turnos t ON e.turno_id = t.id 
+            WHERE e.id = %s
+        """, (empleado_id,))
+        emp_turno = cur.fetchone()
+        if not emp_turno: return False
+
+        # 2. Obtener Marcajes Brutos del día
+        cur.execute(f"""
+            SELECT fecha_hora FROM {schema}.eventos_brutos 
+            WHERE item = (SELECT bio_id::text FROM {schema}.empleados WHERE id = %s) 
+            AND DATE(fecha_hora) = %s 
+            ORDER BY fecha_hora ASC
+        """, (empleado_id, fecha))
+        marcajes = [m['fecha_hora'] for m in cur.fetchall()]
+
+        # 3. Obtener Permisos/Ausencias para ese día
+        cur.execute(f"""
+            SELECT tipo, hora_inicio, hora_fin 
+            FROM {schema}.ausencias 
+            WHERE empleado_id = %s AND estado = 'aprobado' AND eliminado = FALSE
+            AND %s BETWEEN fecha_inicio AND fecha_fin
+        """, (empleado_id, fecha))
+        ausencias = cur.fetchall()
+
+        # 🚀 4. EJECUTAR MOTOR MATEMÁTICO (Tu función calcular_dia_asistencia)
+        # Nota: Asegúrate de que calcular_dia_asistencia esté definida en tu main.py
+        resumen = calcular_dia_asistencia(marcajes, emp_turno, ausencias, emp_turno['salario_base'])
+
+        # 5. UPSERT (Insertar o Actualizar) en la tabla Caché
+        cur.execute(f"""
+            INSERT INTO {schema}.asistencia_diaria 
+            (empleado_id, fecha, turno_id, hora_entrada, hora_inicio_almuerzo, hora_fin_almuerzo, hora_salida, 
+             minutos_retraso_entrada, minutos_exceso_almuerzo, estado, deuda_generada_bs, actualizado_en)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+            ON CONFLICT (empleado_id, fecha) 
+            DO UPDATE SET 
+                hora_entrada = EXCLUDED.hora_entrada,
+                hora_inicio_almuerzo = EXCLUDED.hora_inicio_almuerzo,
+                hora_fin_almuerzo = EXCLUDED.hora_fin_almuerzo,
+                hora_salida = EXCLUDED.hora_salida,
+                minutos_retraso_entrada = EXCLUDED.minutos_retraso_entrada,
+                minutos_exceso_almuerzo = EXCLUDED.minutos_exceso_almuerzo,
+                estado = EXCLUDED.estado,
+                deuda_generada_bs = EXCLUDED.deuda_generada_bs,
+                actualizado_en = CURRENT_TIMESTAMP
+            WHERE {schema}.asistencia_diaria.modificado_manualmente = FALSE;
+        """, (
+            empleado_id, fecha, emp_turno['turno_id'], resumen['hora_entrada'], 
+            resumen['hora_inicio_almuerzo'], resumen['hora_fin_almuerzo'], resumen['hora_salida'], 
+            resumen['minutos_retraso_entrada'], resumen['minutos_exceso_almuerzo'], 
+            resumen['estado'], resumen['deuda_generada_bs']
+        ))
+        
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"❌ Error procesando día: {e}")
+        conn.rollback()
+        return False
+    finally:
+        cur.close()
+        conn.close()
+
+
+
+# ==============================================================================
 # 5. RUTAS PARA COMUNICACIÓN CON HARDWARE (ZKTeco ADMS)
 # ==============================================================================
 
@@ -471,36 +553,60 @@ async def iclock_init(request: Request):
 
 # ── RECEPCIÓN DE MARCAJES DEL LECTOR ──
 # Cuando alguien pone su huella, el lector envía los datos a esta ruta (POST).
+# ── RECEPCIÓN DE MARCAJES DEL LECTOR (VERSIÓN OPTIMIZADA) ──
 @app.post("/iclock/cdata")
 async def iclock_data(request: Request):
-    table = request.query_params.get("table", "") # Nos dice qué tipo de dato envía (ej. ATTLOG = marcaje)
-    sn    = request.query_params.get("SN", "")
-    body  = await request.body()
+    table = request.query_params.get("table", "")
+    sn = request.query_params.get("SN", "")
+    body = await request.body()
     texto = body.decode("utf-8", errors="ignore")
     
-    # TODO: En el futuro, tendremos que modificar esto para que busque a qué cliente (esquema) 
-    # pertenece este Número de Serie (SN) y guarde el evento en la carpeta correcta.
     if table == "ATTLOG":
         for linea in texto.strip().splitlines():
             partes = linea.strip().split("\t")
             if len(partes) >= 2:
+                bio_id = partes[0]
+                fecha_hora_str = partes[1] # Ej: "2026-04-13 08:05:00"
+                fecha_dt = datetime.strptime(fecha_hora_str, "%Y-%m-%d %H:%M:%S").date()
+                
                 try:
-                    conn = conectar_bd("public") # Temporalmente guarda todo en 'public'
-                    cur  = conn.cursor()
-                    cur.execute("""
-                        INSERT INTO eventos_brutos
-                            (device_no, item, verify_mode, action, fecha_hora, raw_data)
-                        VALUES (%s, %s, %s, %s, %s, %s)
-                    """, (sn, partes[0], partes[3] if len(partes)>3 else "1",
-                          partes[2] if len(partes)>2 else "0",
-                          partes[1], psycopg2.extras.Json({"raw": linea})))
-                    conn.commit()
-                    cur.close()
-                    conn.close()
-                except Exception as e:
-                    print(f"❌ {e}")
+                    # 1. Identificar a qué empresa pertenece este SN (Serial Number)
+                    # ⚡ NOTA: Por ahora buscamos en 'public' para saber el esquema
+                    conn_maestra = conectar_bd("public")
+                    cur_m = conn_maestra.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
                     
-    return PlainTextResponse("OK") # Siempre hay que decirle "OK" al lector o se asustará y reenviará el dato.
+                    # Buscamos qué empresa tiene este SN asignado (necesitarás esta columna en empresas)
+                    # O por ahora, buscamos en todos los esquemas (esto es temporal para tu fase de pruebas)
+                    schema_destino = "empresa_bitech" # ⚡ Reemplaza por tu esquema de prueba
+                    
+                    # 2. Guardamos el Marcaje Bruto (Caja Negra)
+                    cur_m.execute("""
+                        INSERT INTO eventos_brutos (device_no, item, verify_mode, action, fecha_hora, raw_data)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                    """, (sn, bio_id, partes[3] if len(partes)>3 else "1",
+                          partes[2] if len(partes)>2 else "0",
+                          fecha_hora_str, psycopg2.extras.Json({"raw": linea})))
+                    conn_maestra.commit()
+                    cur_m.close()
+                    conn_maestra.close()
+
+                    # 3. 🚀 DISPARADOR: Buscamos al empleado y recalculamos
+                    conn_e = conectar_bd(schema_destino)
+                    cur_e = conn_e.cursor()
+                    cur_e.execute(f"SELECT id FROM {schema_destino}.empleados WHERE bio_id = %s", (bio_id,))
+                    res_emp = cur_e.fetchone()
+                    
+                    if res_emp:
+                        # ¡Llamamos al Cerebro Central!
+                        procesar_asistencia_dia(schema_destino, res_emp[0], fecha_dt)
+                    
+                    cur_e.close()
+                    conn_e.close()
+
+                except Exception as e:
+                    print(f"❌ Error en ADMS: {e}")
+                    
+    return PlainTextResponse("OK")
 
 # ==============================================================================
 # 6. RUTA PARA ELIMINAR UNA EMPRESA (SOLO SUPERADMIN) ──
@@ -1397,6 +1503,15 @@ async def registrar_ausencia(data: dict, usuario = Depends(verificar_token)):
         """, (empleado_id, tipo, fecha_inicio, fecha_fin, hora_inicio, hora_fin, horas_totales, dias_descontados, motivo, requiere_reposicion))
         
         conn.commit()
+
+        # ⚡ DISPARADOR: Recalculamos cada día afectado por la ausencia
+        dia_loop = datetime.strptime(fecha_inicio, "%Y-%m-%d").date()
+        fecha_fin_dt = datetime.strptime(fecha_fin, "%Y-%m-%d").date()
+        
+        while dia_loop <= fecha_fin_dt:
+            procesar_asistencia_dia(schema, empleado_id, dia_loop)
+            dia_loop += timedelta(days=1)
+
         return {"mensaje": f"{tipo.capitalize()} registrada correctamente."}
     except Exception as e:
         conn.rollback()
@@ -1758,82 +1873,43 @@ async def eliminar_feriado(feriado_id: int, usuario = Depends(verificar_token)):
 # 1x. MÓDULO: SIMULADOR DE HARDWARE (DEV / QA)
 # ==============================================================================
 
+# ── SIMULADOR DE HARDWARE (VERSIÓN EVENT-DRIVEN) ──
 @app.post("/simulador/evento")
 async def simular_evento_hardware(data: dict, usuario = Depends(verificar_token)):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    
     try:
         device_no = data.get("device_no", "SIMULADOR-01")
         bio_id = data.get("bio_id")
-        fecha = data.get("fecha")
+        fecha = data.get("fecha") # "2026-04-13"
         hora = data.get("hora")
         fecha_hora_str = f"{fecha} {hora}:00" 
+        fecha_dt = datetime.strptime(fecha, "%Y-%m-%d").date()
         
-        # 1. Validar Empleado y Turno
-        cur.execute(f"SELECT id, nombres, salario_base, turno_id FROM {schema}.empleados WHERE bio_id = %s AND eliminado = FALSE", (bio_id,))
+        # 1. Validar que el empleado exista
+        cur.execute(f"SELECT id, nombres FROM {schema}.empleados WHERE bio_id = %s AND eliminado = FALSE", (bio_id,))
         emp = cur.fetchone()
         if not emp:
-            raise HTTPException(status_code=404, detail="Empleado inactivo o no encontrado.")
-            
-        cur.execute(f"SELECT * FROM {schema}.turnos WHERE id = %s", (emp['turno_id'],))
-        turno = cur.fetchone()
-        if not turno:
-            raise HTTPException(status_code=409, detail="El empleado no tiene un turno asignado para calcular.")
+            raise HTTPException(status_code=404, detail="Empleado no encontrado.")
 
-        # 2. Guardar Marcaje Bruto (Caja Negra)
+        # 2. Guardar Marcaje Bruto (Igual que lo haría el reloj real)
         raw_string = f"{bio_id}\t{fecha_hora_str}\t0\t1\tSIMULADO"
         cur.execute(f"""
             INSERT INTO {schema}.eventos_brutos (device_no, item, action, fecha_hora, raw_data)
             VALUES (%s, %s, %s, %s, %s)
         """, (device_no, bio_id, "0", fecha_hora_str, psycopg2.extras.Json({"raw": raw_string})))
-
-        # 3. EXTRAER TODOS LOS MARCAJES DE ESE DÍA Y PROCESARLOS
-        cur.execute(f"""
-            SELECT fecha_hora FROM {schema}.eventos_brutos 
-            WHERE item = %s AND DATE(fecha_hora) = %s 
-            ORDER BY fecha_hora ASC
-        """, (bio_id, fecha))
-        marcajes_db = cur.fetchall()
-        marcajes_dt = [m['fecha_hora'] for m in marcajes_db]
-
-        # Extraer Permisos (Si tiene alguno para hoy)
-        cur.execute(f"""
-            SELECT hora_inicio, hora_fin FROM {schema}.ausencias 
-            WHERE empleado_id = %s AND tipo = 'permiso' AND estado = 'aprobado' AND eliminado = FALSE
-            AND %s BETWEEN fecha_inicio AND fecha_fin
-        """, (emp['id'], fecha))
-        permisos = cur.fetchall()
-
-        # 🚀 4. EJECUTAR EL MOTOR MATEMÁTICO 🚀
-        resumen = calcular_dia_asistencia(marcajes_dt, turno, permisos, emp['salario_base'])
-
-        # 5. ACTUALIZAR O INSERTAR EN ASISTENCIA DIARIA (UPSERT)
-        cur.execute(f"""
-            INSERT INTO {schema}.asistencia_diaria 
-            (empleado_id, fecha, turno_id, hora_entrada, hora_inicio_almuerzo, hora_fin_almuerzo, hora_salida, 
-             minutos_retraso_entrada, minutos_exceso_almuerzo, estado, deuda_generada_bs, actualizado_en)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
-            ON CONFLICT (empleado_id, fecha) 
-            DO UPDATE SET 
-                hora_entrada = EXCLUDED.hora_entrada,
-                hora_inicio_almuerzo = EXCLUDED.hora_inicio_almuerzo,
-                hora_fin_almuerzo = EXCLUDED.hora_fin_almuerzo,
-                hora_salida = EXCLUDED.hora_salida,
-                minutos_retraso_entrada = EXCLUDED.minutos_retraso_entrada,
-                minutos_exceso_almuerzo = EXCLUDED.minutos_exceso_almuerzo,
-                estado = EXCLUDED.estado,
-                deuda_generada_bs = EXCLUDED.deuda_generada_bs,
-                actualizado_en = CURRENT_TIMESTAMP
-            WHERE {schema}.asistencia_diaria.modificado_manualmente = FALSE;
-        """, (
-            emp['id'], fecha, emp['turno_id'], resumen['hora_entrada'], resumen['hora_inicio_almuerzo'], 
-            resumen['hora_fin_almuerzo'], resumen['hora_salida'], resumen['minutos_retraso_entrada'], 
-            resumen['minutos_exceso_almuerzo'], resumen['estado'], resumen['deuda_generada_bs']
-        ))
-
         conn.commit()
-        return {"mensaje": f"Marcaje registrado. Asistencia de {emp['nombres']} actualizada."}
+
+        # 🚀 3. EL GRAN DISPARADOR: Llamamos a la inteligencia centralizada
+        # Ya no calculamos nada aquí. Solo le decimos al cerebro: "Recalcula este día".
+        exito = procesar_asistencia_dia(schema, emp['id'], fecha_dt)
+
+        if exito:
+            return {"mensaje": f"Evento procesado. La asistencia de {emp['nombres']} se ha actualizado automáticamente."}
+        else:
+            raise HTTPException(status_code=500, detail="El cerebro de cálculo falló. Revisa los logs.")
 
     except HTTPException:
         conn.rollback()
