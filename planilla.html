@@ -824,10 +824,10 @@
             console.log("📦 [DATOS CAPTURADOS]:", payload);
 
             // 2. Validación Anti-Fallos Silenciosos con SweetAlert
-            if(!payload.nombres || !payload.ci || isNaN(payload.sucursal_id)) {
-                console.error("❌ [BLOQUEO] Faltan datos obligatorios. Sucursal ID:", payload.sucursal_id);
-                mostrarError("Los campos Nombres, C.I. y Sucursal son obligatorios. Verifica que hayas seleccionado una Sucursal válida.", "Datos incompletos");
-                return; // Cortamos la ejecución aquí
+            if(!payload.nombres || !payload.ci || isNaN(payload.sucursal_id) || isNaN(payload.turno_id) || !payload.turno_id) {
+                console.error("❌ [BLOQUEO] Faltan datos obligatorios.");
+                mostrarError("Los campos Nombres, C.I., Sucursal y Turno son estrictamente obligatorios para que el Motor de Asistencia funcione.", "Datos incompletos");
+                return; 
             }
 
             // Bloqueamos el botón para evitar doble clic

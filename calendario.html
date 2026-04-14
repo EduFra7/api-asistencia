@@ -796,29 +796,34 @@
             document.getElementById('det-deuda').textContent = `Bs. ${Number(d.deuda_generada_bs || 0).toFixed(2)}`;
 
             // 🚀 NUEVO: BOTÓN DE EDICIÓN AL FINAL DEL PANEL
-            // Verificamos si no es un día futuro y si no tiene una vacación activa que bloquee la edición
             const contenedorAcciones = document.getElementById('contenedor-acciones-edicion') || document.createElement('div');
             contenedorAcciones.id = 'contenedor-acciones-edicion';
             contenedorAcciones.className = "mt-4 pt-4 border-t border-gray-200";
             
-            // Convertimos d.fecha a Date para saber si es futuro
             const esPasadoOHoy = new Date(d.fecha + 'T00:00:00') <= new Date();
             
             if (esPasadoOHoy && !d.ausencia_detalle) {
-                const paramEntrada = d.hora_entrada ? String(d.hora_entrada).substring(0,5) : '';
-                const paramSalida = d.hora_salida ? String(d.hora_salida).substring(0,5) : '';
+                // 1. Extraemos los 4 tiempos actuales para mandarlos al modal
+                const paramEnt = d.hora_entrada ? String(d.hora_entrada).substring(0,5) : '';
+                const paramAlmIn = d.hora_inicio_almuerzo ? String(d.hora_inicio_almuerzo).substring(0,5) : '';
+                const paramAlmOut = d.hora_fin_almuerzo ? String(d.hora_fin_almuerzo).substring(0,5) : '';
+                const paramSal = d.hora_salida ? String(d.hora_salida).substring(0,5) : '';
+                
+                // 2. ⚡ Inteligencia: ¿Este empleado tiene almuerzo en su turno?
+                const empActual = listaEmpleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
+                const turnoEmp = turnosGlobal.find(t => String(t.id) === String(empActual.turno_id));
+                const tieneAlmuerzo = turnoEmp && turnoEmp.almuerzo ? true : false;
                 
                 contenedorAcciones.innerHTML = `
-                    <button onclick="abrirModalEdicion('${d.fecha}', '${paramEntrada}', '${paramSalida}')" 
+                    <button onclick="abrirModalEdicion('${d.fecha}', '${paramEnt}', '${paramAlmIn}', '${paramAlmOut}', '${paramSal}', ${tieneAlmuerzo})" 
                             class="w-full bg-slate-800 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition-colors flex items-center justify-center shadow-md">
-                        <i class="fas fa-edit mr-2"></i> Editar / Justificar Asistencia
+                        <i class="fas fa-edit mr-2"></i> Editar / Completar Marcajes
                     </button>
                 `;
             } else {
-                contenedorAcciones.innerHTML = ''; // Limpiamos si es futuro o vacación
+                contenedorAcciones.innerHTML = '';
             }
             
-            // Lo añadimos al final del panel (asegúrate de que sea el último elemento del div padding)
             panel.querySelector('.p-4.md\\:p-5.space-y-4').appendChild(contenedorAcciones);
         }
 
@@ -855,30 +860,51 @@
             if (password) mostrarExito("Desbloqueado con éxito. Modo edición activado.");
         }
 
-        // 🌟 1. ABRIR EL MODAL DE EDICIÓN (SWEETALERT2)
-        async function abrirModalEdicion(fecha, horaInActual, horaOutActual) {
+        // 🌟 1. ABRIR EL MODAL DE EDICIÓN (SWEETALERT2 DINÁMICO)
+        async function abrirModalEdicion(fecha, hIn, hAlmIn, hAlmOut, hOut, tieneAlmuerzo) {
             const emp = listaEmpleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
             
+            // ⚡ Si el turno tiene almuerzo, generamos los inputs extra
+            let htmlAlmuerzo = '';
+            if (tieneAlmuerzo) {
+                htmlAlmuerzo = `
+                    <div class="flex gap-4 mb-4 bg-gray-50 p-2 rounded-lg border border-gray-200">
+                        <div class="flex-1 text-left">
+                            <label class="text-[10px] font-bold text-gray-700 uppercase tracking-wide text-blue-600">Inicio Almuerzo</label>
+                            <input id="swal-alm-in" type="time" class="w-full border border-gray-300 p-2 rounded-lg mt-1 focus:ring-2 focus:ring-blue-500 outline-none" value="${hAlmIn || ''}">
+                        </div>
+                        <div class="flex-1 text-left">
+                            <label class="text-[10px] font-bold text-gray-700 uppercase tracking-wide text-blue-600">Fin Almuerzo</label>
+                            <input id="swal-alm-out" type="time" class="w-full border border-gray-300 p-2 rounded-lg mt-1 focus:ring-2 focus:ring-blue-500 outline-none" value="${hAlmOut || ''}">
+                        </div>
+                    </div>
+                `;
+            }
+            
             const { value: formValues } = await Swal.fire({
-                title: `<p class="text-xl font-bold text-slate-800">Editar Asistencia</p>`,
+                title: `<p class="text-xl font-bold text-slate-800">Completar Asistencia</p>`,
                 html: `
-                    <p class="text-sm text-gray-500 mb-4">Modifica los marcajes del <b>${fecha}</b> para ${emp.nombres}.</p>
+                    <p class="text-sm text-gray-500 mb-4">Modifica los marcajes del <b>${fecha}</b> para ${emp.nombres}.<br><span class="text-xs text-blue-500">Los campos vacíos se considerarán como "No marcó".</span></p>
+                    
                     <div class="flex gap-4 mb-4">
                         <div class="flex-1 text-left">
-                            <label class="text-xs font-bold text-gray-700 uppercase tracking-wide">Entrada Real</label>
-                            <input id="swal-in" type="time" class="w-full border border-gray-300 p-2 rounded-lg mt-1 focus:ring-2 focus:ring-blue-500 outline-none" value="${horaInActual || ''}">
+                            <label class="text-[10px] font-bold text-gray-700 uppercase tracking-wide">Entrada Día</label>
+                            <input id="swal-in" type="time" class="w-full border border-gray-300 p-2 rounded-lg mt-1 focus:ring-2 focus:ring-blue-500 outline-none" value="${hIn || ''}">
                         </div>
                         <div class="flex-1 text-left">
-                            <label class="text-xs font-bold text-gray-700 uppercase tracking-wide">Salida Real</label>
-                            <input id="swal-out" type="time" class="w-full border border-gray-300 p-2 rounded-lg mt-1 focus:ring-2 focus:ring-blue-500 outline-none" value="${horaOutActual || ''}">
+                            <label class="text-[10px] font-bold text-gray-700 uppercase tracking-wide">Salida Día</label>
+                            <input id="swal-out" type="time" class="w-full border border-gray-300 p-2 rounded-lg mt-1 focus:ring-2 focus:ring-blue-500 outline-none" value="${hOut || ''}">
                         </div>
                     </div>
+
+                    ${htmlAlmuerzo}
+
                     <div class="text-left mb-4">
-                        <label class="text-xs font-bold text-gray-700 uppercase tracking-wide">Justificación (Motivo de edición)</label>
-                        <input id="swal-obs" type="text" class="w-full border border-gray-300 p-2 rounded-lg mt-1 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ej: Olvidó marcar, error del reloj...">
+                        <label class="text-xs font-bold text-gray-700 uppercase tracking-wide">Motivo de la Edición</label>
+                        <input id="swal-obs" type="text" class="w-full border border-gray-300 p-2 rounded-lg mt-1 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ej: Olvidó marcar salida, completado por RRHH...">
                     </div>
                     <div class="text-left mb-5 p-3 bg-red-50 border border-red-100 rounded-lg">
-                        <label class="text-xs font-bold text-red-700 uppercase tracking-wide"><i class="fas fa-lock mr-1"></i>Contraseña Administrador *</label>
+                        <label class="text-[10px] font-bold text-red-700 uppercase tracking-wide"><i class="fas fa-lock mr-1"></i>Contraseña Administrador *</label>
                         <input id="swal-pass" type="password" class="w-full border border-red-300 p-2 rounded-lg mt-1 focus:ring-2 focus:ring-red-500 outline-none bg-white" placeholder="Firma electrónica requerida">
                     </div>
                     
@@ -888,14 +914,18 @@
                 `,
                 focusConfirm: false,
                 showCancelButton: true,
-                confirmButtonText: '<i class="fas fa-save mr-1"></i> Guardar Cambios',
+                confirmButtonText: '<i class="fas fa-save mr-1"></i> Guardar Historial',
                 cancelButtonText: 'Cancelar',
-                confirmButtonColor: '#1e293b', // slate-800
+                confirmButtonColor: '#1e293b',
                 width: '32em',
                 preConfirm: () => {
+                    const almInInput = document.getElementById('swal-alm-in');
+                    const almOutInput = document.getElementById('swal-alm-out');
                     return {
                         hora_entrada: document.getElementById('swal-in').value,
                         hora_salida: document.getElementById('swal-out').value,
+                        hora_inicio_almuerzo: almInInput ? almInInput.value : null,
+                        hora_fin_almuerzo: almOutInput ? almOutInput.value : null,
                         justificacion: document.getElementById('swal-obs').value || 'Edición manual por RRHH',
                         admin_password: document.getElementById('swal-pass').value
                     }
