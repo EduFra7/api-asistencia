@@ -664,21 +664,28 @@
                 }
 
                 // 3. TIENE MARCAJE EN LA BD (El empleado vino)
+                // 3. TIENE MARCAJE EN LA BD (Lectura del Caché Event-Driven)
                 else if (datos) {
+                    // Usamos el 'estado' que el Cerebro de Python ya calculó
                     if(datos.estado === 'Puntual') {
                         clases = "estado-puntual";
-                        htmlInner += `<div class="text-[10px] md:text-xs mt-1"><p class="text-green-700 font-semibold"><i class="fas fa-check-circle mr-1"></i>Puntual</p><p class="text-gray-500">${datos.horas_trabajadas} hrs</p></div>`;
+                        htmlInner += `<div class="text-[10px] md:text-xs mt-1">
+                                        <p class="text-green-700 font-semibold"><i class="fas fa-check-circle mr-1"></i>Puntual</p>
+                                        <p class="text-gray-500">${datos.horas_trabajadas || 0} hrs</p>
+                                      </div>`;
                     } else if(datos.estado === 'Tarde') {
                         clases = "estado-tarde";
-                        htmlInner += `<div class="text-[10px] md:text-xs mt-1"><p class="text-orange-600 font-semibold"><i class="fas fa-exclamation-triangle mr-1"></i>Tarde ${datos.minutos_retraso_entrada}m</p><p class="text-gray-500">Desc: Bs.${datos.deuda_generada_bs}</p></div>`;
+                        htmlInner += `<div class="text-[10px] md:text-xs mt-1">
+                                        <p class="text-orange-600 font-semibold"><i class="fas fa-exclamation-triangle mr-1"></i>Tarde ${datos.minutos_retraso_entrada || 0}m</p>
+                                        <p class="text-gray-500">Desc: Bs.${Number(datos.deuda_generada_bs || 0).toFixed(2)}</p>
+                                      </div>`;
                     } else if(datos.estado === 'Falta') {
                         clases = "estado-falta";
                         htmlInner += `<div class="text-[10px] md:text-xs mt-1"><p class="text-red-600 font-bold uppercase mt-1">Falta</p></div>`;
-                    }
-                    
-                    // ⚡ DETALLE VISUAL: Si es Feriado pero vino a trabajar
-                    if (nombreFeriado) {
-                        htmlInner += `<div class="absolute top-1 right-1 text-purple-600" title="Feriado Trabajado: ${nombreFeriado}"><i class="fas fa-star text-xs"></i></div>`;
+                    } else {
+                        // Para estados como 'Incompleto'
+                        clases = "bg-yellow-50/50 border-b-2 border-yellow-400";
+                        htmlInner += `<div class="text-[10px] md:text-xs mt-1"><p class="text-yellow-700 font-bold uppercase mt-1">Procesando...</p></div>`;
                     }
                 } 
                 
@@ -731,32 +738,29 @@
 
         function verDetalleDia(d) {
             const panel = document.getElementById('panel-radiografia');
+            
             panel.classList.remove('hidden', 'animate-emerger');
             void panel.offsetWidth; 
             panel.classList.add('animate-emerger');
             
             document.getElementById('det-fecha').textContent = d.fecha;
-            
             const badge = document.getElementById('det-estado-badge');
             const estadoTexto = d.estado ? String(d.estado).toUpperCase() : 'SIN DATOS';
             badge.textContent = estadoTexto;
             
-            // 🌟 1. CORRECCIÓN DE COLORES EXACTOS
             badge.className = "px-2 py-1 text-xs font-bold rounded shadow-sm text-white";
             if (estadoTexto === 'PUNTUAL') badge.classList.add('bg-green-500');
             else if (estadoTexto === 'VACACION') badge.classList.add('bg-blue-500');
-            else if (estadoTexto === 'PERMISO') badge.classList.add('bg-yellow-500'); // ⚡ Amarillo para Permisos
+            else if (estadoTexto === 'PERMISO') badge.classList.add('bg-yellow-500'); 
             else if (estadoTexto === 'TARDE') badge.classList.add('bg-orange-500');
             else badge.classList.add('bg-red-500'); 
 
-            // 🌟 2. INYECCIÓN DEL DETALLE DE AUSENCIA (Motivos y Horas)
             const contAusencia = document.getElementById('det-ausencia-container');
             const contMarcajes = document.getElementById('det-marcajes-container');
             
             if (d.ausencia_detalle) {
                 contAusencia.classList.remove('hidden');
                 
-                // Darle color a la caja según el tipo
                 if (d.ausencia_detalle.tipo === 'vacacion') {
                     contAusencia.className = "rounded p-3 text-xs md:text-sm space-y-1 mb-4 shadow-sm bg-blue-50 border border-blue-200 text-blue-800";
                     document.getElementById('det-ausencia-titulo').innerHTML = '<i class="fas fa-umbrella-beach mr-1"></i> Detalle de Vacación';
@@ -765,30 +769,24 @@
                     document.getElementById('det-ausencia-titulo').innerHTML = '<i class="fas fa-user-md mr-1"></i> Detalle de Permiso';
                 }
 
-                // Inyectamos el motivo real que escribió RRHH
                 document.getElementById('det-ausencia-motivo').textContent = d.ausencia_detalle.motivo || 'Sin comentarios registrados';
-                document.getElementById('det-ausencia-motivo').title = d.ausencia_detalle.motivo || ''; // Por si es muy largo, se ve al pasar el mouse
                 
-                // Formateo de las horas (Día Completo vs Por Horas)
-                let textoDuracion = 'Día Completo (8 hrs)';
+                let textoDuracion = 'Día Completo';
                 if (d.ausencia_detalle.hora_inicio && d.ausencia_detalle.hora_fin) {
                     textoDuracion = `${String(d.ausencia_detalle.hora_inicio).substring(0,5)} a ${String(d.ausencia_detalle.hora_fin).substring(0,5)} (${d.ausencia_detalle.horas_totales} hrs)`;
                 }
                 document.getElementById('det-ausencia-duracion').textContent = textoDuracion;
 
-                // ⚡ LÓGICA DE INTERFAZ: Ocultar marcajes si es todo el día y no marcó huella
                 if (textoDuracion.includes('Día Completo') && (!d.hora_entrada && !d.hora_salida)) {
                     contMarcajes.classList.add('hidden');
                 } else {
                     contMarcajes.classList.remove('hidden');
                 }
             } else {
-                // Si es un día normal, apagamos la caja de ausencias
                 contAusencia.classList.add('hidden');
                 contMarcajes.classList.remove('hidden');
             }
 
-            // 3. INYECCIÓN DE HORAS DE MARCAJE Y DEUDAS
             document.getElementById('det-entrada').textContent = d.hora_entrada ? String(d.hora_entrada).substring(0,5) : '--:--';
             document.getElementById('det-alm-ini').textContent = d.hora_inicio_almuerzo ? String(d.hora_inicio_almuerzo).substring(0,5) : '--:--';
             document.getElementById('det-alm-fin').textContent = d.hora_fin_almuerzo ? String(d.hora_fin_almuerzo).substring(0,5) : '--:--';
@@ -796,6 +794,32 @@
             
             document.getElementById('det-min-retraso').textContent = `${d.minutos_retraso_entrada || 0} min`;
             document.getElementById('det-deuda').textContent = `Bs. ${Number(d.deuda_generada_bs || 0).toFixed(2)}`;
+
+            // 🚀 NUEVO: BOTÓN DE EDICIÓN AL FINAL DEL PANEL
+            // Verificamos si no es un día futuro y si no tiene una vacación activa que bloquee la edición
+            const contenedorAcciones = document.getElementById('contenedor-acciones-edicion') || document.createElement('div');
+            contenedorAcciones.id = 'contenedor-acciones-edicion';
+            contenedorAcciones.className = "mt-4 pt-4 border-t border-gray-200";
+            
+            // Convertimos d.fecha a Date para saber si es futuro
+            const esPasadoOHoy = new Date(d.fecha + 'T00:00:00') <= new Date();
+            
+            if (esPasadoOHoy && !d.ausencia_detalle) {
+                const paramEntrada = d.hora_entrada ? String(d.hora_entrada).substring(0,5) : '';
+                const paramSalida = d.hora_salida ? String(d.hora_salida).substring(0,5) : '';
+                
+                contenedorAcciones.innerHTML = `
+                    <button onclick="abrirModalEdicion('${d.fecha}', '${paramEntrada}', '${paramSalida}')" 
+                            class="w-full bg-slate-800 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition-colors flex items-center justify-center shadow-md">
+                        <i class="fas fa-edit mr-2"></i> Editar / Justificar Asistencia
+                    </button>
+                `;
+            } else {
+                contenedorAcciones.innerHTML = ''; // Limpiamos si es futuro o vacación
+            }
+            
+            // Lo añadimos al final del panel (asegúrate de que sea el último elemento del div padding)
+            panel.querySelector('.p-4.md\\:p-5.space-y-4').appendChild(contenedorAcciones);
         }
 
         function cambiarMes(dir) {
@@ -829,6 +853,121 @@
         async function solicitarClaveAdmin() {
             const password = await pedirClave("Ingrese la contraseña de Administrador para modificar el historial.");
             if (password) mostrarExito("Desbloqueado con éxito. Modo edición activado.");
+        }
+
+        // 🌟 1. ABRIR EL MODAL DE EDICIÓN (SWEETALERT2)
+        async function abrirModalEdicion(fecha, horaInActual, horaOutActual) {
+            const emp = listaEmpleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
+            
+            const { value: formValues } = await Swal.fire({
+                title: `<p class="text-xl font-bold text-slate-800">Editar Asistencia</p>`,
+                html: `
+                    <p class="text-sm text-gray-500 mb-4">Modifica los marcajes del <b>${fecha}</b> para ${emp.nombres}.</p>
+                    <div class="flex gap-4 mb-4">
+                        <div class="flex-1 text-left">
+                            <label class="text-xs font-bold text-gray-700 uppercase tracking-wide">Entrada Real</label>
+                            <input id="swal-in" type="time" class="w-full border border-gray-300 p-2 rounded-lg mt-1 focus:ring-2 focus:ring-blue-500 outline-none" value="${horaInActual || ''}">
+                        </div>
+                        <div class="flex-1 text-left">
+                            <label class="text-xs font-bold text-gray-700 uppercase tracking-wide">Salida Real</label>
+                            <input id="swal-out" type="time" class="w-full border border-gray-300 p-2 rounded-lg mt-1 focus:ring-2 focus:ring-blue-500 outline-none" value="${horaOutActual || ''}">
+                        </div>
+                    </div>
+                    <div class="text-left mb-4">
+                        <label class="text-xs font-bold text-gray-700 uppercase tracking-wide">Justificación (Motivo de edición)</label>
+                        <input id="swal-obs" type="text" class="w-full border border-gray-300 p-2 rounded-lg mt-1 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ej: Olvidó marcar, error del reloj...">
+                    </div>
+                    <div class="text-left mb-5 p-3 bg-red-50 border border-red-100 rounded-lg">
+                        <label class="text-xs font-bold text-red-700 uppercase tracking-wide"><i class="fas fa-lock mr-1"></i>Contraseña Administrador *</label>
+                        <input id="swal-pass" type="password" class="w-full border border-red-300 p-2 rounded-lg mt-1 focus:ring-2 focus:ring-red-500 outline-none bg-white" placeholder="Firma electrónica requerida">
+                    </div>
+                    
+                    <button onclick="irAPermisos('${fecha}')" class="w-full bg-blue-50 text-blue-700 border border-blue-200 py-2.5 rounded-lg text-sm font-bold hover:bg-blue-100 transition-colors flex items-center justify-center">
+                        <i class="fas fa-calendar-plus mr-2"></i>Convertir en Permiso / Vacación Médica
+                    </button>
+                `,
+                focusConfirm: false,
+                showCancelButton: true,
+                confirmButtonText: '<i class="fas fa-save mr-1"></i> Guardar Cambios',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#1e293b', // slate-800
+                width: '32em',
+                preConfirm: () => {
+                    return {
+                        hora_entrada: document.getElementById('swal-in').value,
+                        hora_salida: document.getElementById('swal-out').value,
+                        justificacion: document.getElementById('swal-obs').value || 'Edición manual por RRHH',
+                        admin_password: document.getElementById('swal-pass').value
+                    }
+                }
+            });
+
+            if (formValues) {
+                if (!formValues.admin_password) return Swal.fire('Acceso Denegado', 'La contraseña de administrador es obligatoria para alterar el historial.', 'error');
+                enviarEdicionBackend(fecha, formValues);
+            }
+        }
+
+        // 🌟 2. ENVIAR LOS DATOS AL BACKEND
+        async function enviarEdicionBackend(fecha, datosForm) {
+            // Ponemos el panel en modo carga
+            document.getElementById('det-estado-badge').textContent = "ACTUALIZANDO...";
+            document.getElementById('det-estado-badge').className = "px-2 py-1 text-xs font-bold rounded shadow-sm text-white bg-yellow-500 animate-pulse";
+
+            try {
+                // Preparamos el payload añadiendo la fecha
+                const payload = Object.assign({ fecha: fecha }, datosForm);
+                
+                // NOTA: Asegúrate de que esta URL coincida exactamente con la que creamos en main.py
+                const res = await fetch(`${API_URL}/asistencia/${empleadoSeleccionadoId}/editar-dia`, {
+                    method: 'PUT',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token_api}` 
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!res.ok) {
+                    const error = await res.json();
+                    throw new Error(error.detail || "Error desconocido");
+                }
+
+                Swal.fire({
+                    icon: 'success',
+                    title: '¡Historial Actualizado!',
+                    text: 'El motor de cálculo ha procesado los nuevos horarios.',
+                    timer: 2000,
+                    showConfirmButton: false
+                });
+
+                // Recargamos el calendario para que muestre los nuevos cálculos
+                const empActual = listaEmpleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
+                const turnoEmp = turnosGlobal.find(t => String(t.id) === String(empActual.turno_id));
+                cargarCalendario(turnoEmp);
+
+            } catch (error) {
+                Swal.fire('Error de Auditaría', error.message, 'error');
+                // Si falla, recargamos para borrar el estado "ACTUALIZANDO..."
+                const empActual = listaEmpleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
+                const turnoEmp = turnosGlobal.find(t => String(t.id) === String(empActual.turno_id));
+                cargarCalendario(turnoEmp);
+            }
+        }
+
+        // 🌟 3. REDIRECCIÓN INTELIGENTE A PERMISOS
+        function irAPermisos(fecha) {
+            Swal.close(); // Cerramos el modal actual
+            
+            // Guardamos la intención en localStorage para que la otra página la lea
+            const intencion = {
+                empleado_id: empleadoSeleccionadoId,
+                fecha_sugerida: fecha
+            };
+            localStorage.setItem('intencion_permiso', JSON.stringify(intencion));
+            
+            // Redirigimos a tu página de vacaciones (Ajusta el nombre del archivo si es diferente)
+            window.location.href = 'vacaciones.html'; 
         }
 
         arrancarPantalla();

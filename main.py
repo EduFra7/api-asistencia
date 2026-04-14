@@ -1869,6 +1869,154 @@ async def eliminar_feriado(feriado_id: int, usuario = Depends(verificar_token)):
         cur.close()
         conn.close()
 
+
+# ==============================================================================
+# 14. MÓDULO: REPORTE DEL DÍA (GLOBAL)
+# ==============================================================================
+
+@app.get("/reporte-diario/{fecha}")
+async def obtener_reporte_diario(fecha: str, usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    conn = conectar_bd(schema)
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    
+    try:
+        # 🚀 LA VENTAJA EVENT-DRIVEN: 
+        # Ya no calculamos nada. Solo cruzamos al empleado con la tabla caché (asistencia_diaria)
+        cur.execute(f"""
+            SELECT 
+                e.id, e.nombres, e.apellidos, e.foto_perfil, e.cargo,
+                s.nombre as sucursal_nombre,
+                t.nombre as turno_nombre, t.hora_ingreso, t.hora_salida,
+                ad.estado, ad.hora_entrada as marcaje_entrada, ad.hora_salida as marcaje_salida, ad.minutos_retraso_entrada,
+                (SELECT tipo 
+                 FROM {schema}.ausencias a 
+                 WHERE a.empleado_id = e.id AND a.estado = 'aprobado' AND a.eliminado = FALSE
+                 AND %s BETWEEN a.fecha_inicio AND a.fecha_fin 
+                 LIMIT 1) as estado_ausencia
+            FROM {schema}.empleados e
+            LEFT JOIN {schema}.sucursales s ON e.sucursal_id = s.id
+            LEFT JOIN {schema}.turnos t ON e.turno_id = t.id
+            LEFT JOIN {schema}.asistencia_diaria ad ON ad.empleado_id = e.id AND ad.fecha = %s
+            WHERE e.eliminado = FALSE AND e.activo = TRUE
+            ORDER BY s.nombre ASC, e.nombres ASC
+        """, (fecha, fecha))
+        
+        reporte = cur.fetchall()
+
+        # ⚡ LIMPIEZA Y FORMATEO SEGURO PARA JSON (Sin bucles tóxicos)
+        for fila in reporte:
+            fila["hora_ingreso"] = str(fila["hora_ingreso"]) if fila.get("hora_ingreso") else None
+            fila["hora_salida"] = str(fila["hora_salida"]) if fila.get("hora_salida") else None
+            fila["marcaje_entrada"] = str(fila["marcaje_entrada"]) if fila.get("marcaje_entrada") else None
+            fila["marcaje_salida"] = str(fila["marcaje_salida"]) if fila.get("marcaje_salida") else None
+            
+            # Si el Motor de Eventos aún no ha registrado nada hoy, asumimos que no ha llegado
+            if not fila.get("estado"):
+                fila["estado"] = "Sin Registro"
+
+        return reporte
+    finally:
+        cur.close()
+        conn.close()
+
+# ==============================================================================
+# 15. EDICIÓN MANUAL DE ASISTENCIA (Solo para RRHH / Admin)
+# ==============================================================================
+
+@app.put("/asistencia/{empleado_id}/editar-dia")
+async def editar_asistencia_manual(empleado_id: int, data: dict, request: Request, usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    
+    # 1. Seguridad: Solo administradores pueden hacer esto
+    if usuario["rol"] not in ["admin", "superadmin"]:
+        raise HTTPException(status_code=403, detail="Sin permisos para editar el historial.")
+        
+    # Verificar contraseña (opcional, pero recomendado para ediciones del pasado)
+    admin_password = data.get("admin_password")
+    if not admin_password:
+        raise HTTPException(status_code=409, detail="Contraseña requerida para modificar historial.")
+        
+    conn_pub = conectar_bd("public")
+    cur_pub = conn_pub.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur_pub.execute("SELECT password_hash FROM usuarios WHERE id = %s", (usuario["id"],))
+    user_db = cur_pub.fetchone()
+    cur_pub.close()
+    conn_pub.close()
+
+    if not user_db or not bcrypt.checkpw(admin_password.encode(), user_db["password_hash"].encode()):
+        raise HTTPException(status_code=409, detail="Contraseña incorrecta. Edición denegada.")
+
+    fecha = data.get("fecha")
+    hora_entrada = data.get("hora_entrada")
+    hora_salida = data.get("hora_salida")
+    justificacion = data.get("justificacion", "Edición manual por RRHH")
+    
+    # Validaciones básicas
+    if not fecha: raise HTTPException(status_code=400, detail="Fecha requerida.")
+    
+    conn = conectar_bd(schema)
+    cur = conn.cursor()
+    try:
+        # 2. 🚀 INYECCIÓN AL MOTOR EVENT-DRIVEN: 
+        # En lugar de solo escribir en la tabla final, insertamos marcajes "Simulados" 
+        # para que el Cerebro calcule si llegó tarde basado en la hora que pongamos.
+        
+        device_id = "EDICIÓN-MANUAL"
+        fecha_dt = datetime.strptime(fecha, "%Y-%m-%d").date()
+        
+        # Conseguir el bio_id
+        cur.execute(f"SELECT bio_id FROM {schema}.empleados WHERE id = %s", (empleado_id,))
+        emp_data = cur.fetchone()
+        bio_id = str(emp_data[0]) if emp_data and emp_data[0] else "S/N"
+
+        # Borramos marcajes brutos previos de ese día para evitar conflictos (opcional, depende de tu lógica de negocio, 
+        # pero para una edición manual absoluta, es más seguro limpiar y reescribir)
+        cur.execute(f"DELETE FROM {schema}.eventos_brutos WHERE item = %s AND DATE(fecha_hora) = %s", (bio_id, fecha_dt))
+
+        # Insertamos la Entrada Manual (Si RRHH la especificó)
+        if hora_entrada:
+            fh_in = f"{fecha} {hora_entrada}:00"
+            cur.execute(f"""
+                INSERT INTO {schema}.eventos_brutos (device_no, item, action, fecha_hora, raw_data)
+                VALUES (%s, %s, '0', %s, %s)
+            """, (device_id, bio_id, fh_in, psycopg2.extras.Json({"raw": "MANUAL-IN"})))
+
+        # Insertamos la Salida Manual (Si RRHH la especificó)
+        if hora_salida:
+            fh_out = f"{fecha} {hora_salida}:00"
+            cur.execute(f"""
+                INSERT INTO {schema}.eventos_brutos (device_no, item, action, fecha_hora, raw_data)
+                VALUES (%s, %s, '1', %s, %s)
+            """, (device_id, bio_id, fh_out, psycopg2.extras.Json({"raw": "MANUAL-OUT"})))
+            
+        conn.commit()
+
+        # 3. 🧠 EL CEREBRO ACTÚA: Le decimos que recalcule el día entero
+        exito = procesar_asistencia_dia(schema, empleado_id, fecha_dt)
+        
+        if exito:
+            # 4. Marcamos la fila como "Auditada" para que sepamos que fue editada a mano
+            cur.execute(f"""
+                UPDATE {schema}.asistencia_diaria 
+                SET modificado_manualmente = TRUE, observaciones = %s
+                WHERE empleado_id = %s AND fecha = %s
+            """, (justificacion, empleado_id, fecha_dt))
+            conn.commit()
+            return {"mensaje": "Asistencia recalculada y justificada exitosamente."}
+        else:
+            raise HTTPException(status_code=500, detail="Error en el Motor de Cálculo.")
+
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
 # ==============================================================================
 # 1x. MÓDULO: SIMULADOR DE HARDWARE (DEV / QA)
 # ==============================================================================
