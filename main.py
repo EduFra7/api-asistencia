@@ -494,7 +494,7 @@ def procesar_asistencia_dia(schema: str, empleado_id: int, fecha: date):
 
         # 🚀 4. EJECUTAR MOTOR MATEMÁTICO (Tu función calcular_dia_asistencia)
         # Nota: Asegúrate de que calcular_dia_asistencia esté definida en tu main.py
-        resumen = calcular_dia_asistencia(marcajes, emp_turno, ausencias, emp_turno['salario_base'])
+        resumen = calcular_dia_asistencia(marcajes, emp_turno, ausencias, emp_turno['salario_base'], fecha)
 
         # 5. UPSERT (Insertar o Actualizar) en la tabla Caché
         cur.execute(f"""
@@ -1580,11 +1580,7 @@ async def editar_ausencia(ausencia_id: int, data: dict, usuario = Depends(verifi
 # 11. MOTOR MATEMÁTICO DE ASISTENCIA (CORE ERP)
 # ==============================================================================
 
-def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, salario_base: float):
-    """
-    Motor matemático que procesa una lista de objetos datetime (marcajes) 
-    y devuelve un diccionario listo para guardar en asistencia_diaria.
-    """
+def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, salario_base: float, fecha_dia: date = None):
     # 1. Filtro Anti-Ansiedad (Debounce de 3 minutos)
     marcajes_limpios = []
     for m in sorted(marcajes_brutos):
@@ -1601,63 +1597,58 @@ def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, 
         "hora_salida": marcajes_limpios[-1].time() if len(marcajes_limpios) > 3 else (marcajes_limpios[-1].time() if len(marcajes_limpios) > 1 else None),
         "minutos_retraso_entrada": 0,
         "minutos_exceso_almuerzo": 0,
-        "estado": "Incompleto",
-        "deuda_generada_bs": 0.00
+        "estado": "Falta",
+        "deuda_generada_bs": 0.00,
+        "horas_trabajadas": 0.00
     }
 
-    if not resumen["hora_entrada"]:
-        resumen["estado"] = "Falta"
+    if not marcajes_limpios:
         return resumen
 
-    # 2. Evaluación de Tolerancia (Solo ingreso)
+    # 2. Evaluación de Retraso Entrada
     hora_oficial = turno['hora_ingreso']
     min_llegada = (resumen["hora_entrada"].hour * 60) + resumen["hora_entrada"].minute
     min_oficial = (hora_oficial.hour * 60) + hora_oficial.minute
-    
     retraso = min_llegada - min_oficial
-    
     if retraso > turno.get('tolerancia_min', 0):
         resumen["minutos_retraso_entrada"] = retraso
 
-    # 3. Evaluación de Almuerzo (Duración Estricta)
+    # 3. Evaluación de Almuerzo
     if resumen["hora_inicio_almuerzo"] and resumen["hora_fin_almuerzo"]:
         alm_in = (resumen["hora_inicio_almuerzo"].hour * 60) + resumen["hora_inicio_almuerzo"].minute
         alm_out = (resumen["hora_fin_almuerzo"].hour * 60) + resumen["hora_fin_almuerzo"].minute
         duracion = alm_out - alm_in
-        
         limite_alm = turno.get('almuerzo_min', 0)
         if duracion > limite_alm and limite_alm > 0:
             resumen["minutos_exceso_almuerzo"] = duracion - limite_alm
 
-    # 4. Regla Estricta de Permisos (Neutraliza deuda si cubre la hora)
+    # 4. Ajuste por Permisos
     if permisos:
         for p in permisos:
-            if p['hora_inicio'] and p['hora_fin']:
-                p_in = (p['hora_inicio'].hour * 60) + p['hora_inicio'].minute
-                p_out = (p['hora_fin'].hour * 60) + p['hora_fin'].minute
-                # Si el empleado llega tarde pero DENTRO de su permiso, perdonamos el retraso matutino
-                if min_llegada <= p_out:
-                    resumen["minutos_retraso_entrada"] = 0 
-                # NOTA: Si llega DESPUÉS de que acabe el permiso, el retraso ya fue sumado arriba y no se perdona.
+            p_out = (p['hora_fin'].hour * 60) + p['hora_fin'].minute
+            if min_llegada <= p_out:
+                resumen["minutos_retraso_entrada"] = 0 
 
-    # 5. Cálculo Financiero (Valor por minuto)
-    # Fórmula: Salario / 30 días / 8 horas / 60 minutos
+    # 5. Cálculo de Deuda
     valor_minuto = (float(salario_base) / 30 / 8 / 60) if salario_base > 0 else 0
     total_min_deuda = resumen["minutos_retraso_entrada"] + resumen["minutos_exceso_almuerzo"]
-    
     resumen["deuda_generada_bs"] = round(total_min_deuda * valor_minuto, 2)
 
-    # 6. Estado Final y Detección de "Incompletos"
-    # ¿Cuántos marcajes exige este turno?
+    # ⚡ 6. LÓGICA DE ESTADOS TEMPORALES (Iconografía)
     marcajes_esperados = 4 if turno.get('almuerzo') else 2
-    
-    # Lógica estricta de Veredicto
-    if len(marcajes_limpios) > 0 and len(marcajes_limpios) < marcajes_esperados:
-        resumen["estado"] = "Incompleto"
-    elif total_min_deuda > 0:
-        resumen["estado"] = "Tarde"
-    elif len(marcajes_limpios) >= marcajes_esperados:
-        resumen["estado"] = "Puntual"
+    conteo = len(marcajes_limpios)
+    hoy = date.today()
+
+    if conteo < marcajes_esperados:
+        # Si el día ya pasó: Es un error/olvido
+        if fecha_dia and fecha_dia < hoy:
+            resumen["estado"] = "Incompleto"
+        # Si es hoy: El empleado sigue trabajando
+        else:
+            resumen["estado"] = "Trabajando"
+    else:
+        # Jornada completa: Evaluamos si hubo retrasos
+        resumen["estado"] = "Tarde" if total_min_deuda > 0 else "Puntual"
 
     return resumen
 
@@ -2012,6 +2003,33 @@ async def editar_asistencia_manual(empleado_id: int, data: dict, request: Reques
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+@app.delete("/asistencia/{empleado_id}/eliminar-dia/{fecha}")
+async def eliminar_asistencia_dia(empleado_id: int, fecha: str, usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    # (Agrega aquí la misma verificación de contraseña admin que usamos en editar si quieres más seguridad)
+    
+    conn = conectar_bd(schema)
+    cur = conn.cursor()
+    try:
+        # 1. Obtenemos el bio_id
+        cur.execute(f"SELECT bio_id FROM {schema}.empleados WHERE id = %s", (empleado_id,))
+        bio_id = cur.fetchone()[0]
+
+        # 2. Borramos los eventos brutos de ese día
+        cur.execute(f"DELETE FROM {schema}.eventos_brutos WHERE item = %s AND DATE(fecha_hora) = %s", (str(bio_id), fecha))
+        
+        # 3. Borramos el cálculo caché para que el Motor lo regenere de cero
+        cur.execute(f"DELETE FROM {schema}.asistencia_diaria WHERE empleado_id = %s AND fecha = %s", (empleado_id, fecha))
+        
+        conn.commit()
+        # 4. Forzamos un recálculo (esto pondrá el estado en 'Falta')
+        procesar_asistencia_dia(schema, empleado_id, datetime.strptime(fecha, "%Y-%m-%d").date())
+        
+        return {"mensaje": "Registros eliminados. El día ha vuelto a estado inicial."}
     finally:
         cur.close()
         conn.close()

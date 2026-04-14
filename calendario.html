@@ -34,6 +34,9 @@
         .animate-emerger {
             animation: fadeInRight 0.3s ease-out forwards;
         }
+        /* Fija el scroll y evita saltos visuales al abrir modales */
+        body.swal2-shown { padding-right: 0 !important; }
+        html.swal2-shown { overflow: auto !important; }
     </style>
 </head>
 <body class="bg-gray-50 font-sans flex h-screen overflow-hidden text-gray-800 relative">
@@ -663,33 +666,44 @@
                     permiteClic = false;
                 }
 
-                // 3. TIENE MARCAJE EN LA BD (El empleado vino)
+                // 3. ESTADOS CON ICONOS (Asistencia Calculada)
                 else if (datos) {
+                    let icono = "";
+                    let label = "";
+                    let colorIcono = "";
+                    let colorTexto = "";
+
                     if(datos.estado === 'Puntual') {
                         clases = "estado-puntual text-center justify-center relative";
-                        htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-1 md:top-2 left-1 md:left-2">${d}</span>
-                                     <i class="fas fa-check-circle text-2xl md:text-3xl opacity-40 mb-1 text-green-500"></i>
-                                     <p class="text-[10px] md:text-xs text-green-700 font-bold uppercase mt-1">Puntual</p>`;
+                        icono = "fa-check-circle"; colorIcono = "text-green-500";
+                        label = "Puntual"; colorTexto = "text-green-700";
                     } else if(datos.estado === 'Tarde') {
                         clases = "estado-tarde text-center justify-center relative";
-                        htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-1 md:top-2 left-1 md:left-2">${d}</span>
-                                     <i class="fas fa-clock text-2xl md:text-3xl opacity-40 mb-1 text-orange-500"></i>
-                                     <p class="text-[10px] md:text-xs text-orange-700 font-bold uppercase mt-1">Tarde</p>
-                                     <p class="text-[9px] text-orange-600 font-bold leading-tight">Retraso: ${datos.minutos_retraso_entrada}m</p>`;
+                        icono = "fa-clock"; colorIcono = "text-orange-500";
+                        label = "Tarde"; colorTexto = "text-orange-700";
+                    } else if(datos.estado === 'Trabajando') {
+                        clases = "bg-blue-50/50 text-center justify-center relative border-b-4 border-blue-400";
+                        icono = "fa-user-clock animate-pulse"; colorIcono = "text-blue-500";
+                        label = "En Curso"; colorTexto = "text-blue-700";
                     } else if(datos.estado === 'Incompleto') {
-                        // ⚡ NUEVO ESTADO VISUAL: Falta un marcaje
                         clases = "bg-yellow-50 text-center justify-center relative border-b-4 border-yellow-400";
-                        htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-1 md:top-2 left-1 md:left-2">${d}</span>
-                                     <i class="fas fa-exclamation-triangle text-2xl md:text-3xl opacity-40 mb-1 text-yellow-500"></i>
-                                     <p class="text-[10px] md:text-xs text-yellow-700 font-bold uppercase mt-1">Incompleto</p>
-                                     <p class="text-[9px] text-yellow-600 font-bold leading-tight">Faltan marcajes</p>`;
+                        icono = "fa-exclamation-triangle"; colorIcono = "text-yellow-500";
+                        label = "Incompleto"; colorTexto = "text-yellow-700";
                     } else if(datos.estado === 'Falta') {
                         clases = "estado-falta text-center justify-center relative";
-                        htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-1 md:top-2 left-1 md:left-2">${d}</span>
-                                     <i class="fas fa-times-circle text-2xl md:text-3xl opacity-40 mb-1 text-red-500"></i>
-                                     <p class="text-[10px] md:text-xs text-red-700 font-bold uppercase mt-1">Falta</p>`;
+                        icono = "fa-times-circle"; colorIcono = "text-red-500";
+                        label = "Falta"; colorTexto = "text-red-700";
                     }
-                } 
+
+                    htmlInner = `
+                        <span class="text-xs font-bold text-gray-700 absolute top-2 left-2">${d}</span>
+                        <i class="fas ${icono} text-2xl md:text-3xl opacity-50 mb-1 ${colorIcono}"></i>
+                        <p class="text-[10px] md:text-xs ${colorTexto} font-bold uppercase mt-1">${label}</p>
+                    `;
+                    if(datos.estado === 'Tarde') {
+                        htmlInner += `<p class="text-[9px] text-orange-600 font-bold">-${datos.minutos_retraso_entrada}m</p>`;
+                    }
+                }
                 
                 // 4. AUSENCIAS APROBADAS (Permisos y Vacaciones)
                 else if (ausenciaActiva) {
@@ -916,6 +930,9 @@
                     <button onclick="irAPermisos('${fecha}')" class="w-full bg-blue-50 text-blue-700 border border-blue-200 py-2.5 rounded-lg text-sm font-bold hover:bg-blue-100 transition-colors flex items-center justify-center">
                         <i class="fas fa-calendar-plus mr-2"></i>Convertir en Permiso / Vacación Médica
                     </button>
+                    <button onclick="confirmarEliminacionAsistencia('${fecha}')" class="w-full mt-2 text-red-600 text-xs font-bold hover:underline py-2">
+                        <i class="fas fa-trash-alt mr-1"></i> Eliminar todos los registros de este día
+                    </button>
                 `,
                 focusConfirm: false,
                 showCancelButton: true,
@@ -1002,7 +1019,33 @@
             localStorage.setItem('intencion_permiso', JSON.stringify(intencion));
             
             // Redirigimos a tu página de vacaciones (Ajusta el nombre del archivo si es diferente)
-            window.location.href = 'vacaciones.html'; 
+            window.location.href = 'ausencias.html'; 
+        }
+
+        async function confirmarEliminacionAsistencia(fecha) {
+            const { isConfirmed } = await Swal.fire({
+                title: '¿Eliminar registros?',
+                text: `Se borrarán todos los marcajes del día ${fecha}. El estado volverá a "Falta".`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                confirmButtonText: 'Sí, eliminar',
+                cancelButtonText: 'Cancelar'
+            });
+
+            if (isConfirmed) {
+                // Aquí llamas al endpoint DELETE que creamos en el paso anterior
+                const res = await fetch(`${API_URL}/asistencia/${empleadoSeleccionadoId}/eliminar-dia/${fecha}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token_api}` }
+                });
+                if(res.ok) {
+                    Swal.fire('Eliminado', 'Los registros han sido borrados.', 'success');
+                    const empActual = listaEmpleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
+                    const turnoEmp = turnosGlobal.find(t => String(t.id) === String(empActual.turno_id));
+                    cargarCalendario(turnoEmp);
+                }
+            }
         }
 
         arrancarPantalla();
