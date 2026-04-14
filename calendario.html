@@ -336,10 +336,9 @@
                     feriadosDB.forEach(f => {
                         const fechaCompleta = String(f.fecha); // "2026-05-01"
                         const mesDia = fechaCompleta.substring(5, 10); // "05-01"
-                        
-                        // Si es recurrente guarda solo el mes-día, si no, la fecha exacta
-                        if (f.recurrente) feriadosBolivia.set(mesDia, f.descripcion);
-                        else feriadosBolivia.set(fechaCompleta, f.descripcion);
+                        // Guardamos un objeto con la descripción y la ciudad (tipo)
+                        if (f.recurrente) feriadosBolivia.set(mesDia, { descripcion: f.descripcion, tipo: f.tipo || 'Nacional' });
+                        else feriadosBolivia.set(fechaCompleta, { descripcion: f.descripcion, tipo: f.tipo || 'Nacional' });
                     });
                 }
                 
@@ -588,10 +587,24 @@
                     ausenciaActiva = ausencias.find(a => a.estado === 'aprobado' && fechaStr >= String(a.fecha_inicio).substring(0,10) && fechaStr <= String(a.fecha_fin).substring(0,10));
                 }
 
-                // 🌟 LECTURA DE FERIADOS DESDE LA BD (Tu código requerido)
-                let nombreFeriado = feriadosBolivia.get(fechaStr);
-                if (!nombreFeriado) nombreFeriado = feriadosBolivia.get(mesDiaStr);
+                // 🌟 LECTURA Y FILTRADO GEOGRÁFICO DE FERIADOS
+                let objFeriado = feriadosBolivia.get(fechaStr) || feriadosBolivia.get(mesDiaStr);
+                let nombreFeriado = null;
 
+                if (objFeriado) {
+                    // 1. ¿De qué ciudad es este empleado? (Si no tiene, asumimos Nacional)
+                    const ciudadEmpleado = (empleadoActual && empleadoActual.sucursal_ciudad) 
+                        ? String(empleadoActual.sucursal_ciudad).toLowerCase() 
+                        : 'nacional';
+                    
+                    const alcanceFeriado = String(objFeriado.tipo).toLowerCase();
+
+                    // 2. ¿Le corresponde este feriado?
+                    if (alcanceFeriado === 'nacional' || alcanceFeriado === ciudadEmpleado) {
+                        nombreFeriado = objFeriado.descripcion;
+                    }
+                }
+                
                 let esDiaLaboral = false;
                 if (diasLaboralesJSON && typeof diasLaboralesJSON === 'object') {
                     esDiaLaboral = Reflect.get(diasLaboralesJSON, letraDia) === true;

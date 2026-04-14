@@ -742,7 +742,8 @@ async def obtener_empleados(usuario = Depends(verificar_token)):
         # ⚡ AHORA TRAEMOS HORA_INGRESO, HORA_SALIDA Y ALMUERZO DEL TURNO
         cur.execute(f"""
             SELECT e.*, 
-                   s.nombre as sucursal_nombre, 
+                   s.nombre as sucursal_nombre,
+                   s.ciudad as sucursal_ciudad,
                    sec.nombre as seccion_nombre,
                    t.nombre as turno_nombre,
                    t.hora_ingreso as turno_ingreso,
