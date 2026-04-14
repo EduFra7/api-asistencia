@@ -302,8 +302,15 @@
         async function arrancarPantalla() {
             renderizarMenu('asistencia');
             configurarBotonesFiltro();
-            const promesasInicio = new Array(cargarCatalogos(), cargarEmpleados());
+            
+            // 1. Disparamos ambas descargas al mismo tiempo
+            const promesasInicio = [cargarCatalogos(), cargarEmpleados()];
+            
+            // 2. Esperamos pacientemente a que AMBAS terminen al 100%
             await Promise.all(promesasInicio);
+            
+            // 3. ⚡ FIX: Recién ahora que tenemos Empleados Y Turnos, dibujamos la lista interactiva
+            filtrarDirectorio();
         }
 
         function configurarBotonesFiltro() {
@@ -354,10 +361,9 @@
             try {
                 const res = await fetch(`${API_URL}/empleados`, { headers: { 'Authorization': `Bearer ${token_api}` } });
                 listaEmpleadosGlobal = await res.json();
-                filtrarDirectorio();
                 
-                // ⚡ ELIMINADO: Ya no auto-seleccionamos a nadie. 
-                // La pantalla quedará en su "Estado Vacío" esperando la acción del usuario.
+                // ⚡ FIX: Borramos filtrarDirectorio() de aquí para que no dibuje la lista antes de tiempo
+                
             } catch (e) { console.error("Error empleados", e); }
         }
 
@@ -445,7 +451,7 @@
             document.getElementById('header-cargo').innerHTML = `<i class="fas fa-briefcase mr-1"></i>${emp.cargo || 'Sin cargo'}`;
             document.getElementById('header-sucursal').innerHTML = `<i class="fas fa-building mr-1"></i>${emp.sucursal_nombre || 'Sin Sucursal'}`;
             
-            const turnoEmp = turnosGlobal.find(t => t.id === emp.turno_id);
+            const turnoEmp = turnosGlobal.find(t => String(t.id) === String(emp.turno_id));
             let turnoDetalleHTML = `<p class="text-xs md:text-sm font-medium"><i class="fas fa-clock mr-1 text-gray-400"></i>No asignado</p>`;
             if (turnoEmp) {
                 const hIngreso = String(turnoEmp.hora_ingreso).substring(0,5);
@@ -470,25 +476,34 @@
             await cargarCalendario(turnoEmp);
         }
 
-        // ⚡ NUEVA FUNCIÓN: El espía silencioso
+        // ⚡ FUNCIÓN OPTIMIZADA: Solo descarga feriados, no toda la empresa
         async function verificarSincronizacionFeriados(anio) {
-            // Si ya lo sincronizamos en esta sesión de navegación, no hacemos nada
             if (aniosSincronizados.has(anio)) return; 
 
             try {
-                // Llamamos a la API de Python para que calcule la matemática
-                await fetch(`${API_URL}/sincronizar-feriados/${anio}`, {
+                const res = await fetch(`${API_URL}/sincronizar-feriados/${anio}`, {
                     method: 'POST',
                     headers: { 'Authorization': `Bearer ${token_api}` }
                 });
                 
-                // Lo guardamos en la memoria para no volver a pedirlo
+                const data = await res.json();
                 aniosSincronizados.add(anio);
                 
-                // Recargamos el catálogo interno para que el calendario tenga los nuevos datos
-                await cargarCatalogos(); 
+                // SOLO si la IA insertó nuevos feriados, refrescamos la memoria de feriados
+                if (data.insertados && data.insertados > 0) {
+                    const resF = await fetch(`${API_URL}/feriados`, { headers: { 'Authorization': `Bearer ${token_api}` } });
+                    const feriadosDB = await resF.json();
+                    
+                    feriadosBolivia.clear();
+                    feriadosDB.forEach(f => {
+                        const fechaCompleta = String(f.fecha);
+                        const mesDia = fechaCompleta.substring(5, 10);
+                        if (f.recurrente) feriadosBolivia.set(mesDia, { descripcion: f.descripcion, tipo: f.tipo || 'Nacional' });
+                        else feriadosBolivia.set(fechaCompleta, { descripcion: f.descripcion, tipo: f.tipo || 'Nacional' });
+                    });
+                }
             } catch(e) {
-                console.error("Error sincronizando feriados del año " + anio, e);
+                console.error("Error sincronizando feriados en segundo plano", e);
             }
         }
 
@@ -507,9 +522,10 @@
             
             const cuadricula = document.getElementById('cuadriculaCalendario');
             cuadricula.innerHTML = `
-                <div class="col-span-7 p-16 flex flex-col items-center justify-center text-blue-500 bg-white">
-                    <i class="fas fa-circle-notch fa-spin text-4xl mb-3"></i>
-                    <p class="text-sm font-bold text-gray-500">Calculando asistencia mensual...</p>
+                <div class="cal-header">Lun</div><div class="cal-header">Mar</div><div class="cal-header">Mié</div><div class="cal-header">Jue</div><div class="cal-header">Vie</div><div class="cal-header">Sáb</div><div class="cal-header">Dom</div>
+                <div class="col-span-7 p-10 flex flex-col items-center justify-center text-blue-500 bg-white">
+                    <i class="fas fa-circle-notch fa-spin text-3xl mb-2"></i>
+                    <p class="text-xs font-bold text-gray-500">Analizando asistencia...</p>
                 </div>
             `;
 
@@ -604,10 +620,22 @@
                         nombreFeriado = objFeriado.descripcion;
                     }
                 }
-                
+
+                // 🌟 LECTURA DE DÍAS LABORALES (Con analizador a prueba de errores)
                 let esDiaLaboral = false;
-                if (diasLaboralesJSON && typeof diasLaboralesJSON === 'object') {
-                    esDiaLaboral = Reflect.get(diasLaboralesJSON, letraDia) === true;
+                let diasTurno = diasLaboralesJSON;
+                
+                // Si la BD lo envió como texto, lo convertimos a objeto
+                if (typeof diasTurno === 'string') {
+                    try { diasTurno = JSON.parse(diasTurno); } catch(e) { diasTurno = null; }
+                }
+
+                if (diasTurno && typeof diasTurno === 'object' && Object.keys(diasTurno).length > 0) {
+                    // Verificamos si es true (booleano) o "true" (texto)
+                    esDiaLaboral = diasTurno[letraDia] === true || String(diasTurno[letraDia]).toLowerCase() === 'true';
+                } else {
+                    // Si el empleado aún no tiene turno asignado, asumimos Lunes a Viernes para no llenarle de faltas
+                    esDiaLaboral = (letraDia !== 'S' && letraDia !== 'D');
                 }
 
                 let clases = "estado-futuro";
@@ -666,12 +694,14 @@
                     datosClick = { fecha: fechaStr, estado: ausenciaActiva.tipo, ausencia_detalle: ausenciaActiva };
                 } 
                 
-                // 5. FIN DE SEMANA O DÍA INHÁBIL
-                else if (!esDiaLaboral && diasLaboralesJSON && Object.keys(diasLaboralesJSON).length > 0) {
-                    clases = "estado-inhabiles";
-                    htmlInner = `<span class="text-xs font-bold text-gray-400">${d}</span>`;
-                    permiteClic = false;
-                } 
+                // 5. DÍA INHÁBIL O FIN DE SEMANA (Sigue siendo interactivo)
+                else if (!esDiaLaboral) {
+                    clases = "estado-inhabiles text-center justify-center relative bg-gray-100/40 hover:bg-blue-50/50";
+                    htmlInner = `<span class="text-xs font-bold text-gray-400 absolute top-1 left-1">${d}</span>
+                                 <i class="fas fa-bed text-xl text-gray-300 mb-1"></i>
+                                 <p class="text-[10px] text-gray-400 font-bold uppercase mt-1">Descanso</p>`;
+                    permiteClic = true; // ⚡ CAMBIO CLAVE: Ahora sí puedes hacer clic para ver detalles o marcar
+                }
                 
                 // 6. DÍA LABORAL, PASADO, SIN MARCAJE, SIN FERIADO, SIN PERMISO -> ¡FALTA!
                 else if (fechaActualLoop < hoy) {
@@ -770,24 +800,22 @@
 
         function cambiarMes(dir) {
             fechaVisualizada.setMonth(fechaVisualizada.getMonth() + dir);
-            cargarCalendario( turnosGlobal.find(t => t.id === empleadoSeleccionadoId) );
+            // ⚡ FIX BUG: Buscamos al empleado correcto primero, luego su turno
+            const empActual = listaEmpleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
+            const turnoEmp = turnosGlobal.find(t => String(t.id) === String(empActual.turno_id));
+            cargarCalendario(turnoEmp);
         }
 
-        // 🌟 NUEVA FUNCIÓN: Salto en el tiempo exacto
         function irAMesEspecifico(valorYyyyMm) {
-            if(!valorYyyyMm) return; // Si el usuario cancela, no hacemos nada
+            if(!valorYyyyMm) return; 
             
-            // Separamos el "2024-05" en Año y Mes
             const partes = String(valorYyyyMm).split('-');
-            const anio = parseInt(partes.at(0));
-            const mes = parseInt(partes.at(1)) - 1; // JS cuenta los meses del 0 al 11
+            fechaVisualizada.setFullYear(parseInt(partes[0]));
+            fechaVisualizada.setMonth(parseInt(partes[1]) - 1); 
             
-            // Actualizamos la variable global del reloj
-            fechaVisualizada.setFullYear(anio);
-            fechaVisualizada.setMonth(mes);
-            
-            // Disparamos la recarga del calendario
-            const turnoEmp = turnosGlobal.find(t => t.id === empleadoSeleccionadoId);
+            // ⚡ FIX BUG: Igual que arriba
+            const empActual = listaEmpleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
+            const turnoEmp = turnosGlobal.find(t => String(t.id) === String(empActual.turno_id));
             cargarCalendario(turnoEmp);
         }
 
