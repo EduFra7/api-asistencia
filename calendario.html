@@ -664,39 +664,41 @@
                 }
 
                 // 3. TIENE MARCAJE EN LA BD (El empleado vino)
-                // 3. TIENE MARCAJE EN LA BD (Lectura del Caché Event-Driven)
                 else if (datos) {
-                    // Usamos el 'estado' que el Cerebro de Python ya calculó
                     if(datos.estado === 'Puntual') {
-                        clases = "estado-puntual";
-                        htmlInner += `<div class="text-[10px] md:text-xs mt-1">
-                                        <p class="text-green-700 font-semibold"><i class="fas fa-check-circle mr-1"></i>Puntual</p>
-                                        <p class="text-gray-500">${datos.horas_trabajadas || 0} hrs</p>
-                                      </div>`;
+                        clases = "estado-puntual text-center justify-center relative";
+                        htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-1 md:top-2 left-1 md:left-2">${d}</span>
+                                     <i class="fas fa-check-circle text-2xl md:text-3xl opacity-40 mb-1 text-green-500"></i>
+                                     <p class="text-[10px] md:text-xs text-green-700 font-bold uppercase mt-1">Puntual</p>`;
                     } else if(datos.estado === 'Tarde') {
-                        clases = "estado-tarde";
-                        htmlInner += `<div class="text-[10px] md:text-xs mt-1">
-                                        <p class="text-orange-600 font-semibold"><i class="fas fa-exclamation-triangle mr-1"></i>Tarde ${datos.minutos_retraso_entrada || 0}m</p>
-                                        <p class="text-gray-500">Desc: Bs.${Number(datos.deuda_generada_bs || 0).toFixed(2)}</p>
-                                      </div>`;
+                        clases = "estado-tarde text-center justify-center relative";
+                        htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-1 md:top-2 left-1 md:left-2">${d}</span>
+                                     <i class="fas fa-clock text-2xl md:text-3xl opacity-40 mb-1 text-orange-500"></i>
+                                     <p class="text-[10px] md:text-xs text-orange-700 font-bold uppercase mt-1">Tarde</p>
+                                     <p class="text-[9px] text-orange-600 font-bold leading-tight">Retraso: ${datos.minutos_retraso_entrada}m</p>`;
+                    } else if(datos.estado === 'Incompleto') {
+                        // ⚡ NUEVO ESTADO VISUAL: Falta un marcaje
+                        clases = "bg-yellow-50 text-center justify-center relative border-b-4 border-yellow-400";
+                        htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-1 md:top-2 left-1 md:left-2">${d}</span>
+                                     <i class="fas fa-exclamation-triangle text-2xl md:text-3xl opacity-40 mb-1 text-yellow-500"></i>
+                                     <p class="text-[10px] md:text-xs text-yellow-700 font-bold uppercase mt-1">Incompleto</p>
+                                     <p class="text-[9px] text-yellow-600 font-bold leading-tight">Faltan marcajes</p>`;
                     } else if(datos.estado === 'Falta') {
-                        clases = "estado-falta";
-                        htmlInner += `<div class="text-[10px] md:text-xs mt-1"><p class="text-red-600 font-bold uppercase mt-1">Falta</p></div>`;
-                    } else {
-                        // Para estados como 'Incompleto'
-                        clases = "bg-yellow-50/50 border-b-2 border-yellow-400";
-                        htmlInner += `<div class="text-[10px] md:text-xs mt-1"><p class="text-yellow-700 font-bold uppercase mt-1">Procesando...</p></div>`;
+                        clases = "estado-falta text-center justify-center relative";
+                        htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-1 md:top-2 left-1 md:left-2">${d}</span>
+                                     <i class="fas fa-times-circle text-2xl md:text-3xl opacity-40 mb-1 text-red-500"></i>
+                                     <p class="text-[10px] md:text-xs text-red-700 font-bold uppercase mt-1">Falta</p>`;
                     }
                 } 
                 
                 // 4. AUSENCIAS APROBADAS (Permisos y Vacaciones)
                 else if (ausenciaActiva) {
                     clases = ausenciaActiva.tipo === 'vacacion' ? "estado-vacacion text-center justify-center relative" : "estado-permiso text-center justify-center relative";
-                    const icono = ausenciaActiva.tipo === 'vacacion' ? 'fa-umbrella-beach text-blue-400' : 'fa-user-md text-yellow-500';
+                    const icono = ausenciaActiva.tipo === 'vacacion' ? 'fa-umbrella-beach text-blue-500' : 'fa-user-md text-yellow-500';
                     const textColor = ausenciaActiva.tipo === 'vacacion' ? 'text-blue-700' : 'text-yellow-700';
                     htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-1 md:top-2 left-1 md:left-2">${d}</span>
-                                 <i class="fas ${icono} text-xl md:text-2xl opacity-50 mb-1"></i>
-                                 <p class="text-[10px] md:text-xs ${textColor} font-bold uppercase mt-1 md:mt-2">${ausenciaActiva.tipo}</p>`;
+                                 <i class="fas ${icono} text-2xl md:text-3xl opacity-40 mb-1"></i>
+                                 <p class="text-[10px] md:text-xs ${textColor} font-bold uppercase mt-1">${ausenciaActiva.tipo}</p>`;
                     
                     datosClick = { fecha: fechaStr, estado: ausenciaActiva.tipo, ausencia_detalle: ausenciaActiva };
                 } 
@@ -705,15 +707,17 @@
                 else if (!esDiaLaboral) {
                     clases = "estado-inhabiles text-center justify-center relative bg-gray-100/40 hover:bg-blue-50/50";
                     htmlInner = `<span class="text-xs font-bold text-gray-400 absolute top-1 left-1">${d}</span>
-                                 <i class="fas fa-bed text-xl text-gray-300 mb-1"></i>
+                                 <i class="fas fa-bed text-2xl md:text-3xl text-gray-300 opacity-60 mb-1"></i>
                                  <p class="text-[10px] text-gray-400 font-bold uppercase mt-1">Descanso</p>`;
-                    permiteClic = true; // ⚡ CAMBIO CLAVE: Ahora sí puedes hacer clic para ver detalles o marcar
+                    permiteClic = true;
                 }
                 
-                // 6. DÍA LABORAL, PASADO, SIN MARCAJE, SIN FERIADO, SIN PERMISO -> ¡FALTA!
+                // 6. DÍA LABORAL, PASADO, SIN MARCAJE -> ¡FALTA!
                 else if (fechaActualLoop < hoy) {
-                    clases = "estado-falta";
-                    htmlInner += `<div class="text-[10px] md:text-xs mt-1"><p class="text-red-600 font-bold uppercase mt-1">Falta</p><p class="text-red-400 leading-tight">Sin registro</p></div>`;
+                    clases = "estado-falta text-center justify-center relative";
+                    htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-1 md:top-2 left-1 md:left-2">${d}</span>
+                                 <i class="fas fa-times-circle text-2xl md:text-3xl opacity-40 mb-1 text-red-500"></i>
+                                 <p class="text-[10px] md:text-xs text-red-700 font-bold uppercase mt-1">Falta</p>`;
                     datosClick = { fecha: fechaStr, estado: 'Falta', minutos_retraso_entrada: 0, deuda_generada_bs: '0.00' };
                 }
 
@@ -882,6 +886,7 @@
             }
             
             const { value: formValues } = await Swal.fire({
+                scrollbarPadding: false, // ⚡ ESTA LÍNEA MÁGICA EVITA EL SALTO DEL DIRECTORIO
                 title: `<p class="text-xl font-bold text-slate-800">Completar Asistencia</p>`,
                 html: `
                     <p class="text-sm text-gray-500 mb-4">Modifica los marcajes del <b>${fecha}</b> para ${emp.nombres}.<br><span class="text-xs text-blue-500">Los campos vacíos se considerarán como "No marcó".</span></p>

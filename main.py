@@ -1647,10 +1647,16 @@ def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, 
     
     resumen["deuda_generada_bs"] = round(total_min_deuda * valor_minuto, 2)
 
-    # 6. Estado Final
-    if total_min_deuda > 0:
+    # 6. Estado Final y Detección de "Incompletos"
+    # ¿Cuántos marcajes exige este turno?
+    marcajes_esperados = 4 if turno.get('almuerzo') else 2
+    
+    # Lógica estricta de Veredicto
+    if len(marcajes_limpios) > 0 and len(marcajes_limpios) < marcajes_esperados:
+        resumen["estado"] = "Incompleto"
+    elif total_min_deuda > 0:
         resumen["estado"] = "Tarde"
-    elif len(marcajes_limpios) >= 4 or (len(marcajes_limpios) >= 2 and not turno.get('almuerzo')):
+    elif len(marcajes_limpios) >= marcajes_esperados:
         resumen["estado"] = "Puntual"
 
     return resumen
