@@ -2072,6 +2072,8 @@ async def eliminar_asistencia_dia(empleado_id: int, fecha: str, usuario = Depend
 # ==============================================================================
 
 # ── SIMULADOR DE HARDWARE (VERSIÓN EVENT-DRIVEN) ──
+from datetime import timedelta # Asegúrate de tener esto arriba en tus importaciones
+
 @app.post("/simulador/evento")
 async def simular_evento_hardware(data: dict, usuario = Depends(verificar_token)):
     schema = usuario["schema_name"]
