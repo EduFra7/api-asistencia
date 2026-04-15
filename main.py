@@ -519,8 +519,8 @@ def procesar_asistencia_dia(schema: str, empleado_id: int, fecha: date):
         cur.execute(f"""
             INSERT INTO {schema}.asistencia_diaria 
             (empleado_id, fecha, turno_id, hora_entrada, hora_inicio_almuerzo, hora_fin_almuerzo, hora_salida, 
-             minutos_retraso_entrada, minutos_exceso_almuerzo, estado, deuda_generada_bs, actualizado_en)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+             minutos_retraso_entrada, minutos_exceso_almuerzo, horas_trabajadas, estado, deuda_generada_bs, actualizado_en)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
             ON CONFLICT (empleado_id, fecha) 
             DO UPDATE SET 
                 hora_entrada = EXCLUDED.hora_entrada,
@@ -529,6 +529,7 @@ def procesar_asistencia_dia(schema: str, empleado_id: int, fecha: date):
                 hora_salida = EXCLUDED.hora_salida,
                 minutos_retraso_entrada = EXCLUDED.minutos_retraso_entrada,
                 minutos_exceso_almuerzo = EXCLUDED.minutos_exceso_almuerzo,
+                horas_trabajadas = EXCLUDED.horas_trabajadas,
                 estado = EXCLUDED.estado,
                 deuda_generada_bs = EXCLUDED.deuda_generada_bs,
                 actualizado_en = CURRENT_TIMESTAMP
@@ -537,7 +538,7 @@ def procesar_asistencia_dia(schema: str, empleado_id: int, fecha: date):
             empleado_id, fecha, emp_turno['turno_id'], resumen['hora_entrada'], 
             resumen['hora_inicio_almuerzo'], resumen['hora_fin_almuerzo'], resumen['hora_salida'], 
             resumen['minutos_retraso_entrada'], resumen['minutos_exceso_almuerzo'], 
-            resumen['estado'], resumen['deuda_generada_bs']
+            resumen['horas_trabajadas'], resumen['estado'], resumen['deuda_generada_bs']
         ))
         
         conn.commit()
@@ -1705,7 +1706,7 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    
+
     try:
         # ⚡ LIMPIEZA PEREZOSA + EVOLUCIÓN HISTÓRICA
         cur.execute(f"SELECT fecha, estado, horas_trabajadas FROM {schema}.asistencia_diaria WHERE empleado_id = %s AND EXTRACT(YEAR FROM fecha) = %s AND EXTRACT(MONTH FROM fecha) = %s", (empleado_id, anio, mes))
@@ -2027,7 +2028,9 @@ async def editar_asistencia_manual(empleado_id: int, data: dict, request: Reques
         inyectar_marcaje(h_alm_in, '1', "MANUAL-LUNCH-OUT")
         inyectar_marcaje(h_alm_out, '0', "MANUAL-LUNCH-IN")
         inyectar_marcaje(h_salida, '1', "MANUAL-OUT")
-            
+        
+        # ⚡ DESBLOQUEAMOS EL DÍA TEMPORALMENTE PARA QUE EL MOTOR PUEDA REESCRIBIRLO
+        cur.execute(f"UPDATE {schema}.asistencia_diaria SET modificado_manualmente = FALSE WHERE empleado_id = %s AND fecha = %s", (empleado_id, fecha_dt))
         conn.commit()
 
         # 4. 🧠 Despertamos al Cerebro para que lea la nueva historia
