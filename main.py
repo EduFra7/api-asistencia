@@ -1705,15 +1705,22 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    
     try:
-        # ⚡ LIMPIEZA PEREZOSA: Detectamos si hay días "congelados" en el pasado
-        cur.execute(f"SELECT fecha, estado FROM {schema}.asistencia_diaria WHERE empleado_id = %s AND EXTRACT(YEAR FROM fecha) = %s AND EXTRACT(MONTH FROM fecha) = %s", (empleado_id, anio, mes))
+        # ⚡ LIMPIEZA PEREZOSA + EVOLUCIÓN HISTÓRICA
+        cur.execute(f"SELECT fecha, estado, horas_trabajadas FROM {schema}.asistencia_diaria WHERE empleado_id = %s AND EXTRACT(YEAR FROM fecha) = %s AND EXTRACT(MONTH FROM fecha) = %s", (empleado_id, anio, mes))
         dias_check = cur.fetchall()
         hoy_srv = date.today()
         
         for dc in dias_check:
-            if dc["estado"] in ["Trabajando", "Pendiente"] and dc["fecha"] < hoy_srv:
-                # Si el día está en el pasado pero sigue diciendo trabajando, forzamos un recálculo
+            # 1. Detectar días que se quedaron trancados en "Trabajando" de ayer o antes
+            congelado = dc["estado"] in ["Trabajando", "Pendiente"] and dc["fecha"] < hoy_srv
+            
+            # 2. Detectar días viejos (antes de la actualización) que no tienen sus horas calculadas
+            viejo_sin_horas = dc["estado"] not in ["Falta", "Pendiente"] and float(dc["horas_trabajadas"] or 0) == 0.0
+            
+            # Si cumple cualquiera de los dos, forzamos a que el cerebro actual recalcule todo ese día
+            if congelado or viejo_sin_horas:
                 procesar_asistencia_dia(schema, empleado_id, dc["fecha"])
 
         # Ahora sí, extraemos los datos limpios y reales

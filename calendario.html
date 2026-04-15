@@ -195,20 +195,28 @@
                         <!-- KPIs Limpios por defecto -->
                         <div class="grid grid-cols-2 xl:grid-cols-4 gap-2 md:gap-4 shrink-0">
                             <div class="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-                                <div><p class="text- md:text-xs text-gray-500 font-bold uppercase">Días Trab.</p><p id="kpi-dias" class="text-lg md:text-2xl font-black text-gray-800 mt-1">-</p></div>
+                                <div><p class="text-xs text-gray-500 font-bold uppercase">Días Trab.</p><p id="kpi-dias" class="text-lg md:text-2xl font-black text-gray-800 mt-1">-</p></div>
                                 <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600"><i class="fas fa-calendar-check"></i></div>
                             </div>
                             <div class="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-                                <div><p class="text- md:text-xs text-gray-500 font-bold uppercase">Horas Lab.</p><p id="kpi-horas" class="text-lg md:text-2xl font-black text-gray-800 mt-1">-</p></div>
+                                <div>
+                                    <p class="text-[10px] md:text-xs text-gray-500 font-bold uppercase">Horas (Real/Turno)</p>
+                                    <p id="kpi-horas" class="text-lg md:text-2xl font-black text-gray-800 mt-1">-</p>
+                                    <p id="kpi-horas-extra" class="text-[10px] font-bold text-green-600 mt-0.5 empty:hidden"></p>
+                                </div>
                                 <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600"><i class="fas fa-stopwatch"></i></div>
                             </div>
                             <div class="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-                                <div><p class="text- md:text-xs text-gray-500 font-bold uppercase">Retraso</p><p id="kpi-retraso" class="text-lg md:text-2xl font-black text-red-600 mt-1">-</p></div>
-                                <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600"><i class="fas fa-running"></i></div>
+                                <div><p class="text-xs text-gray-500 font-bold uppercase">Retraso Mensual</p><p id="kpi-retraso" class="text-lg md:text-2xl font-black text-orange-600 mt-1">-</p></div>
+                                <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600"><i class="fas fa-running"></i></div>
                             </div>
                             <div class="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-                                <div><p class="text- md:text-xs text-gray-500 font-bold uppercase">Deuda</p><p id="kpi-deuda" class="text-lg md:text-2xl font-black text-gray-800 mt-1">-</p></div>
-                                <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600"><i class="fas fa-file-invoice-dollar"></i></div>
+                                <div>
+                                    <p class="text-xs text-gray-500 font-bold uppercase">Deuda Acumulada</p>
+                                    <p id="kpi-deuda" class="text-lg md:text-2xl font-black text-red-600 mt-1">-</p>
+                                    <p id="kpi-deuda-horas" class="text-[10px] font-bold text-red-600 mt-0.5 empty:hidden"></p>
+                                </div>
+                                <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600"><i class="fas fa-file-invoice-dollar"></i></div>
                             </div>
                         </div>
 
@@ -274,7 +282,7 @@
 
                                     <div class="border-t border-gray-100 pt-4">
                                         <p class="text-xs md:text-sm font-bold text-gray-800 mb-2">Resumen Económico</p>
-                                        <div class="bg-gray-50 rounded p-2 md:p-3 text-xs md:text-sm space-y-1 text-gray-700 border border-gray-100">
+                                        <div id="contenedor-resumen-economico" class="bg-gray-50 rounded p-2 md:p-3 text-xs md:text-sm space-y-1 text-gray-700 border border-gray-100">
                                             <div class="flex justify-between border-b border-gray-200 pb-1 mb-1"><span>Hrs Efectivas:</span><span id="det-horas-trabajadas" class="font-bold text-blue-600">0 hrs</span></div>
                                             <div class="flex justify-between"><span>Retraso:</span><span id="det-min-retraso" class="font-bold">-</span></div>
                                             <div class="flex justify-between border-t border-gray-200 pt-1 mt-1"><span>Descuento:</span><span id="det-deuda" class="font-bold text-red-600">-</span></div>
@@ -566,8 +574,7 @@
             document.getElementById('mesAnioTexto').textContent = `${nombresMeses.at(mes - 1)} ${anio}`;
             
             const mesFormateado = String(mes).padStart(2, '0');
-            const selectorMes = document.getElementById('selectorMesRapido');
-            if (selectorMes) selectorMes.value = `${anio}-${mesFormateado}`;
+            if (document.getElementById('selectorMesRapido')) document.getElementById('selectorMesRapido').value = `${anio}-${mesFormateado}`;
 
             const cuadricula = document.getElementById('cuadriculaCalendario');
             cuadricula.innerHTML = '<div class="cal-header">Lun</div><div class="cal-header">Mar</div><div class="cal-header">Mié</div><div class="cal-header">Jue</div><div class="cal-header">Vie</div><div class="cal-header">Sáb</div><div class="cal-header">Dom</div>';
@@ -585,133 +592,130 @@
             mapaDiasLetras.set(1, 'L'); mapaDiasLetras.set(2, 'M'); mapaDiasLetras.set(3, 'X');
             mapaDiasLetras.set(4, 'J'); mapaDiasLetras.set(5, 'V'); mapaDiasLetras.set(6, 'S'); mapaDiasLetras.set(0, 'D');
 
-            const hoy = new Date();
-            hoy.setHours(0,0,0,0);
+            const hoy = new Date(); hoy.setHours(0,0,0,0);
+            
+            let fechaIngreso = empleadoActual && empleadoActual.fecha_ingreso ? new Date(empleadoActual.fecha_ingreso + 'T00:00:00') : null;
+            if (fechaIngreso) fechaIngreso.setHours(0,0,0,0);
 
-            let fechaIngreso = null;
-            if (empleadoActual && empleadoActual.fecha_ingreso) {
-                fechaIngreso = new Date(empleadoActual.fecha_ingreso + 'T00:00:00');
-                fechaIngreso.setHours(0,0,0,0);
+            // ⚡ MAGIA FINANCIERA: Preparar variables del Turno
+            const turnoEmpleado = turnosGlobal.find(t => String(t.id) === String(empleadoActual.turno_id));
+            let horasTurnoBase = 0;
+            let permiteExtras = false;
+            
+            if (turnoEmpleado && turnoEmpleado.hora_ingreso && turnoEmpleado.hora_salida) {
+                permiteExtras = turnoEmpleado.horas_extras || false;
+                let [inH, inM] = turnoEmpleado.hora_ingreso.split(':').map(Number);
+                let [outH, outM] = turnoEmpleado.hora_salida.split(':').map(Number);
+                let minIn = inH * 60 + inM;
+                let minOut = outH * 60 + outM;
+                if (minOut < minIn) minOut += 24 * 60;
+                let mins = minOut - minIn;
+                if (turnoEmpleado.almuerzo) mins -= (turnoEmpleado.almuerzo_min || 0);
+                horasTurnoBase = Number((mins / 60).toFixed(2));
             }
+
+            // ⚡ Contadores del Mes
+            let sumHorasEsperadas = 0;
+            let sumHorasTrabajadas = 0;
+            let sumHorasExtras = 0;
 
             for(let d=1; d<=totalDias; d++) {
                 const fechaActualLoop = new Date(anio, mes - 1, d);
-                const diaFormateado = String(d).padStart(2, '0');
-                const fechaStr = `${anio}-${mesFormateado}-${diaFormateado}`;
-                const mesDiaStr = `${mesFormateado}-${diaFormateado}`; 
+                const fechaStr = `${anio}-${mesFormateado}-${String(d).padStart(2, '0')}`;
+                const mesDiaStr = `${mesFormateado}-${String(d).padStart(2, '0')}`; 
                 
                 const letraDia = mapaDiasLetras.get(fechaActualLoop.getDay());
                 const datos = mapaDatos.get(fechaStr);
                 
-                let ausenciaActiva = null;
-                if (ausencias && Array.isArray(ausencias)) {
-                    ausenciaActiva = ausencias.find(a => a.estado === 'aprobado' && fechaStr >= String(a.fecha_inicio).substring(0,10) && fechaStr <= String(a.fecha_fin).substring(0,10));
-                }
+                let ausenciaActiva = ausencias ? ausencias.find(a => a.estado === 'aprobado' && fechaStr >= String(a.fecha_inicio).substring(0,10) && fechaStr <= String(a.fecha_fin).substring(0,10)) : null;
 
                 let objFeriado = feriadosBolivia.get(fechaStr) || feriadosBolivia.get(mesDiaStr);
                 let nombreFeriado = null;
-
                 if (objFeriado) {
-                    const ciudadEmpleado = (empleadoActual && empleadoActual.sucursal_ciudad) ? String(empleadoActual.sucursal_ciudad).toLowerCase() : 'nacional';
-                    const alcanceFeriado = String(objFeriado.tipo).toLowerCase();
-                    if (alcanceFeriado === 'nacional' || alcanceFeriado === ciudadEmpleado) {
-                        nombreFeriado = objFeriado.descripcion;
-                    }
+                    const alcance = String(objFeriado.tipo).toLowerCase();
+                    if (alcance === 'nacional' || alcance === (empleadoActual.sucursal_ciudad || '').toLowerCase()) nombreFeriado = objFeriado.descripcion;
                 }
 
                 let esDiaLaboral = false;
-                let diasTurno = diasLaboralesJSON;
-                if (typeof diasTurno === 'string') { try { diasTurno = JSON.parse(diasTurno); } catch(e) { diasTurno = null; } }
-                if (diasTurno && typeof diasTurno === 'object' && Object.keys(diasTurno).length > 0) {
-                    esDiaLaboral = diasTurno[letraDia] === true || String(diasTurno[letraDia]).toLowerCase() === 'true';
-                } else {
-                    esDiaLaboral = (letraDia !== 'S' && letraDia !== 'D');
+                let diasTurno = typeof diasLaboralesJSON === 'string' ? JSON.parse(diasLaboralesJSON || "{}") : diasLaboralesJSON;
+                if (diasTurno && Object.keys(diasTurno).length > 0) esDiaLaboral = String(diasTurno[letraDia]).toLowerCase() === 'true';
+                else esDiaLaboral = (letraDia !== 'S' && letraDia !== 'D');
+
+                // ⚡ MAGIA FINANCIERA: Cálculo del día
+                let factorDia = (esDiaLaboral && turnoEmpleado && turnoEmpleado.medio_tiempo_fines && (letraDia === 'S' || letraDia === 'D')) ? 0.5 : 1.0;
+                let hrsEsperadasHoy = horasTurnoBase * factorDia;
+                let hExtrasHoy = 0;
+
+                // Sumamos la cuota si es un día laboral pasado/hoy y no es feriado/vacación completa
+                if (esDiaLaboral && fechaActualLoop <= hoy && !nombreFeriado) {
+                    let esDiaLibreCompleto = ausenciaActiva && (ausenciaActiva.tipo === 'vacacion' || !ausenciaActiva.hora_inicio);
+                    if (!esDiaLibreCompleto) sumHorasEsperadas += hrsEsperadasHoy;
+                }
+
+                if (datos && datos.horas_trabajadas > 0) {
+                    sumHorasTrabajadas += datos.horas_trabajadas;
+                    // Detectamos si generó Horas Extras (Solo si el turno lo permite)
+                    if (permiteExtras && datos.horas_trabajadas > hrsEsperadasHoy) {
+                        hExtrasHoy = Number((datos.horas_trabajadas - hrsEsperadasHoy).toFixed(2));
+                        sumHorasExtras += hExtrasHoy;
+                    }
                 }
 
                 let clases = "estado-futuro";
                 let htmlInner = `<span class="text-xs font-bold text-gray-700">${d}</span>`;
                 
-                // ⚡ AQUÍ ESTABA EL BUG: Ahora creamos datos falsos limpios para días futuros vacíos
-                let datosClick = datos ? Object.assign({}, datos) : { fecha: fechaStr, estado: 'Pendiente', horas_trabajadas: 0, deuda_generada_bs: 0 };
+                // Preparamos el paquete de datos para inyectar al panel derecho
+                let datosClick = datos ? Object.assign({}, datos) : { fecha: fechaStr, estado: 'Pendiente' };
+                datosClick.horas_turno = hrsEsperadasHoy;
+                datosClick.horas_extras = hExtrasHoy;
+
                 let permiteClic = true;
 
                 if (fechaIngreso && fechaActualLoop < fechaIngreso) {
-                    clases = "bg-gray-100 opacity-50"; 
-                    htmlInner = `<span class="text-xs font-bold text-gray-400">${d}</span><p class="text-[10px] text-gray-400 mt-2 text-center leading-tight">Previo a contrato</p>`;
-                    permiteClic = false;
-                }
-                else if (nombreFeriado && !datos) {
-                    clases = "bg-purple-50 text-center justify-center relative";
-                    htmlInner = `<span class="text-xs font-bold text-purple-900 absolute top-1 md:top-2 left-1 md:left-2">${d}</span><i class="fas fa-flag text-xl md:text-2xl text-purple-300 mb-1"></i><p class="text-[10px] md:text-[11px] text-purple-700 font-bold uppercase mt-1 leading-tight">${nombreFeriado}</p>`;
-                    permiteClic = false;
-                }
-                else if (datos) {
-                    let icono = ""; let label = ""; let colorIcono = ""; let colorTexto = "";
-
-                    if(datos.estado === 'Puntual') {
-                        clases = "estado-puntual text-center justify-center relative";
-                        icono = "fa-check-circle"; colorIcono = "text-green-500";
-                        label = "Puntual"; colorTexto = "text-green-700";
-                    } else if(datos.estado === 'Tarde') {
-                        clases = "estado-tarde text-center justify-center relative";
-                        icono = "fa-clock"; colorIcono = "text-orange-500";
-                        label = "Tarde"; colorTexto = "text-orange-700";
-                    } else if(datos.estado === 'Trabajando') {
-                        clases = "bg-blue-50/50 text-center justify-center relative border-b-4 border-blue-400";
-                        icono = "fa-user-clock animate-pulse"; colorIcono = "text-blue-500";
-                        label = "En Curso"; colorTexto = "text-blue-700";
-                    } else if(datos.estado === 'Incompleto') {
-                        clases = "bg-yellow-50 text-center justify-center relative border-b-4 border-yellow-400";
-                        icono = "fa-exclamation-triangle"; colorIcono = "text-yellow-500";
-                        label = "Incompleto"; colorTexto = "text-yellow-700";
-                    } else if(datos.estado === 'Falta') {
-                        clases = "estado-falta text-center justify-center relative";
-                        icono = "fa-times-circle"; colorIcono = "text-red-500";
-                        label = "Falta"; colorTexto = "text-red-700";
-                    } else if(datos.estado === 'Pendiente') {
-                        clases = "bg-white text-center justify-center relative";
-                        htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-2 left-2">${d}</span>`;
-                        icono = ""; label = ""; 
-                    }
-
-                    htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-2 left-2">${d}</span>`;
-                    if (icono) htmlInner += `<i class="fas ${icono} text-2xl md:text-3xl opacity-50 mb-1 ${colorIcono}"></i><p class="text-[10px] md:text-xs ${colorTexto} font-bold uppercase mt-1">${label}</p>`;
+                    clases = "bg-gray-100 opacity-50"; htmlInner += `<p class="text-[10px] text-gray-400 mt-2 text-center leading-tight">Previo a contrato</p>`; permiteClic = false;
+                } else if (nombreFeriado && !datos) {
+                    clases = "bg-purple-50 text-center justify-center relative"; htmlInner = `<span class="text-xs font-bold text-purple-900 absolute top-1 md:top-2 left-1 md:left-2">${d}</span><i class="fas fa-flag text-xl md:text-2xl text-purple-300 mb-1"></i><p class="text-[10px] md:text-[11px] text-purple-700 font-bold uppercase mt-1 leading-tight">${nombreFeriado}</p>`; permiteClic = false;
+                } else if (datos && datos.estado) {
+                    let ic = "", l = "", cIc = "", cTx = "";
+                    if(datos.estado === 'Puntual') { clases = "estado-puntual text-center justify-center relative"; ic = "fa-check-circle"; cIc = "text-green-500"; l = "Puntual"; cTx = "text-green-700"; }
+                    else if(datos.estado === 'Tarde') { clases = "estado-tarde text-center justify-center relative"; ic = "fa-clock"; cIc = "text-orange-500"; l = "Tarde"; cTx = "text-orange-700"; }
+                    else if(datos.estado === 'Trabajando') { clases = "bg-blue-50/50 text-center justify-center relative border-b-4 border-blue-400"; ic = "fa-user-clock animate-pulse"; cIc = "text-blue-500"; l = "En Curso"; cTx = "text-blue-700"; }
+                    else if(datos.estado === 'Incompleto') { clases = "bg-yellow-50 text-center justify-center relative border-b-4 border-yellow-400"; ic = "fa-exclamation-triangle"; cIc = "text-yellow-500"; l = "Incompleto"; cTx = "text-yellow-700"; }
+                    else if(datos.estado === 'Falta') { clases = "estado-falta text-center justify-center relative"; ic = "fa-times-circle"; cIc = "text-red-500"; l = "Falta"; cTx = "text-red-700"; }
+                    
+                    if (ic) htmlInner += `<i class="fas ${ic} text-2xl md:text-3xl opacity-50 mb-1 ${cIc}"></i><p class="text-[10px] md:text-xs ${cTx} font-bold uppercase mt-1">${l}</p>`;
                     if (datos.estado === 'Tarde') htmlInner += `<p class="text-[9px] text-orange-600 font-bold">-${datos.minutos_retraso_entrada}m</p>`;
-                }
-                else if (ausenciaActiva) {
+                    if (hExtrasHoy > 0) htmlInner += `<p class="text-[9px] text-green-600 font-bold bg-green-100 px-1 rounded absolute bottom-1">+${hExtrasHoy}H</p>`;
+                } else if (ausenciaActiva) {
                     clases = ausenciaActiva.tipo === 'vacacion' ? "estado-vacacion text-center justify-center relative" : "estado-permiso text-center justify-center relative";
-                    const icono = ausenciaActiva.tipo === 'vacacion' ? 'fa-umbrella-beach text-blue-500' : 'fa-user-md text-yellow-500';
-                    const textColor = ausenciaActiva.tipo === 'vacacion' ? 'text-blue-700' : 'text-yellow-700';
-                    htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-1 md:top-2 left-1 md:left-2">${d}</span><i class="fas ${icono} text-2xl md:text-3xl opacity-40 mb-1"></i><p class="text-[10px] md:text-xs ${textColor} font-bold uppercase mt-1">${ausenciaActiva.tipo}</p>`;
-                    datosClick = { fecha: fechaStr, estado: ausenciaActiva.tipo, ausencia_detalle: ausenciaActiva, horas_trabajadas: 0 };
-                } 
-                else if (!esDiaLaboral) {
-                    clases = "estado-inhabiles text-center justify-center relative bg-gray-100/40 hover:bg-blue-50/50";
-                    htmlInner = `<span class="text-xs font-bold text-gray-400 absolute top-1 left-1">${d}</span><i class="fas fa-bed text-2xl md:text-3xl text-gray-300 opacity-60 mb-1"></i><p class="text-[10px] text-gray-400 font-bold uppercase mt-1">Descanso</p>`;
-                    permiteClic = true;
-                }
-                else if (fechaActualLoop < hoy) {
-                    clases = "estado-falta text-center justify-center relative";
-                    htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-1 md:top-2 left-1 md:left-2">${d}</span><i class="fas fa-times-circle text-2xl md:text-3xl opacity-40 mb-1 text-red-500"></i><p class="text-[10px] md:text-xs text-red-700 font-bold uppercase mt-1">Falta</p>`;
-                    datosClick = { fecha: fechaStr, estado: 'Falta', minutos_retraso_entrada: 0, deuda_generada_bs: 0.00, horas_trabajadas: 0 };
+                    htmlInner += `<i class="fas ${ausenciaActiva.tipo === 'vacacion' ? 'fa-umbrella-beach text-blue-500' : 'fa-user-md text-yellow-500'} text-2xl md:text-3xl opacity-40 mb-1"></i><p class="text-[10px] md:text-xs ${ausenciaActiva.tipo === 'vacacion' ? 'text-blue-700' : 'text-yellow-700'} font-bold uppercase mt-1">${ausenciaActiva.tipo}</p>`;
+                    datosClick.estado = ausenciaActiva.tipo; datosClick.ausencia_detalle = ausenciaActiva;
+                } else if (!esDiaLaboral) {
+                    clases = "estado-inhabiles text-center justify-center relative bg-gray-100/40 hover:bg-blue-50/50"; htmlInner += `<i class="fas fa-bed text-2xl md:text-3xl text-gray-300 opacity-60 mb-1"></i><p class="text-[10px] text-gray-400 font-bold uppercase mt-1">Descanso</p>`;
+                } else if (fechaActualLoop < hoy) {
+                    clases = "estado-falta text-center justify-center relative"; htmlInner += `<i class="fas fa-times-circle text-2xl md:text-3xl opacity-40 mb-1 text-red-500"></i><p class="text-[10px] md:text-xs text-red-700 font-bold uppercase mt-1">Falta</p>`;
+                    datosClick.estado = 'Falta';
                 }
 
                 const div = document.createElement('div');
-                div.className = `cal-day ${clases}`;
-                div.innerHTML = htmlInner;
-
-                if (ausenciaActiva && datosClick) datosClick.ausencia_detalle = ausenciaActiva;
-
-                // ⚡ MAGIA: Ahora se puede hacer clic incluso en días futuros vacíos (PermiteClic es la clave)
+                div.className = `cal-day ${clases}`; div.innerHTML = htmlInner;
+                
                 if (permiteClic) {
                     div.onclick = () => verDetalleDia(datosClick);
                     div.classList.add("cursor-pointer", "hover:ring-2", "hover:ring-blue-400", "transition-all");
-                } else {
-                    div.classList.remove("cursor-pointer");
                 }
-
                 cuadricula.appendChild(div);
             }
+
+            // ⚡ MAGIA FINANCIERA: Actualización Final de los KPIs Globales
+            let sumHorasReponer = 0;
+            if (ausencias && Array.isArray(ausencias)) {
+                ausencias.forEach(a => { if (a.requiere_reposicion) sumHorasReponer += Number(a.horas_totales || 0); });
+            }
+
+            document.getElementById('kpi-horas').textContent = `${sumHorasTrabajadas.toFixed(2)} / ${sumHorasEsperadas.toFixed(2)}`;
+            document.getElementById('kpi-horas-extra').textContent = sumHorasExtras > 0 ? `+${sumHorasExtras.toFixed(2)} Hrs Extras acumuladas` : '';
+            document.getElementById('kpi-deuda-horas').innerHTML = sumHorasReponer > 0 ? `<i class="fas fa-exclamation-circle mr-1"></i> Debe ${sumHorasReponer.toFixed(2)} Hrs a la empresa` : '';
         }
 
         // 🧠 Función inteligente para detectar si una hora pertenece al día siguiente en turnos nocturnos
@@ -742,7 +746,6 @@
 
         function verDetalleDia(d) {
             const panel = document.getElementById('panel-radiografia');
-            
             panel.classList.remove('hidden', 'animate-emerger');
             void panel.offsetWidth; 
             panel.classList.add('animate-emerger');
@@ -773,27 +776,21 @@
                     document.getElementById('det-ausencia-titulo').innerHTML = '<i class="fas fa-user-md mr-1"></i> Detalle de Permiso';
                 }
 
-                document.getElementById('det-ausencia-motivo').textContent = d.ausencia_detalle.motivo || 'Sin comentarios registrados';
+                document.getElementById('det-ausencia-motivo').textContent = d.ausencia_detalle.motivo || 'Sin observaciones';
                 
                 let textoDuracion = 'Día Completo';
                 if (d.ausencia_detalle.hora_inicio && d.ausencia_detalle.hora_fin) {
                     textoDuracion = `${String(d.ausencia_detalle.hora_inicio).substring(0,5)} a ${String(d.ausencia_detalle.hora_fin).substring(0,5)} (${d.ausencia_detalle.horas_totales} hrs)`;
                 }
-                
                 if (d.ausencia_detalle.tipo === 'permiso' && d.ausencia_detalle.requiere_reposicion) {
-                    textoDuracion += `<br><span class="inline-block mt-1 bg-red-100 text-red-600 px-2 py-0.5 rounded text-[10px] font-bold border border-red-200 shadow-sm"><i class="fas fa-exclamation-circle mr-1"></i>Debe reponer ${d.ausencia_detalle.horas_totales} hrs</span>`;
+                    textoDuracion += `<br><span class="inline-block mt-1 bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold border border-red-200 shadow-sm"><i class="fas fa-exclamation-circle mr-1"></i>Requiere reposición de ${d.ausencia_detalle.horas_totales} hrs</span>`;
                 }
-                
                 document.getElementById('det-ausencia-duracion').innerHTML = textoDuracion;
 
-                if (textoDuracion.includes('Día Completo') && (!d.hora_entrada && !d.hora_salida)) {
-                    contMarcajes.classList.add('hidden');
-                } else {
-                    contMarcajes.classList.remove('hidden');
-                }
+                if (textoDuracion.includes('Día Completo') && (!d.hora_entrada && !d.hora_salida)) contMarcajes.classList.add('hidden');
+                else contMarcajes.classList.remove('hidden');
             } else {
-                contAusencia.classList.add('hidden');
-                contMarcajes.classList.remove('hidden');
+                contAusencia.classList.add('hidden'); contMarcajes.classList.remove('hidden');
             }
 
             const empActual = listaEmpleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
@@ -804,43 +801,39 @@
             document.getElementById('det-alm-fin').innerHTML = formatearHoraMarcaje(d.hora_fin_almuerzo, d.fecha, turnoEmp);
             document.getElementById('det-salida').innerHTML = formatearHoraMarcaje(d.hora_salida, d.fecha, turnoEmp);
             
-            document.getElementById('det-min-retraso').textContent = `${d.minutos_retraso_entrada || 0} min`;
-            document.getElementById('det-deuda').textContent = `Bs. ${Number(d.deuda_generada_bs || 0).toFixed(2)}`;
+            // ⚡ MAGIA FINANCIERA: Inyección del Resumen Económico SEGURO
+            const contenedorResumen = document.getElementById('contenedor-resumen-economico');
+            
+            let htmlExtras = '';
+            if (d.horas_extras > 0) {
+                htmlExtras = `<div class="flex justify-between border-b border-gray-200 pb-1 mb-1 bg-green-50 px-1 rounded"><span>Hrs. Extras:</span><span class="font-bold text-green-600">+${d.horas_extras.toFixed(2)} hrs</span></div>`;
+            }
 
-            // ⚡ Carga limpia y segura de las Horas Efectivas
-            document.getElementById('det-horas-trabajadas').textContent = `${d.horas_trabajadas || 0} hrs`;
+            contenedorResumen.innerHTML = `
+                <div class="flex justify-between border-b border-gray-200 pb-1 mb-1"><span>Hrs. del Turno:</span><span class="font-bold text-gray-500">${d.horas_turno ? d.horas_turno.toFixed(2) : '0.00'} hrs</span></div>
+                <div class="flex justify-between border-b border-gray-200 pb-1 mb-1"><span>Hrs. Efectivas:</span><span class="font-bold text-blue-600">${d.horas_trabajadas ? d.horas_trabajadas.toFixed(2) : '0.00'} hrs</span></div>
+                ${htmlExtras}
+                <div class="flex justify-between mt-2"><span>Retraso:</span><span id="det-min-retraso" class="font-bold text-orange-600">${d.minutos_retraso_entrada || 0} min</span></div>
+                <div class="flex justify-between border-t border-gray-200 pt-1 mt-1"><span>Descuento:</span><span id="det-deuda" class="font-bold text-red-600">Bs. ${Number(d.deuda_generada_bs || 0).toFixed(2)}</span></div>
+            `;
 
-            // ⚡ EXORCISMO DEL DOM: Vaciamos completamente el contenedor de auditoría cada vez que abrimos el panel
+            // Exorcismo de Auditoría (Comentarios)
             const cajaAuditoria = document.getElementById('contenedor-auditoria');
-            cajaAuditoria.innerHTML = ''; // ¡Adiós fantasmas!
-
-            // ⚡ Si existe una edición, creamos UNA SOLA caja amarilla fresca
+            cajaAuditoria.innerHTML = ''; 
             if (d.modificado_manualmente) {
-                cajaAuditoria.innerHTML = `
-                    <div class="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg shadow-inner">
-                        <p class="text-[10px] font-bold text-yellow-800 uppercase mb-1"><i class="fas fa-edit mr-1"></i>Modificado por RRHH</p>
-                        <p class="text-xs text-yellow-700 italic leading-tight">"${d.observaciones || 'Edición manual justificada.'}"</p>
-                    </div>
-                `;
+                cajaAuditoria.innerHTML = `<div class="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg shadow-inner"><p class="text-[10px] font-bold text-yellow-800 uppercase mb-1"><i class="fas fa-edit mr-1"></i>Modificado por RRHH</p><p class="text-xs text-yellow-700 italic leading-tight">"${d.observaciones || 'Edición manual justificada.'}"</p></div>`;
             }
 
             const contenedorAcciones = document.getElementById('contenedor-acciones-edicion');
-            contenedorAcciones.innerHTML = ''; // Limpiamos acciones
-            
+            contenedorAcciones.innerHTML = ''; 
             if (!d.ausencia_detalle) { 
-                const paramEnt = d.hora_entrada ? String(d.hora_entrada).substring(0,5) : '';
-                const paramAlmIn = d.hora_inicio_almuerzo ? String(d.hora_inicio_almuerzo).substring(0,5) : '';
-                const paramAlmOut = d.hora_fin_almuerzo ? String(d.hora_fin_almuerzo).substring(0,5) : '';
-                const paramSal = d.hora_salida ? String(d.hora_salida).substring(0,5) : '';
+                const pEnt = d.hora_entrada ? String(d.hora_entrada).substring(0,5) : '';
+                const pAlmIn = d.hora_inicio_almuerzo ? String(d.hora_inicio_almuerzo).substring(0,5) : '';
+                const pAlmOut = d.hora_fin_almuerzo ? String(d.hora_fin_almuerzo).substring(0,5) : '';
+                const pSal = d.hora_salida ? String(d.hora_salida).substring(0,5) : '';
+                const tAlm = turnoEmp && turnoEmp.almuerzo ? true : false;
                 
-                const tieneAlmuerzo = turnoEmp && turnoEmp.almuerzo ? true : false;
-                
-                contenedorAcciones.innerHTML = `
-                    <button onclick="abrirModalEdicion('${d.fecha}', '${paramEnt}', '${paramAlmIn}', '${paramAlmOut}', '${paramSal}', ${tieneAlmuerzo})" 
-                            class="w-full bg-slate-800 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition-colors flex items-center justify-center shadow-md">
-                        <i class="fas fa-edit mr-2"></i> Editar / Completar Marcajes
-                    </button>
-                `;
+                contenedorAcciones.innerHTML = `<button onclick="abrirModalEdicion('${d.fecha}', '${pEnt}', '${pAlmIn}', '${pAlmOut}', '${pSal}', ${tAlm})" class="w-full bg-slate-800 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition-colors shadow-md"><i class="fas fa-edit mr-2"></i> Editar / Completar Marcajes</button>`;
             }
         }
 
