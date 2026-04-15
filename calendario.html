@@ -824,9 +824,14 @@
             contenedorAcciones.id = 'contenedor-acciones-edicion';
             contenedorAcciones.className = "mt-4 pt-4 border-t border-gray-200";
             
-            const esPasadoOHoy = new Date(d.fecha + 'T00:00:00') <= new Date();
+
+            // 🚀 AHORA PERMITE EDITAR CUALQUIER DÍA, INCLUSO FUTUROS (Siempre que no sea vacación/permiso)
+            if (!d.ausencia_detalle) { 
+                // ... todo el código de let htmlAlmuerzo y contenedorAcciones.innerHTML se mantiene igual
+            //const esPasadoOHoy = new Date(d.fecha + 'T00:00:00') <= new Date();
             
-            if (esPasadoOHoy && !d.ausencia_detalle) {
+            //if (esPasadoOHoy && !d.ausencia_detalle) {
+                
                 // 1. Extraemos los 4 tiempos actuales para mandarlos al modal
                 const paramEnt = d.hora_entrada ? String(d.hora_entrada).substring(0,5) : '';
                 const paramAlmIn = d.hora_inicio_almuerzo ? String(d.hora_inicio_almuerzo).substring(0,5) : '';
@@ -967,49 +972,38 @@
         }
 
         // 🌟 2. ENVIAR LOS DATOS AL BACKEND
-        async function enviarEdicionBackend(fecha, datosForm) {
-            // Ponemos el panel en modo carga
-            document.getElementById('det-estado-badge').textContent = "ACTUALIZANDO...";
-            document.getElementById('det-estado-badge').className = "px-2 py-1 text-xs font-bold rounded shadow-sm text-white bg-yellow-500 animate-pulse";
-
+        async function enviarEdicionBackend(fecha, formValues) {
             try {
-                // Preparamos el payload añadiendo la fecha
-                const payload = Object.assign({ fecha: fecha }, datosForm);
+                const emp = listaEmpleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
                 
-                // NOTA: Asegúrate de que esta URL coincida exactamente con la que creamos en main.py
-                const res = await fetch(`${API_URL}/asistencia/${empleadoSeleccionadoId}/editar-dia`, {
+                const res = await fetch(`${API_URL}/asistencia/${emp.id}/editar-dia`, {
                     method: 'PUT',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token_api}` 
-                    },
-                    body: JSON.stringify(payload)
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token_api}` },
+                    body: JSON.stringify({ fecha: fecha, ...formValues })
                 });
 
+                const data = await res.json();
+
+                // 🛑 EL CINTURÓN DE SEGURIDAD: Si el status no es 200/20x, bloqueamos
                 if (!res.ok) {
-                    const error = await res.json();
-                    throw new Error(error.detail || "Error desconocido");
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Acceso Denegado',
+                        text: data.detail || 'Contraseña incorrecta o error de servidor.'
+                    });
+                    return; // Matamos la ejecución aquí. NO recarga la página.
                 }
 
-                Swal.fire({
-                    icon: 'success',
-                    title: '¡Historial Actualizado!',
-                    text: 'El motor de cálculo ha procesado los nuevos horarios.',
-                    timer: 2000,
-                    showConfirmButton: false
-                });
-
-                // Recargamos el calendario para que muestre los nuevos cálculos
-                const empActual = listaEmpleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
-                const turnoEmp = turnosGlobal.find(t => String(t.id) === String(empActual.turno_id));
+                // ✅ Si llega hasta aquí, la contraseña era correcta
+                Swal.fire('¡Actualizado!', 'El historial ha sido modificado con éxito.', 'success');
+                
+                // Recargamos el calendario para ver los cambios
+                const turnoEmp = turnosGlobal.find(t => String(t.id) === String(emp.turno_id));
                 cargarCalendario(turnoEmp);
 
             } catch (error) {
-                Swal.fire('Error de Auditaría', error.message, 'error');
-                // Si falla, recargamos para borrar el estado "ACTUALIZANDO..."
-                const empActual = listaEmpleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
-                const turnoEmp = turnosGlobal.find(t => String(t.id) === String(empActual.turno_id));
-                cargarCalendario(turnoEmp);
+                console.error(error);
+                Swal.fire('Error de red', 'No se pudo conectar al servidor.', 'error');
             }
         }
 

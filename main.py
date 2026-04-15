@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 
 # -- Manejo de Tiempo y Fechas (Nativas y Externas) --
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, time
 from dateutil.relativedelta import relativedelta  # Instalado vía pip
 
 # -- Seguridad y Base de Datos --
@@ -26,7 +26,6 @@ import json              # Asegúrate de que esto esté al inicio de tu main.py
 
 # -- Librerías para feriados --
 import holidays
-from datetime import date
 from pydantic import BaseModel
 from typing import Optional
 
@@ -2106,8 +2105,9 @@ async def simular_evento_hardware(data: dict, usuario = Depends(verificar_token)
         # A) Calculamos el día actual de la huella
         exito_hoy = procesar_asistencia_dia(schema, emp['id'], fecha_dt)
         
-        # 🌙 B) MAGIA NOCTURNA: Forzamos el cálculo del día anterior por si esta huella es una salida de madrugada
-        procesar_asistencia_dia(schema, emp['id'], fecha_dt - timedelta(days=1))
+        # B) MAGIA NOCTURNA: Forzamos el día de AYER
+        ayer_dt = fecha_dt - timedelta(days=1)
+        procesar_asistencia_dia(schema, emp['id'], ayer_dt)
 
         if exito_hoy:
             return {"mensaje": f"Evento procesado. La asistencia de {emp['nombres']} se ha actualizado automáticamente."}
