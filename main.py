@@ -1629,7 +1629,7 @@ def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, 
             resumen["estado"] = "Pendiente"
         return resumen
 
-    # 1. Evaluación de Retraso (Con Tolerancia Dinámica)
+    # 1. Tolerancia
     hora_oficial = turno['hora_ingreso']
     min_llegada = (resumen["hora_entrada"].hour * 60) + resumen["hora_entrada"].minute
     min_oficial = (hora_oficial.hour * 60) + hora_oficial.minute
@@ -1637,7 +1637,7 @@ def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, 
     if retraso > turno.get('tolerancia_min', 0):
         resumen["minutos_retraso_entrada"] = retraso
 
-    # 2. Evaluación de Almuerzo
+    # 2. Almuerzo
     if resumen["hora_inicio_almuerzo"] and resumen["hora_fin_almuerzo"]:
         alm_in = (resumen["hora_inicio_almuerzo"].hour * 60) + resumen["hora_inicio_almuerzo"].minute
         alm_out = (resumen["hora_fin_almuerzo"].hour * 60) + resumen["hora_fin_almuerzo"].minute
@@ -1663,7 +1663,6 @@ def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, 
             
         segundos_trab_brutos = (dt_out - dt_in).total_seconds()
         
-        # Descontar almuerzo de las horas trabajadas
         if turno.get('almuerzo'):
             if resumen["hora_inicio_almuerzo"] and resumen["hora_fin_almuerzo"]:
                 dt_alm_in = datetime.combine(base_date, resumen["hora_inicio_almuerzo"])
@@ -1671,19 +1670,16 @@ def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, 
                 if dt_alm_out < dt_alm_in: dt_alm_out += timedelta(days=1)
                 segundos_trab_brutos -= (dt_alm_out - dt_alm_in).total_seconds()
             else:
-                # Si el turno exige almuerzo pero no marcó, se descuenta el tiempo por defecto
                 segundos_trab_brutos -= (turno.get('almuerzo_min', 0) * 60)
                 
         resumen["horas_trabajadas"] = round(max(0, segundos_trab_brutos) / 3600.0, 2)
 
-    # 🚀 4. DINAMISMO FINANCIERO (Regla de Descuento del Turno)
+    # 🚀 4. DINAMISMO FINANCIERO (Descuentos)
     total_min_deuda = resumen["minutos_retraso_entrada"] + resumen["minutos_exceso_almuerzo"]
-    
-    if turno.get('descuento', True) == True: # Si el turno exige descuentos
+    if turno.get('descuento', True) == True:
         valor_minuto = (float(salario_base) / 30 / 8 / 60) if salario_base > 0 else 0
         resumen["deuda_generada_bs"] = round(total_min_deuda * valor_minuto, 2)
     else:
-        # Registra el retraso en minutos (para KPIs), pero NO afecta al dinero
         resumen["deuda_generada_bs"] = 0.00
 
     # 5. Veredicto Final
@@ -1710,6 +1706,17 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
+        # ⚡ LIMPIEZA PEREZOSA: Detectamos si hay días "congelados" en el pasado
+        cur.execute(f"SELECT fecha, estado FROM {schema}.asistencia_diaria WHERE empleado_id = %s AND EXTRACT(YEAR FROM fecha) = %s AND EXTRACT(MONTH FROM fecha) = %s", (empleado_id, anio, mes))
+        dias_check = cur.fetchall()
+        hoy_srv = date.today()
+        
+        for dc in dias_check:
+            if dc["estado"] in ["Trabajando", "Pendiente"] and dc["fecha"] < hoy_srv:
+                # Si el día está en el pasado pero sigue diciendo trabajando, forzamos un recálculo
+                procesar_asistencia_dia(schema, empleado_id, dc["fecha"])
+
+        # Ahora sí, extraemos los datos limpios y reales
         cur.execute(f"""
             SELECT * FROM {schema}.asistencia_diaria 
             WHERE empleado_id = %s AND EXTRACT(YEAR FROM fecha) = %s AND EXTRACT(MONTH FROM fecha) = %s 
@@ -1748,7 +1755,6 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
         turno_data = cur.fetchone()
         dias_laborales = turno_data["dias"] if turno_data and turno_data.get("dias") else {}
 
-        # 🚀 INCLUIMOS REQUIERE REPOSICIÓN Y HORAS TOTALES
         cur.execute(f"""
             SELECT tipo, fecha_inicio, fecha_fin, estado, motivo, requiere_reposicion, horas_totales
             FROM {schema}.ausencias 
@@ -1757,7 +1763,6 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
                  OR (EXTRACT(YEAR FROM fecha_fin) = %s AND EXTRACT(MONTH FROM fecha_fin) = %s))
         """, (empleado_id, anio, mes, anio, mes))
         ausencias = cur.fetchall()
-        
         for a in ausencias:
             a["fecha_inicio"] = str(a["fecha_inicio"])
             a["fecha_fin"] = str(a["fecha_fin"])

@@ -241,7 +241,6 @@
                                 </div>
                                 
                                 <div class="p-4 md:p-5 space-y-4">
-                                    
                                     <div id="det-ausencia-container" class="hidden rounded p-3 text-xs md:text-sm space-y-1 shadow-sm">
                                         <p class="font-bold border-b pb-1 mb-1" id="det-ausencia-titulo">Detalle</p>
                                         <div class="flex justify-between"><span>Motivo:</span><span id="det-ausencia-motivo" class="font-medium text-right max-w-[65%] truncate">---</span></div>
@@ -271,17 +270,18 @@
                                         </div>
                                     </div>
 
-                                    <div class="flex justify-between"><span>Hrs. Turno:</span><span id="det-hrs-turno" class="font-bold">--</span></div>
-                                    <div class="flex justify-between"><span>Hrs. Efectivas:</span><span id="det-hrs-efectivas" class="font-bold text-blue-600">--</span></div>
-                                    <div id="row-extras" class="flex justify-between hidden"><span>Hrs. Extras:</span><span id="det-hrs-extras" class="font-bold text-green-600">--</span></div>
+                                    <div id="contenedor-auditoria" class="empty:hidden"></div>
 
                                     <div class="border-t border-gray-100 pt-4">
                                         <p class="text-xs md:text-sm font-bold text-gray-800 mb-2">Resumen Económico</p>
                                         <div class="bg-gray-50 rounded p-2 md:p-3 text-xs md:text-sm space-y-1 text-gray-700 border border-gray-100">
+                                            <div class="flex justify-between border-b border-gray-200 pb-1 mb-1"><span>Hrs Efectivas:</span><span id="det-horas-trabajadas" class="font-bold text-blue-600">0 hrs</span></div>
                                             <div class="flex justify-between"><span>Retraso:</span><span id="det-min-retraso" class="font-bold">-</span></div>
                                             <div class="flex justify-between border-t border-gray-200 pt-1 mt-1"><span>Descuento:</span><span id="det-deuda" class="font-bold text-red-600">-</span></div>
                                         </div>
                                     </div>
+
+                                    <div id="contenedor-acciones-edicion" class="mt-4 pt-4 border-t border-gray-200 empty:hidden"></div>
                                 </div>
                             </div>
                         </div>
@@ -588,10 +588,8 @@
             const hoy = new Date();
             hoy.setHours(0,0,0,0);
 
-            // ⚡ Fecha de Ingreso del Empleado (Para no ponerle faltas antes de que trabajara aquí)
             let fechaIngreso = null;
             if (empleadoActual && empleadoActual.fecha_ingreso) {
-                // Forzamos la zona horaria para evitar desfases
                 fechaIngreso = new Date(empleadoActual.fecha_ingreso + 'T00:00:00');
                 fechaIngreso.setHours(0,0,0,0);
             }
@@ -600,7 +598,7 @@
                 const fechaActualLoop = new Date(anio, mes - 1, d);
                 const diaFormateado = String(d).padStart(2, '0');
                 const fechaStr = `${anio}-${mesFormateado}-${diaFormateado}`;
-                const mesDiaStr = `${mesFormateado}-${diaFormateado}`; // Ej: "05-01"
+                const mesDiaStr = `${mesFormateado}-${diaFormateado}`; 
                 
                 const letraDia = mapaDiasLetras.get(fechaActualLoop.getDay());
                 const datos = mapaDatos.get(fechaStr);
@@ -610,72 +608,45 @@
                     ausenciaActiva = ausencias.find(a => a.estado === 'aprobado' && fechaStr >= String(a.fecha_inicio).substring(0,10) && fechaStr <= String(a.fecha_fin).substring(0,10));
                 }
 
-                // 🌟 LECTURA Y FILTRADO GEOGRÁFICO DE FERIADOS
                 let objFeriado = feriadosBolivia.get(fechaStr) || feriadosBolivia.get(mesDiaStr);
                 let nombreFeriado = null;
 
                 if (objFeriado) {
-                    // 1. ¿De qué ciudad es este empleado? (Si no tiene, asumimos Nacional)
-                    const ciudadEmpleado = (empleadoActual && empleadoActual.sucursal_ciudad) 
-                        ? String(empleadoActual.sucursal_ciudad).toLowerCase() 
-                        : 'nacional';
-                    
+                    const ciudadEmpleado = (empleadoActual && empleadoActual.sucursal_ciudad) ? String(empleadoActual.sucursal_ciudad).toLowerCase() : 'nacional';
                     const alcanceFeriado = String(objFeriado.tipo).toLowerCase();
-
-                    // 2. ¿Le corresponde este feriado?
                     if (alcanceFeriado === 'nacional' || alcanceFeriado === ciudadEmpleado) {
                         nombreFeriado = objFeriado.descripcion;
                     }
                 }
 
-                // 🌟 LECTURA DE DÍAS LABORALES (Con analizador a prueba de errores)
                 let esDiaLaboral = false;
                 let diasTurno = diasLaboralesJSON;
-                
-                // Si la BD lo envió como texto, lo convertimos a objeto
-                if (typeof diasTurno === 'string') {
-                    try { diasTurno = JSON.parse(diasTurno); } catch(e) { diasTurno = null; }
-                }
-
+                if (typeof diasTurno === 'string') { try { diasTurno = JSON.parse(diasTurno); } catch(e) { diasTurno = null; } }
                 if (diasTurno && typeof diasTurno === 'object' && Object.keys(diasTurno).length > 0) {
-                    // Verificamos si es true (booleano) o "true" (texto)
                     esDiaLaboral = diasTurno[letraDia] === true || String(diasTurno[letraDia]).toLowerCase() === 'true';
                 } else {
-                    // Si el empleado aún no tiene turno asignado, asumimos Lunes a Viernes para no llenarle de faltas
                     esDiaLaboral = (letraDia !== 'S' && letraDia !== 'D');
                 }
 
                 let clases = "estado-futuro";
                 let htmlInner = `<span class="text-xs font-bold text-gray-700">${d}</span>`;
-                let datosClick = datos ? Object.assign({}, datos) : null;
+                
+                // ⚡ AQUÍ ESTABA EL BUG: Ahora creamos datos falsos limpios para días futuros vacíos
+                let datosClick = datos ? Object.assign({}, datos) : { fecha: fechaStr, estado: 'Pendiente', horas_trabajadas: 0, deuda_generada_bs: 0 };
                 let permiteClic = true;
 
-                // ---------------------------------------------------------
-                // 🌟 ÁRBOL DE DECISIONES DE NEGOCIO (Jerarquía Estricta)
-                // ---------------------------------------------------------
-
-                // 1. ANTES DE SER CONTRATADO
                 if (fechaIngreso && fechaActualLoop < fechaIngreso) {
                     clases = "bg-gray-100 opacity-50"; 
                     htmlInner = `<span class="text-xs font-bold text-gray-400">${d}</span><p class="text-[10px] text-gray-400 mt-2 text-center leading-tight">Previo a contrato</p>`;
                     permiteClic = false;
                 }
-                
-                // 2. FERIADOS (Si el empleado NO marcó asistencia ese día)
                 else if (nombreFeriado && !datos) {
                     clases = "bg-purple-50 text-center justify-center relative";
-                    htmlInner = `<span class="text-xs font-bold text-purple-900 absolute top-1 md:top-2 left-1 md:left-2">${d}</span>
-                                 <i class="fas fa-flag text-xl md:text-2xl text-purple-300 mb-1"></i>
-                                 <p class="text-[10px] md:text-[11px] text-purple-700 font-bold uppercase mt-1 leading-tight">${nombreFeriado}</p>`;
+                    htmlInner = `<span class="text-xs font-bold text-purple-900 absolute top-1 md:top-2 left-1 md:left-2">${d}</span><i class="fas fa-flag text-xl md:text-2xl text-purple-300 mb-1"></i><p class="text-[10px] md:text-[11px] text-purple-700 font-bold uppercase mt-1 leading-tight">${nombreFeriado}</p>`;
                     permiteClic = false;
                 }
-
-                // 3. ESTADOS CON ICONOS (Asistencia Calculada)
                 else if (datos) {
-                    let icono = "";
-                    let label = "";
-                    let colorIcono = "";
-                    let colorTexto = "";
+                    let icono = ""; let label = ""; let colorIcono = ""; let colorTexto = "";
 
                     if(datos.estado === 'Puntual') {
                         clases = "estado-puntual text-center justify-center relative";
@@ -698,62 +669,41 @@
                         icono = "fa-times-circle"; colorIcono = "text-red-500";
                         label = "Falta"; colorTexto = "text-red-700";
                     } else if(datos.estado === 'Pendiente') {
-                        // 🚀 NUEVO: Turnos futuros o de esta noche
                         clases = "bg-white text-center justify-center relative";
                         htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-2 left-2">${d}</span>`;
-                        // Forzamos a que no dibuje icono, dejándolo limpio como día futuro
                         icono = ""; label = ""; 
                     }
 
-                    htmlInner = `
-                        <span class="text-xs font-bold text-gray-700 absolute top-2 left-2">${d}</span>
-                        <i class="fas ${icono} text-2xl md:text-3xl opacity-50 mb-1 ${colorIcono}"></i>
-                        <p class="text-[10px] md:text-xs ${colorTexto} font-bold uppercase mt-1">${label}</p>
-                    `;
-                    if(datos.estado === 'Tarde') {
-                        htmlInner += `<p class="text-[9px] text-orange-600 font-bold">-${datos.minutos_retraso_entrada}m</p>`;
-                    }
+                    htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-2 left-2">${d}</span>`;
+                    if (icono) htmlInner += `<i class="fas ${icono} text-2xl md:text-3xl opacity-50 mb-1 ${colorIcono}"></i><p class="text-[10px] md:text-xs ${colorTexto} font-bold uppercase mt-1">${label}</p>`;
+                    if (datos.estado === 'Tarde') htmlInner += `<p class="text-[9px] text-orange-600 font-bold">-${datos.minutos_retraso_entrada}m</p>`;
                 }
-                
-                // 4. AUSENCIAS APROBADAS (Permisos y Vacaciones)
                 else if (ausenciaActiva) {
                     clases = ausenciaActiva.tipo === 'vacacion' ? "estado-vacacion text-center justify-center relative" : "estado-permiso text-center justify-center relative";
                     const icono = ausenciaActiva.tipo === 'vacacion' ? 'fa-umbrella-beach text-blue-500' : 'fa-user-md text-yellow-500';
                     const textColor = ausenciaActiva.tipo === 'vacacion' ? 'text-blue-700' : 'text-yellow-700';
-                    htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-1 md:top-2 left-1 md:left-2">${d}</span>
-                                 <i class="fas ${icono} text-2xl md:text-3xl opacity-40 mb-1"></i>
-                                 <p class="text-[10px] md:text-xs ${textColor} font-bold uppercase mt-1">${ausenciaActiva.tipo}</p>`;
-                    
-                    datosClick = { fecha: fechaStr, estado: ausenciaActiva.tipo, ausencia_detalle: ausenciaActiva };
+                    htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-1 md:top-2 left-1 md:left-2">${d}</span><i class="fas ${icono} text-2xl md:text-3xl opacity-40 mb-1"></i><p class="text-[10px] md:text-xs ${textColor} font-bold uppercase mt-1">${ausenciaActiva.tipo}</p>`;
+                    datosClick = { fecha: fechaStr, estado: ausenciaActiva.tipo, ausencia_detalle: ausenciaActiva, horas_trabajadas: 0 };
                 } 
-                
-                // 5. DÍA INHÁBIL O FIN DE SEMANA (Sigue siendo interactivo)
                 else if (!esDiaLaboral) {
                     clases = "estado-inhabiles text-center justify-center relative bg-gray-100/40 hover:bg-blue-50/50";
-                    htmlInner = `<span class="text-xs font-bold text-gray-400 absolute top-1 left-1">${d}</span>
-                                 <i class="fas fa-bed text-2xl md:text-3xl text-gray-300 opacity-60 mb-1"></i>
-                                 <p class="text-[10px] text-gray-400 font-bold uppercase mt-1">Descanso</p>`;
+                    htmlInner = `<span class="text-xs font-bold text-gray-400 absolute top-1 left-1">${d}</span><i class="fas fa-bed text-2xl md:text-3xl text-gray-300 opacity-60 mb-1"></i><p class="text-[10px] text-gray-400 font-bold uppercase mt-1">Descanso</p>`;
                     permiteClic = true;
                 }
-                
-                // 6. DÍA LABORAL, PASADO, SIN MARCAJE -> ¡FALTA!
                 else if (fechaActualLoop < hoy) {
                     clases = "estado-falta text-center justify-center relative";
-                    htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-1 md:top-2 left-1 md:left-2">${d}</span>
-                                 <i class="fas fa-times-circle text-2xl md:text-3xl opacity-40 mb-1 text-red-500"></i>
-                                 <p class="text-[10px] md:text-xs text-red-700 font-bold uppercase mt-1">Falta</p>`;
-                    datosClick = { fecha: fechaStr, estado: 'Falta', minutos_retraso_entrada: 0, deuda_generada_bs: '0.00' };
+                    htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-1 md:top-2 left-1 md:left-2">${d}</span><i class="fas fa-times-circle text-2xl md:text-3xl opacity-40 mb-1 text-red-500"></i><p class="text-[10px] md:text-xs text-red-700 font-bold uppercase mt-1">Falta</p>`;
+                    datosClick = { fecha: fechaStr, estado: 'Falta', minutos_retraso_entrada: 0, deuda_generada_bs: 0.00, horas_trabajadas: 0 };
                 }
 
-                // Renderizamos
                 const div = document.createElement('div');
                 div.className = `cal-day ${clases}`;
                 div.innerHTML = htmlInner;
 
-                // Le guardamos el detalle completo en el bolsillo si existe
                 if (ausenciaActiva && datosClick) datosClick.ausencia_detalle = ausenciaActiva;
 
-                if (permiteClic && clases !== "estado-futuro") {
+                // ⚡ MAGIA: Ahora se puede hacer clic incluso en días futuros vacíos (PermiteClic es la clave)
+                if (permiteClic) {
                     div.onclick = () => verDetalleDia(datosClick);
                     div.classList.add("cursor-pointer", "hover:ring-2", "hover:ring-blue-400", "transition-all");
                 } else {
@@ -807,6 +757,7 @@
             else if (estadoTexto === 'VACACION') badge.classList.add('bg-blue-500');
             else if (estadoTexto === 'PERMISO') badge.classList.add('bg-yellow-500'); 
             else if (estadoTexto === 'TARDE') badge.classList.add('bg-orange-500');
+            else if (estadoTexto === 'PENDIENTE') badge.classList.add('bg-slate-400');
             else badge.classList.add('bg-red-500'); 
 
             const contAusencia = document.getElementById('det-ausencia-container');
@@ -814,7 +765,6 @@
             
             if (d.ausencia_detalle) {
                 contAusencia.classList.remove('hidden');
-                
                 if (d.ausencia_detalle.tipo === 'vacacion') {
                     contAusencia.className = "rounded p-3 text-xs md:text-sm space-y-1 mb-4 shadow-sm bg-blue-50 border border-blue-200 text-blue-800";
                     document.getElementById('det-ausencia-titulo').innerHTML = '<i class="fas fa-umbrella-beach mr-1"></i> Detalle de Vacación';
@@ -830,7 +780,6 @@
                     textoDuracion = `${String(d.ausencia_detalle.hora_inicio).substring(0,5)} a ${String(d.ausencia_detalle.hora_fin).substring(0,5)} (${d.ausencia_detalle.horas_totales} hrs)`;
                 }
                 
-                // 🚀 NUEVO: Alerta visual si debe reponer el permiso
                 if (d.ausencia_detalle.tipo === 'permiso' && d.ausencia_detalle.requiere_reposicion) {
                     textoDuracion += `<br><span class="inline-block mt-1 bg-red-100 text-red-600 px-2 py-0.5 rounded text-[10px] font-bold border border-red-200 shadow-sm"><i class="fas fa-exclamation-circle mr-1"></i>Debe reponer ${d.ausencia_detalle.horas_totales} hrs</span>`;
                 }
@@ -858,35 +807,25 @@
             document.getElementById('det-min-retraso').textContent = `${d.minutos_retraso_entrada || 0} min`;
             document.getElementById('det-deuda').textContent = `Bs. ${Number(d.deuda_generada_bs || 0).toFixed(2)}`;
 
-            // 🚀 NUEVO: Horas Trabajadas y Alerta de Edición Manual
-            let divResumen = document.getElementById('det-deuda').parentElement.parentElement;
-            
-            // Limpiamos inyecciones anteriores si existen
-            let viejaAlerta = document.getElementById('alerta-edicion-manual');
-            if(viejaAlerta) viejaAlerta.remove();
-            let viejoHoras = document.getElementById('row-horas-trabajadas');
-            if(viejoHoras) viejoHoras.remove();
+            // ⚡ Carga limpia y segura de las Horas Efectivas
+            document.getElementById('det-horas-trabajadas').textContent = `${d.horas_trabajadas || 0} hrs`;
 
-            // Inyectamos las horas trabajadas reales en el Resumen Económico
-            divResumen.insertAdjacentHTML('afterbegin', `
-                <div id="row-horas-trabajadas" class="flex justify-between border-b border-gray-200 pb-1 mb-1">
-                    <span>Hrs Efectivas:</span><span class="font-bold text-blue-600">${d.horas_trabajadas || 0} hrs</span>
-                </div>
-            `);
+            // ⚡ EXORCISMO DEL DOM: Vaciamos completamente el contenedor de auditoría cada vez que abrimos el panel
+            const cajaAuditoria = document.getElementById('contenedor-auditoria');
+            cajaAuditoria.innerHTML = ''; // ¡Adiós fantasmas!
 
-            // Si fue modificado manualmente, dibujamos la bitácora
+            // ⚡ Si existe una edición, creamos UNA SOLA caja amarilla fresca
             if (d.modificado_manualmente) {
-                divResumen.insertAdjacentHTML('afterend', `
-                    <div id="alerta-edicion-manual" class="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg shadow-inner">
+                cajaAuditoria.innerHTML = `
+                    <div class="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg shadow-inner">
                         <p class="text-[10px] font-bold text-yellow-800 uppercase mb-1"><i class="fas fa-edit mr-1"></i>Modificado por RRHH</p>
                         <p class="text-xs text-yellow-700 italic leading-tight">"${d.observaciones || 'Edición manual justificada.'}"</p>
                     </div>
-                `);
+                `;
             }
 
-            const contenedorAcciones = document.getElementById('contenedor-acciones-edicion') || document.createElement('div');
-            contenedorAcciones.id = 'contenedor-acciones-edicion';
-            contenedorAcciones.className = "mt-4 pt-4 border-t border-gray-200";
+            const contenedorAcciones = document.getElementById('contenedor-acciones-edicion');
+            contenedorAcciones.innerHTML = ''; // Limpiamos acciones
             
             if (!d.ausencia_detalle) { 
                 const paramEnt = d.hora_entrada ? String(d.hora_entrada).substring(0,5) : '';
@@ -902,22 +841,7 @@
                         <i class="fas fa-edit mr-2"></i> Editar / Completar Marcajes
                     </button>
                 `;
-            } else {
-                contenedorAcciones.innerHTML = '';
             }
-
-            // 🚀 SI EL DÍA FUE EDITADO, MOSTRAR EL COMENTARIO
-            if (d.modificado_manualmente && d.observaciones) {
-                const alertaEdicion = `
-                    <div class="mt-4 p-3 bg-yellow-50 border-l-4 border-yellow-400 rounded shadow-sm">
-                        <p class="text-[10px] font-bold text-yellow-800 uppercase tracking-wider">Nota de Auditoría:</p>
-                        <p class="text-xs text-yellow-900 italic">"${d.observaciones}"</p>
-                    </div>
-                `;
-                document.getElementById('det-marcajes-container').insertAdjacentHTML('afterend', alertaEdicion);
-            }
-            
-            panel.querySelector('.p-4.md\\:p-5.space-y-4').appendChild(contenedorAcciones);
         }
 
         function cambiarMes(dir) {
