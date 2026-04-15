@@ -95,6 +95,11 @@ def verificar_token(request: Request):
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Token inválido o manipulado.")
 
+# ── HORA OFICIAL DEL SERVIDOR (Para sincronizar Frontends) ──
+@app.get("/hora-servidor")
+def obtener_hora_servidor():
+    # Devuelve la hora exacta de Railway (con la zona horaria America/La_Paz que configuraste)
+    return {"hora_oficial": datetime.now().isoformat()}
 
 # ==============================================================================
 # 4. RUTAS O ENDPOINTS (Las "puertas" de tu servidor)

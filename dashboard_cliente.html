@@ -145,14 +145,41 @@
         // ── SEGURIDAD Y RELOJ ──
         const userDataStr = localStorage.getItem('userData');
         if (!userDataStr) window.location.href = 'index.html'; 
+        
+        let diferenciaTiempo = 0; // Guardará la diferencia en milisegundos
 
-        function actualizarReloj() {
-            const ahora = new Date();
-            const opciones = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
-            document.getElementById('relojTop').textContent = ahora.toLocaleDateString('es-ES', opciones).toUpperCase();
+        // 1. Sincronizamos con el servidor al cargar la página
+        async function sincronizarReloj() {
+            try {
+                // Asume que API_URL es tu enlace de Railway
+                const respuesta = await fetch(`${API_URL}/hora-servidor`);
+                const datos = await respuesta.json();
+                
+                const horaServidor = new Date(datos.hora_oficial).getTime();
+                const horaLocal = new Date().getTime();
+                
+                // Calculamos cuántos milisegundos de diferencia hay
+                diferenciaTiempo = horaServidor - horaLocal;
+            } catch (error) {
+                console.error("No se pudo sincronizar la hora. Usando hora local.");
+            }
         }
-        setInterval(actualizarReloj, 1000);
-        actualizarReloj(); 
+
+        // 2. El reloj visual
+        function actualizarReloj() {
+            // Le sumamos la diferencia a la hora de la laptop. 
+            // ¡Magia! Ahora es la hora del servidor.
+            const ahoraReal = new Date(new Date().getTime() + diferenciaTiempo);
+            
+            const opciones = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
+            document.getElementById('relojTop').textContent = ahoraReal.toLocaleDateString('es-ES', opciones).toUpperCase();
+        }
+
+        // Arrancamos el motor
+        sincronizarReloj().then(() => {
+            setInterval(actualizarReloj, 1000);
+            actualizarReloj();
+        });
 
         // ── VERIFICADOR INTELIGENTE DE FERIADOS (El que armamos en la sesión) ──
         async function verificarEstadoFeriados() {
