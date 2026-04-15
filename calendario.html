@@ -693,6 +693,12 @@
                         clases = "estado-falta text-center justify-center relative";
                         icono = "fa-times-circle"; colorIcono = "text-red-500";
                         label = "Falta"; colorTexto = "text-red-700";
+                    } else if(datos.estado === 'Pendiente') {
+                        // 🚀 NUEVO: Turnos futuros o de esta noche
+                        clases = "bg-white text-center justify-center relative";
+                        htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-2 left-2">${d}</span>`;
+                        // Forzamos a que no dibuje icono, dejándolo limpio como día futuro
+                        icono = ""; label = ""; 
                     }
 
                     htmlInner = `

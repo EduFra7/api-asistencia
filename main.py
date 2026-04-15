@@ -1622,7 +1622,15 @@ def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, 
         "horas_trabajadas": 0.00
     }
 
+    # ⚡ NUEVO: PREVENCIÓN DE FALTAS PREMATURAS
+    hoy = date.today()
+    es_nocturno = turno.get('hora_salida') < turno.get('hora_ingreso') if turno.get('hora_salida') and turno.get('hora_ingreso') else False
+    dia_cierre = (fecha_dia + timedelta(days=1)) if es_nocturno and fecha_dia else fecha_dia
+
     if not marcajes_limpios:
+        # Si el día de cierre es hoy o en el futuro, no es falta, simplemente "Pendiente"
+        if fecha_dia and dia_cierre >= hoy:
+            resumen["estado"] = "Pendiente"
         return resumen
 
     # 2. Evaluación de Retraso Entrada
@@ -2093,10 +2101,13 @@ async def simular_evento_hardware(data: dict, usuario = Depends(verificar_token)
         conn.commit()
 
         # 🚀 3. EL GRAN DISPARADOR: Llamamos a la inteligencia centralizada
-        # Ya no calculamos nada aquí. Solo le decimos al cerebro: "Recalcula este día".
-        exito = procesar_asistencia_dia(schema, emp['id'], fecha_dt)
+        # A) Calculamos el día actual de la huella
+        exito_hoy = procesar_asistencia_dia(schema, emp['id'], fecha_dt)
+        
+        # 🌙 B) MAGIA NOCTURNA: Forzamos el cálculo del día anterior por si esta huella es una salida de madrugada
+        procesar_asistencia_dia(schema, emp['id'], fecha_dt - timedelta(days=1))
 
-        if exito:
+        if exito_hoy:
             return {"mensaje": f"Evento procesado. La asistencia de {emp['nombres']} se ha actualizado automáticamente."}
         else:
             raise HTTPException(status_code=500, detail="El cerebro de cálculo falló. Revisa los logs.")
