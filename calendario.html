@@ -271,6 +271,10 @@
                                         </div>
                                     </div>
 
+                                    <div class="flex justify-between"><span>Hrs. Turno:</span><span id="det-hrs-turno" class="font-bold">--</span></div>
+                                    <div class="flex justify-between"><span>Hrs. Efectivas:</span><span id="det-hrs-efectivas" class="font-bold text-blue-600">--</span></div>
+                                    <div id="row-extras" class="flex justify-between hidden"><span>Hrs. Extras:</span><span id="det-hrs-extras" class="font-bold text-green-600">--</span></div>
+
                                     <div class="border-t border-gray-100 pt-4">
                                         <p class="text-xs md:text-sm font-bold text-gray-800 mb-2">Resumen Económico</p>
                                         <div class="bg-gray-50 rounded p-2 md:p-3 text-xs md:text-sm space-y-1 text-gray-700 border border-gray-100">
@@ -825,7 +829,13 @@
                 if (d.ausencia_detalle.hora_inicio && d.ausencia_detalle.hora_fin) {
                     textoDuracion = `${String(d.ausencia_detalle.hora_inicio).substring(0,5)} a ${String(d.ausencia_detalle.hora_fin).substring(0,5)} (${d.ausencia_detalle.horas_totales} hrs)`;
                 }
-                document.getElementById('det-ausencia-duracion').textContent = textoDuracion;
+                
+                // 🚀 NUEVO: Alerta visual si debe reponer el permiso
+                if (d.ausencia_detalle.tipo === 'permiso' && d.ausencia_detalle.requiere_reposicion) {
+                    textoDuracion += `<br><span class="inline-block mt-1 bg-red-100 text-red-600 px-2 py-0.5 rounded text-[10px] font-bold border border-red-200 shadow-sm"><i class="fas fa-exclamation-circle mr-1"></i>Debe reponer ${d.ausencia_detalle.horas_totales} hrs</span>`;
+                }
+                
+                document.getElementById('det-ausencia-duracion').innerHTML = textoDuracion;
 
                 if (textoDuracion.includes('Día Completo') && (!d.hora_entrada && !d.hora_salida)) {
                     contMarcajes.classList.add('hidden');
@@ -837,11 +847,9 @@
                 contMarcajes.classList.remove('hidden');
             }
 
-            // 🚀 1. EXTRAEMOS EL TURNO AQUÍ ARRIBA PARA FORMATEAR LAS HORAS
             const empActual = listaEmpleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
             const turnoEmp = turnosGlobal.find(t => String(t.id) === String(empActual.turno_id));
 
-            // 🚀 2. INYECTAMOS LAS HORAS USANDO LA FUNCIÓN INTELIGENTE (innerHTML)
             document.getElementById('det-entrada').innerHTML = formatearHoraMarcaje(d.hora_entrada, d.fecha, turnoEmp);
             document.getElementById('det-alm-ini').innerHTML = formatearHoraMarcaje(d.hora_inicio_almuerzo, d.fecha, turnoEmp);
             document.getElementById('det-alm-fin').innerHTML = formatearHoraMarcaje(d.hora_fin_almuerzo, d.fecha, turnoEmp);
@@ -850,12 +858,36 @@
             document.getElementById('det-min-retraso').textContent = `${d.minutos_retraso_entrada || 0} min`;
             document.getElementById('det-deuda').textContent = `Bs. ${Number(d.deuda_generada_bs || 0).toFixed(2)}`;
 
-            // 🚀 NUEVO: BOTÓN DE EDICIÓN AL FINAL DEL PANEL
+            // 🚀 NUEVO: Horas Trabajadas y Alerta de Edición Manual
+            let divResumen = document.getElementById('det-deuda').parentElement.parentElement;
+            
+            // Limpiamos inyecciones anteriores si existen
+            let viejaAlerta = document.getElementById('alerta-edicion-manual');
+            if(viejaAlerta) viejaAlerta.remove();
+            let viejoHoras = document.getElementById('row-horas-trabajadas');
+            if(viejoHoras) viejoHoras.remove();
+
+            // Inyectamos las horas trabajadas reales en el Resumen Económico
+            divResumen.insertAdjacentHTML('afterbegin', `
+                <div id="row-horas-trabajadas" class="flex justify-between border-b border-gray-200 pb-1 mb-1">
+                    <span>Hrs Efectivas:</span><span class="font-bold text-blue-600">${d.horas_trabajadas || 0} hrs</span>
+                </div>
+            `);
+
+            // Si fue modificado manualmente, dibujamos la bitácora
+            if (d.modificado_manualmente) {
+                divResumen.insertAdjacentHTML('afterend', `
+                    <div id="alerta-edicion-manual" class="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg shadow-inner">
+                        <p class="text-[10px] font-bold text-yellow-800 uppercase mb-1"><i class="fas fa-edit mr-1"></i>Modificado por RRHH</p>
+                        <p class="text-xs text-yellow-700 italic leading-tight">"${d.observaciones || 'Edición manual justificada.'}"</p>
+                    </div>
+                `);
+            }
+
             const contenedorAcciones = document.getElementById('contenedor-acciones-edicion') || document.createElement('div');
             contenedorAcciones.id = 'contenedor-acciones-edicion';
             contenedorAcciones.className = "mt-4 pt-4 border-t border-gray-200";
             
-            // 🚀 PERMITE EDITAR CUALQUIER DÍA (Siempre que no sea vacación/permiso completo)
             if (!d.ausencia_detalle) { 
                 const paramEnt = d.hora_entrada ? String(d.hora_entrada).substring(0,5) : '';
                 const paramAlmIn = d.hora_inicio_almuerzo ? String(d.hora_inicio_almuerzo).substring(0,5) : '';
@@ -872,6 +904,17 @@
                 `;
             } else {
                 contenedorAcciones.innerHTML = '';
+            }
+
+            // 🚀 SI EL DÍA FUE EDITADO, MOSTRAR EL COMENTARIO
+            if (d.modificado_manualmente && d.observaciones) {
+                const alertaEdicion = `
+                    <div class="mt-4 p-3 bg-yellow-50 border-l-4 border-yellow-400 rounded shadow-sm">
+                        <p class="text-[10px] font-bold text-yellow-800 uppercase tracking-wider">Nota de Auditoría:</p>
+                        <p class="text-xs text-yellow-900 italic">"${d.observaciones}"</p>
+                    </div>
+                `;
+                document.getElementById('det-marcajes-container').insertAdjacentHTML('afterend', alertaEdicion);
             }
             
             panel.querySelector('.p-4.md\\:p-5.space-y-4').appendChild(contenedorAcciones);

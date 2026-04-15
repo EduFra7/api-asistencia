@@ -1600,7 +1600,6 @@ async def editar_ausencia(ausencia_id: int, data: dict, usuario = Depends(verifi
 # ==============================================================================
 
 def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, salario_base: float, fecha_dia: date = None):
-    # 1. Filtro Anti-Ansiedad (Debounce de 3 minutos)
     marcajes_limpios = []
     for m in sorted(marcajes_brutos):
         if not marcajes_limpios:
@@ -1621,18 +1620,16 @@ def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, 
         "horas_trabajadas": 0.00
     }
 
-    # ⚡ NUEVO: PREVENCIÓN DE FALTAS PREMATURAS
     hoy = date.today()
     es_nocturno = turno.get('hora_salida') < turno.get('hora_ingreso') if turno.get('hora_salida') and turno.get('hora_ingreso') else False
     dia_cierre = (fecha_dia + timedelta(days=1)) if es_nocturno and fecha_dia else fecha_dia
 
     if not marcajes_limpios:
-        # Si el día de cierre es hoy o en el futuro, no es falta, simplemente "Pendiente"
         if fecha_dia and dia_cierre >= hoy:
             resumen["estado"] = "Pendiente"
         return resumen
 
-    # 2. Evaluación de Retraso Entrada
+    # 1. Evaluación de Retraso (Con Tolerancia Dinámica)
     hora_oficial = turno['hora_ingreso']
     min_llegada = (resumen["hora_entrada"].hour * 60) + resumen["hora_entrada"].minute
     min_oficial = (hora_oficial.hour * 60) + hora_oficial.minute
@@ -1640,7 +1637,7 @@ def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, 
     if retraso > turno.get('tolerancia_min', 0):
         resumen["minutos_retraso_entrada"] = retraso
 
-    # 3. Evaluación de Almuerzo
+    # 2. Evaluación de Almuerzo
     if resumen["hora_inicio_almuerzo"] and resumen["hora_fin_almuerzo"]:
         alm_in = (resumen["hora_inicio_almuerzo"].hour * 60) + resumen["hora_inicio_almuerzo"].minute
         alm_out = (resumen["hora_fin_almuerzo"].hour * 60) + resumen["hora_fin_almuerzo"].minute
@@ -1649,35 +1646,54 @@ def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, 
         if duracion > limite_alm and limite_alm > 0:
             resumen["minutos_exceso_almuerzo"] = duracion - limite_alm
 
-    # 4. Ajuste por Permisos
     if permisos:
         for p in permisos:
             p_out = (p['hora_fin'].hour * 60) + p['hora_fin'].minute
             if min_llegada <= p_out:
                 resumen["minutos_retraso_entrada"] = 0 
 
-    # 5. Cálculo de Deuda
-    valor_minuto = (float(salario_base) / 30 / 8 / 60) if salario_base > 0 else 0
-    total_min_deuda = resumen["minutos_retraso_entrada"] + resumen["minutos_exceso_almuerzo"]
-    resumen["deuda_generada_bs"] = round(total_min_deuda * valor_minuto, 2)
+    # 🚀 3. CÁLCULO REAL DE HORAS TRABAJADAS
+    if resumen["hora_entrada"] and resumen["hora_salida"]:
+        base_date = fecha_dia or hoy
+        dt_in = datetime.combine(base_date, resumen["hora_entrada"])
+        dt_out = datetime.combine(base_date, resumen["hora_salida"])
+        
+        if dt_out < dt_in:
+            dt_out += timedelta(days=1)
+            
+        segundos_trab_brutos = (dt_out - dt_in).total_seconds()
+        
+        # Descontar almuerzo de las horas trabajadas
+        if turno.get('almuerzo'):
+            if resumen["hora_inicio_almuerzo"] and resumen["hora_fin_almuerzo"]:
+                dt_alm_in = datetime.combine(base_date, resumen["hora_inicio_almuerzo"])
+                dt_alm_out = datetime.combine(base_date, resumen["hora_fin_almuerzo"])
+                if dt_alm_out < dt_alm_in: dt_alm_out += timedelta(days=1)
+                segundos_trab_brutos -= (dt_alm_out - dt_alm_in).total_seconds()
+            else:
+                # Si el turno exige almuerzo pero no marcó, se descuenta el tiempo por defecto
+                segundos_trab_brutos -= (turno.get('almuerzo_min', 0) * 60)
+                
+        resumen["horas_trabajadas"] = round(max(0, segundos_trab_brutos) / 3600.0, 2)
 
-    # ⚡ 6. LÓGICA DE ESTADOS TEMPORALES (Iconografía)
+    # 🚀 4. DINAMISMO FINANCIERO (Regla de Descuento del Turno)
+    total_min_deuda = resumen["minutos_retraso_entrada"] + resumen["minutos_exceso_almuerzo"]
+    
+    if turno.get('descuento', True) == True: # Si el turno exige descuentos
+        valor_minuto = (float(salario_base) / 30 / 8 / 60) if salario_base > 0 else 0
+        resumen["deuda_generada_bs"] = round(total_min_deuda * valor_minuto, 2)
+    else:
+        # Registra el retraso en minutos (para KPIs), pero NO afecta al dinero
+        resumen["deuda_generada_bs"] = 0.00
+
+    # 5. Veredicto Final
     marcajes_esperados = 4 if turno.get('almuerzo') else 2
     conteo = len(marcajes_limpios)
-    hoy = date.today()
-
-    # ¿Es un turno que cruza la medianoche?
-    es_nocturno = turno.get('hora_salida') < turno.get('hora_ingreso') if turno.get('hora_salida') and turno.get('hora_ingreso') else False
-
-    # ¿Cuándo termina REALMENTE este día laboral?
-    dia_cierre = (fecha_dia + timedelta(days=1)) if es_nocturno and fecha_dia else fecha_dia
 
     if conteo < marcajes_esperados:
-        # Evaluamos si el turno ya cerró definitivamente
         if dia_cierre and dia_cierre < hoy:
             resumen["estado"] = "Incompleto"
         else:
-            # Si seguimos en el día de cierre (o antes), sigue trabajando
             resumen["estado"] = "Trabajando"
     else:
         resumen["estado"] = "Tarde" if total_min_deuda > 0 else "Puntual"
@@ -1694,7 +1710,6 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        # 1. LECTURA SÚPER RÁPIDA DE CACHÉ
         cur.execute(f"""
             SELECT * FROM {schema}.asistencia_diaria 
             WHERE empleado_id = %s AND EXTRACT(YEAR FROM fecha) = %s AND EXTRACT(MONTH FROM fecha) = %s 
@@ -1702,7 +1717,6 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
         """, (empleado_id, anio, mes))
         dias_procesados = cur.fetchall()
 
-        # ⚡ CORRECCIÓN CRÍTICA: Eliminamos el bucle tóxico y formateamos correctamente
         for dia in dias_procesados:
             dia["fecha"] = str(dia["fecha"]) if dia.get("fecha") else None
             dia["hora_entrada"] = str(dia["hora_entrada"]) if dia.get("hora_entrada") else None
@@ -1711,14 +1725,13 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
             dia["hora_salida"] = str(dia["hora_salida"]) if dia.get("hora_salida") else None
             dia["horas_trabajadas"] = float(dia["horas_trabajadas"] or 0)
             dia["deuda_generada_bs"] = float(dia["deuda_generada_bs"] or 0)
+            dia["modificado_manualmente"] = bool(dia.get("modificado_manualmente"))
+            dia["observaciones"] = dia.get("observaciones") or ""
 
-        # 2. CÁLCULO DE KPIs DIRECTO EN SQL (Más rápido que sumar en Python)
         cur.execute(f"""
-            SELECT 
-                COUNT(id) as dias_trabajados, 
-                SUM(horas_trabajadas) as total_horas, 
-                SUM(minutos_retraso_entrada + minutos_exceso_almuerzo) as retraso_total_min, 
-                SUM(deuda_generada_bs) as deuda_total 
+            SELECT COUNT(id) as dias_trabajados, SUM(horas_trabajadas) as total_horas, 
+                   SUM(minutos_retraso_entrada + minutos_exceso_almuerzo) as retraso_total_min, 
+                   SUM(deuda_generada_bs) as deuda_total 
             FROM {schema}.asistencia_diaria 
             WHERE empleado_id = %s AND EXTRACT(YEAR FROM fecha) = %s AND EXTRACT(MONTH FROM fecha) = %s
         """, (empleado_id, anio, mes))
@@ -1726,43 +1739,33 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
         
         kpis = {
             "dias_trabajados": kpis_raw["dias_trabajados"] if kpis_raw and kpis_raw["dias_trabajados"] else 0,
-            "total_horas": float(kpis_raw["total_horas"] or 0) if kpis_raw else 0.0,
+            "total_horas": round(float(kpis_raw["total_horas"] or 0), 2) if kpis_raw else 0.0,
             "retraso_total_min": int(kpis_raw["retraso_total_min"] or 0) if kpis_raw else 0,
             "deuda_total": float(kpis_raw["deuda_total"] or 0) if kpis_raw else 0.0
         }
 
-        # 3. TRAER TURNOS (Para pintar días de descanso)
         cur.execute(f"SELECT t.dias FROM {schema}.empleados e LEFT JOIN {schema}.turnos t ON e.turno_id = t.id WHERE e.id = %s", (empleado_id,))
         turno_data = cur.fetchone()
         dias_laborales = turno_data["dias"] if turno_data and turno_data.get("dias") else {}
 
-        # 4. TRAER AUSENCIAS DEL MES
+        # 🚀 INCLUIMOS REQUIERE REPOSICIÓN Y HORAS TOTALES
         cur.execute(f"""
-            SELECT tipo, fecha_inicio, fecha_fin, estado, motivo
+            SELECT tipo, fecha_inicio, fecha_fin, estado, motivo, requiere_reposicion, horas_totales
             FROM {schema}.ausencias 
             WHERE empleado_id = %s AND eliminado = FALSE AND estado = 'aprobado'
-            AND (
-                (EXTRACT(YEAR FROM fecha_inicio) = %s AND EXTRACT(MONTH FROM fecha_inicio) = %s)
-                OR (EXTRACT(YEAR FROM fecha_fin) = %s AND EXTRACT(MONTH FROM fecha_fin) = %s)
-            )
+            AND ((EXTRACT(YEAR FROM fecha_inicio) = %s AND EXTRACT(MONTH FROM fecha_inicio) = %s)
+                 OR (EXTRACT(YEAR FROM fecha_fin) = %s AND EXTRACT(MONTH FROM fecha_fin) = %s))
         """, (empleado_id, anio, mes, anio, mes))
         ausencias = cur.fetchall()
         
-        # ⚡ CORRECCIÓN: Parseo limpio de las ausencias
         for a in ausencias:
             a["fecha_inicio"] = str(a["fecha_inicio"])
             a["fecha_fin"] = str(a["fecha_fin"])
 
-        return {
-            "dias": dias_procesados, 
-            "kpis": kpis, 
-            "dias_laborales": dias_laborales, 
-            "ausencias": ausencias
-        }
+        return {"dias": dias_procesados, "kpis": kpis, "dias_laborales": dias_laborales, "ausencias": ausencias}
     finally:
         cur.close()
         conn.close()
-
 
 # ==============================================================================
 # 13. MÓDULO: FERIADOS
