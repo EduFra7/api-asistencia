@@ -760,6 +760,32 @@
             }
         }
 
+        // 🧠 Función inteligente para detectar si una hora pertenece al día siguiente en turnos nocturnos
+        function formatearHoraMarcaje(horaStr, fechaBaseStr, turno) {
+            if (!horaStr) return '--:--';
+            const horaCorta = String(horaStr).substring(0, 5); // "00:15"
+            
+            let esDiaSiguiente = false;
+            // Si el turno cruza la medianoche y la hora del marcaje es menor a la hora de ingreso (ej. 00:15 < 20:00)
+            if (turno && turno.hora_salida < turno.hora_ingreso) {
+                if (horaStr < turno.hora_ingreso) {
+                    esDiaSiguiente = true;
+                }
+            }
+            
+            if (esDiaSiguiente) {
+                // Calculamos visualmente el día de mañana
+                let fechaObj = new Date(fechaBaseStr + 'T00:00:00');
+                fechaObj.setDate(fechaObj.getDate() + 1);
+                let diaSig = fechaObj.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+                
+                // Retorna la hora con un pequeño indicativo del día
+                return `<span class="text-[9px] text-blue-500 font-bold bg-blue-50 px-1 rounded mr-1" title="Día Siguiente">${diaSig}.</span>${horaCorta}`;
+            }
+            
+            return horaCorta; // Si es un día normal, solo devuelve la hora
+        }
+
         function verDetalleDia(d) {
             const panel = document.getElementById('panel-radiografia');
             
@@ -811,10 +837,15 @@
                 contMarcajes.classList.remove('hidden');
             }
 
-            document.getElementById('det-entrada').textContent = d.hora_entrada ? String(d.hora_entrada).substring(0,5) : '--:--';
-            document.getElementById('det-alm-ini').textContent = d.hora_inicio_almuerzo ? String(d.hora_inicio_almuerzo).substring(0,5) : '--:--';
-            document.getElementById('det-alm-fin').textContent = d.hora_fin_almuerzo ? String(d.hora_fin_almuerzo).substring(0,5) : '--:--';
-            document.getElementById('det-salida').textContent = d.hora_salida ? String(d.hora_salida).substring(0,5) : '--:--';
+            // 🚀 1. EXTRAEMOS EL TURNO AQUÍ ARRIBA PARA FORMATEAR LAS HORAS
+            const empActual = listaEmpleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
+            const turnoEmp = turnosGlobal.find(t => String(t.id) === String(empActual.turno_id));
+
+            // 🚀 2. INYECTAMOS LAS HORAS USANDO LA FUNCIÓN INTELIGENTE (innerHTML)
+            document.getElementById('det-entrada').innerHTML = formatearHoraMarcaje(d.hora_entrada, d.fecha, turnoEmp);
+            document.getElementById('det-alm-ini').innerHTML = formatearHoraMarcaje(d.hora_inicio_almuerzo, d.fecha, turnoEmp);
+            document.getElementById('det-alm-fin').innerHTML = formatearHoraMarcaje(d.hora_fin_almuerzo, d.fecha, turnoEmp);
+            document.getElementById('det-salida').innerHTML = formatearHoraMarcaje(d.hora_salida, d.fecha, turnoEmp);
             
             document.getElementById('det-min-retraso').textContent = `${d.minutos_retraso_entrada || 0} min`;
             document.getElementById('det-deuda').textContent = `Bs. ${Number(d.deuda_generada_bs || 0).toFixed(2)}`;
@@ -824,23 +855,13 @@
             contenedorAcciones.id = 'contenedor-acciones-edicion';
             contenedorAcciones.className = "mt-4 pt-4 border-t border-gray-200";
             
-
-            // 🚀 AHORA PERMITE EDITAR CUALQUIER DÍA, INCLUSO FUTUROS (Siempre que no sea vacación/permiso)
+            // 🚀 PERMITE EDITAR CUALQUIER DÍA (Siempre que no sea vacación/permiso completo)
             if (!d.ausencia_detalle) { 
-                // ... todo el código de let htmlAlmuerzo y contenedorAcciones.innerHTML se mantiene igual
-            //const esPasadoOHoy = new Date(d.fecha + 'T00:00:00') <= new Date();
-            
-            //if (esPasadoOHoy && !d.ausencia_detalle) {
-                
-                // 1. Extraemos los 4 tiempos actuales para mandarlos al modal
                 const paramEnt = d.hora_entrada ? String(d.hora_entrada).substring(0,5) : '';
                 const paramAlmIn = d.hora_inicio_almuerzo ? String(d.hora_inicio_almuerzo).substring(0,5) : '';
                 const paramAlmOut = d.hora_fin_almuerzo ? String(d.hora_fin_almuerzo).substring(0,5) : '';
                 const paramSal = d.hora_salida ? String(d.hora_salida).substring(0,5) : '';
                 
-                // 2. ⚡ Inteligencia: ¿Este empleado tiene almuerzo en su turno?
-                const empActual = listaEmpleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
-                const turnoEmp = turnosGlobal.find(t => String(t.id) === String(empActual.turno_id));
                 const tieneAlmuerzo = turnoEmp && turnoEmp.almuerzo ? true : false;
                 
                 contenedorAcciones.innerHTML = `
@@ -1023,27 +1044,60 @@
         }
 
         async function confirmarEliminacionAsistencia(fecha) {
-            const { isConfirmed } = await Swal.fire({
-                title: '¿Eliminar registros?',
-                text: `Se borrarán todos los marcajes del día ${fecha}. El estado volverá a "Falta".`,
+            const { value: adminPassword } = await Swal.fire({
+                title: `<p class="text-xl font-bold text-slate-800">¿Eliminar registros?</p>`,
+                html: `
+                    <p class="text-sm text-gray-500 mb-4">Se borrarán todos los marcajes del <b>${fecha}</b> y el estado volverá a "Falta". Esta acción no se puede deshacer.</p>
+                    <div class="text-left mb-2 p-3 bg-red-50 border border-red-100 rounded-lg">
+                        <label class="text-[10px] font-bold text-red-700 uppercase tracking-wide"><i class="fas fa-lock mr-1"></i>Contraseña Administrador *</label>
+                        <input id="swal-delete-pass" type="password" class="w-full border border-red-300 p-2 rounded-lg mt-1 focus:ring-2 focus:ring-red-500 outline-none bg-white" placeholder="Firma electrónica requerida">
+                    </div>
+                `,
                 icon: 'warning',
                 showCancelButton: true,
                 confirmButtonColor: '#d33',
-                confirmButtonText: 'Sí, eliminar',
-                cancelButtonText: 'Cancelar'
+                confirmButtonText: '<i class="fas fa-trash-alt mr-1"></i> Sí, eliminar todo',
+                cancelButtonText: 'Cancelar',
+                preConfirm: () => {
+                    const pass = document.getElementById('swal-delete-pass').value;
+                    if (!pass) {
+                        Swal.showValidationMessage('La contraseña es obligatoria para eliminar.');
+                    }
+                    return pass;
+                }
             });
 
-            if (isConfirmed) {
-                // Aquí llamas al endpoint DELETE que creamos en el paso anterior
-                const res = await fetch(`${API_URL}/asistencia/${empleadoSeleccionadoId}/eliminar-dia/${fecha}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${token_api}` }
-                });
-                if(res.ok) {
+            if (adminPassword) {
+                try {
+                    // Enviamos la petición DELETE con la contraseña en el cuerpo
+                    const res = await fetch(`${API_URL}/asistencia/${empleadoSeleccionadoId}/eliminar-dia/${fecha}`, {
+                        method: 'DELETE',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token_api}` 
+                        },
+                        body: JSON.stringify({ admin_password: adminPassword })
+                    });
+
+                    const data = await res.json();
+
+                    // 🛑 CINTURÓN DE SEGURIDAD FRONTEND
+                    if (!res.ok) {
+                        Swal.fire('Acceso Denegado', data.detail || 'Contraseña incorrecta.', 'error');
+                        return;
+                    }
+
+                    // ✅ ÉXITO
                     Swal.fire('Eliminado', 'Los registros han sido borrados.', 'success');
+                    
+                    // Recargamos la interfaz
                     const empActual = listaEmpleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
                     const turnoEmp = turnosGlobal.find(t => String(t.id) === String(empActual.turno_id));
                     cargarCalendario(turnoEmp);
+                    
+                } catch (error) {
+                    console.error(error);
+                    Swal.fire('Error', 'No se pudo conectar al servidor.', 'error');
                 }
             }
         }

@@ -2040,28 +2040,59 @@ async def editar_asistencia_manual(empleado_id: int, data: dict, request: Reques
         conn.close()
 
 @app.delete("/asistencia/{empleado_id}/eliminar-dia/{fecha}")
-async def eliminar_asistencia_dia(empleado_id: int, fecha: str, usuario = Depends(verificar_token)):
+async def eliminar_asistencia_dia(empleado_id: int, fecha: str, request: Request, usuario = Depends(verificar_token)):
     schema = usuario["schema_name"]
-    # (Agrega aquí la misma verificación de contraseña admin que usamos en editar si quieres más seguridad)
     
+    # 1. Verificación de Roles
+    if usuario["rol"] not in ["admin", "superadmin"]:
+        raise HTTPException(status_code=403, detail="Sin permisos para eliminar historial.")
+        
+    # 2. Captura del Body en la petición DELETE
+    try:
+        data = await request.json()
+    except:
+        raise HTTPException(status_code=400, detail="Formato JSON inválido o vacío.")
+        
+    admin_password = data.get("admin_password")
+    if not admin_password:
+        raise HTTPException(status_code=409, detail="Contraseña requerida.")
+        
+    # 3. Verificación de Contraseña en BD Public
+    import bcrypt
+    conn_pub = conectar_bd("public")
+    cur_pub = conn_pub.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur_pub.execute("SELECT password_hash FROM usuarios WHERE id = %s", (usuario["id"],))
+    user_db = cur_pub.fetchone()
+    cur_pub.close()
+    conn_pub.close()
+
+    if not user_db or not bcrypt.checkpw(admin_password.encode(), user_db["password_hash"].encode()):
+        raise HTTPException(status_code=409, detail="Contraseña incorrecta. Eliminación denegada.")
+    
+    # 4. 🛑 Lógica de Eliminación (Solo si pasó los filtros)
     conn = conectar_bd(schema)
     cur = conn.cursor()
     try:
-        # 1. Obtenemos el bio_id
         cur.execute(f"SELECT bio_id FROM {schema}.empleados WHERE id = %s", (empleado_id,))
-        bio_id = cur.fetchone()[0]
+        emp_data = cur.fetchone()
+        bio_id = str(emp_data[0]) if emp_data and emp_data[0] else "S/N"
 
-        # 2. Borramos los eventos brutos de ese día
-        cur.execute(f"DELETE FROM {schema}.eventos_brutos WHERE item = %s AND DATE(fecha_hora) = %s", (str(bio_id), fecha))
+        # Borramos los eventos brutos
+        cur.execute(f"DELETE FROM {schema}.eventos_brutos WHERE item = %s AND DATE(fecha_hora) = %s", (bio_id, fecha))
         
-        # 3. Borramos el cálculo caché para que el Motor lo regenere de cero
+        # Borramos el cálculo diario
         cur.execute(f"DELETE FROM {schema}.asistencia_diaria WHERE empleado_id = %s AND fecha = %s", (empleado_id, fecha))
         
         conn.commit()
-        # 4. Forzamos un recálculo (esto pondrá el estado en 'Falta')
+        
+        # Forzamos al motor a recalcular para que ponga estado "Falta"
+        from datetime import datetime
         procesar_asistencia_dia(schema, empleado_id, datetime.strptime(fecha, "%Y-%m-%d").date())
         
         return {"mensaje": "Registros eliminados. El día ha vuelto a estado inicial."}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
         conn.close()
