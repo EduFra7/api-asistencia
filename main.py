@@ -471,21 +471,37 @@ def procesar_asistencia_dia(schema: str, empleado_id: int, fecha: date):
     
     try:
         # 1. Obtener datos básicos (Empleado, Turno y Salario)
+        # ⚡ OPTIMIZACIÓN: Traemos el bio_id aquí directamente
         cur.execute(f"""
-            SELECT e.id, e.salario_base, e.turno_id, t.* FROM {schema}.empleados e 
+            SELECT e.id, e.bio_id, e.salario_base, e.turno_id, t.* FROM {schema}.empleados e 
             JOIN {schema}.turnos t ON e.turno_id = t.id 
             WHERE e.id = %s
         """, (empleado_id,))
         emp_turno = cur.fetchone()
         if not emp_turno: return False
+        
+        bio_id_str = str(emp_turno['bio_id']) if emp_turno.get('bio_id') else "S/N"
 
-        # 2. Obtener Marcajes Brutos del día
+        # 2. 🌙 VENTANA DINÁMICA: Detección de Turno Nocturno
+        es_nocturno = False
+        if emp_turno.get('hora_salida') and emp_turno.get('hora_ingreso'):
+            es_nocturno = emp_turno['hora_salida'] < emp_turno['hora_ingreso']
+
+        if es_nocturno:
+            # Ventana Nocturna: Desde hoy al mediodía hasta mañana al mediodía
+            inicio_ventana = f"{fecha} 12:00:00"
+            fin_ventana = f"{fecha + timedelta(days=1)} 11:59:59"
+        else:
+            # Ventana Diurna: El día calendario normal
+            inicio_ventana = f"{fecha} 00:00:00"
+            fin_ventana = f"{fecha} 23:59:59"
+
+        # 📡 Extraer los Marcajes Brutos usando la ventana de tiempo
         cur.execute(f"""
             SELECT fecha_hora FROM {schema}.eventos_brutos 
-            WHERE item = (SELECT bio_id::text FROM {schema}.empleados WHERE id = %s) 
-            AND DATE(fecha_hora) = %s 
+            WHERE item = %s AND fecha_hora >= %s AND fecha_hora <= %s 
             ORDER BY fecha_hora ASC
-        """, (empleado_id, fecha))
+        """, (bio_id_str, inicio_ventana, fin_ventana))
         marcajes = [m['fecha_hora'] for m in cur.fetchall()]
 
         # 3. Obtener Permisos/Ausencias para ese día
@@ -497,8 +513,7 @@ def procesar_asistencia_dia(schema: str, empleado_id: int, fecha: date):
         """, (empleado_id, fecha))
         ausencias = cur.fetchall()
 
-        # 🚀 4. EJECUTAR MOTOR MATEMÁTICO (Tu función calcular_dia_asistencia)
-        # Nota: Asegúrate de que calcular_dia_asistencia esté definida en tu main.py
+        # 🚀 4. EJECUTAR MOTOR MATEMÁTICO
         resumen = calcular_dia_asistencia(marcajes, emp_turno, ausencias, emp_turno['salario_base'], fecha)
 
         # 5. UPSERT (Insertar o Actualizar) en la tabla Caché
@@ -1644,15 +1659,20 @@ def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, 
     conteo = len(marcajes_limpios)
     hoy = date.today()
 
+    # ¿Es un turno que cruza la medianoche?
+    es_nocturno = turno.get('hora_salida') < turno.get('hora_ingreso') if turno.get('hora_salida') and turno.get('hora_ingreso') else False
+
+    # ¿Cuándo termina REALMENTE este día laboral?
+    dia_cierre = (fecha_dia + timedelta(days=1)) if es_nocturno and fecha_dia else fecha_dia
+
     if conteo < marcajes_esperados:
-        # Si el día ya pasó: Es un error/olvido
-        if fecha_dia and fecha_dia < hoy:
+        # Evaluamos si el turno ya cerró definitivamente
+        if dia_cierre and dia_cierre < hoy:
             resumen["estado"] = "Incompleto"
-        # Si es hoy: El empleado sigue trabajando
         else:
+            # Si seguimos en el día de cierre (o antes), sigue trabajando
             resumen["estado"] = "Trabajando"
     else:
-        # Jornada completa: Evaluamos si hubo retrasos
         resumen["estado"] = "Tarde" if total_min_deuda > 0 else "Puntual"
 
     return resumen
