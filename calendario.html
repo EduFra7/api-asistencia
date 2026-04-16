@@ -646,15 +646,22 @@
                 let hrsEsperadasHoy = horasTurnoBase * factorDia;
                 let hExtrasHoy = 0;
 
-                // Sumamos la cuota si es un día laboral pasado/hoy y no es feriado/vacación completa
+                // Sumamos la cuota si es laboral y no es feriado/vacación
                 if (esDiaLaboral && fechaActualLoop <= hoy && !nombreFeriado) {
                     let esDiaLibreCompleto = ausenciaActiva && (ausenciaActiva.tipo === 'vacacion' || !ausenciaActiva.hora_inicio);
-                    if (!esDiaLibreCompleto) sumHorasEsperadas += hrsEsperadasHoy;
+                    if (!esDiaLibreCompleto) {
+                        let hrsParaSumar = hrsEsperadasHoy;
+                        // ⚡ RESTAMOS LAS HORAS DEL PERMISO DE LA EXPECTATIVA DIARIA (Arregla el 56.00)
+                        if (ausenciaActiva && ausenciaActiva.horas_totales) {
+                            hrsParaSumar -= Number(ausenciaActiva.horas_totales);
+                            if (hrsParaSumar < 0) hrsParaSumar = 0;
+                        }
+                        sumHorasEsperadas += hrsParaSumar;
+                    }
                 }
 
                 if (datos && datos.horas_trabajadas > 0) {
                     sumHorasTrabajadas += datos.horas_trabajadas;
-                    // Detectamos si generó Horas Extras (Solo si el turno lo permite)
                     if (permiteExtras && datos.horas_trabajadas > hrsEsperadasHoy) {
                         hExtrasHoy = Number((datos.horas_trabajadas - hrsEsperadasHoy).toFixed(2));
                         sumHorasExtras += hExtrasHoy;
@@ -664,7 +671,6 @@
                 let clases = "estado-futuro";
                 let htmlInner = `<span class="text-xs font-bold text-gray-700">${d}</span>`;
                 
-                // Preparamos el paquete de datos para inyectar al panel derecho
                 let datosClick = datos ? Object.assign({}, datos) : { fecha: fechaStr, estado: 'Pendiente' };
                 datosClick.horas_turno = hrsEsperadasHoy;
                 datosClick.horas_extras = hExtrasHoy;
@@ -675,7 +681,8 @@
                     clases = "bg-gray-100 opacity-50"; htmlInner += `<p class="text-[10px] text-gray-400 mt-2 text-center leading-tight">Previo a contrato</p>`; permiteClic = false;
                 } else if (nombreFeriado && !datos) {
                     clases = "bg-purple-50 text-center justify-center relative"; htmlInner = `<span class="text-xs font-bold text-purple-900 absolute top-1 md:top-2 left-1 md:left-2">${d}</span><i class="fas fa-flag text-xl md:text-2xl text-purple-300 mb-1"></i><p class="text-[10px] md:text-[11px] text-purple-700 font-bold uppercase mt-1 leading-tight">${nombreFeriado}</p>`; permiteClic = false;
-                } else if (datos && datos.estado) {
+                } else if (datos && datos.estado && datos.estado !== 'Pendiente') {
+                    // ⚡ AQUÍ ESTÁ EL TRUCO VISUAL: Mostrar Huellas Y Permisos juntos
                     let ic = "", l = "", cIc = "", cTx = "";
                     if(datos.estado === 'Puntual') { clases = "estado-puntual text-center justify-center relative"; ic = "fa-check-circle"; cIc = "text-green-500"; l = "Puntual"; cTx = "text-green-700"; }
                     else if(datos.estado === 'Tarde') { clases = "estado-tarde text-center justify-center relative"; ic = "fa-clock"; cIc = "text-orange-500"; l = "Tarde"; cTx = "text-orange-700"; }
@@ -683,10 +690,19 @@
                     else if(datos.estado === 'Incompleto') { clases = "bg-yellow-50 text-center justify-center relative border-b-4 border-yellow-400"; ic = "fa-exclamation-triangle"; cIc = "text-yellow-500"; l = "Incompleto"; cTx = "text-yellow-700"; }
                     else if(datos.estado === 'Falta') { clases = "estado-falta text-center justify-center relative"; ic = "fa-times-circle"; cIc = "text-red-500"; l = "Falta"; cTx = "text-red-700"; }
                     
+                    htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-2 left-2">${d}</span>`;
+                    
+                    // ⚡ Si tiene permiso, le inyectamos un icono de hospital en la esquina superior derecha
+                    if (ausenciaActiva) {
+                        htmlInner += `<div class="absolute top-1 right-1 text-orange-500 bg-orange-50 rounded-full p-1 border border-orange-200 shadow-sm" title="Tiene Permiso"><i class="fas fa-notes-medical"></i></div>`;
+                        datosClick.ausencia_detalle = ausenciaActiva; // Pasamos el permiso a la radiografía derecha
+                    }
+
                     if (ic) htmlInner += `<i class="fas ${ic} text-2xl md:text-3xl opacity-50 mb-1 ${cIc}"></i><p class="text-[10px] md:text-xs ${cTx} font-bold uppercase mt-1">${l}</p>`;
                     if (datos.estado === 'Tarde') htmlInner += `<p class="text-[9px] text-orange-600 font-bold">-${datos.minutos_retraso_entrada}m</p>`;
                     if (hExtrasHoy > 0) htmlInner += `<p class="text-[9px] text-green-600 font-bold bg-green-100 px-1 rounded absolute bottom-1">+${hExtrasHoy}H</p>`;
                 } else if (ausenciaActiva) {
+                    // Solo permiso puro (sin huellas)
                     clases = ausenciaActiva.tipo === 'vacacion' ? "estado-vacacion text-center justify-center relative" : "estado-permiso text-center justify-center relative";
                     htmlInner += `<i class="fas ${ausenciaActiva.tipo === 'vacacion' ? 'fa-umbrella-beach text-blue-500' : 'fa-user-md text-yellow-500'} text-2xl md:text-3xl opacity-40 mb-1"></i><p class="text-[10px] md:text-xs ${ausenciaActiva.tipo === 'vacacion' ? 'text-blue-700' : 'text-yellow-700'} font-bold uppercase mt-1">${ausenciaActiva.tipo}</p>`;
                     datosClick.estado = ausenciaActiva.tipo; datosClick.ausencia_detalle = ausenciaActiva;
@@ -715,7 +731,17 @@
 
             document.getElementById('kpi-horas').textContent = `${sumHorasTrabajadas.toFixed(2)} / ${sumHorasEsperadas.toFixed(2)}`;
             document.getElementById('kpi-horas-extra').textContent = sumHorasExtras > 0 ? `+${sumHorasExtras.toFixed(2)} Hrs Extras acumuladas` : '';
-            document.getElementById('kpi-deuda-horas').innerHTML = sumHorasReponer > 0 ? `<i class="fas fa-exclamation-circle mr-1"></i> Debe ${sumHorasReponer.toFixed(2)} Hrs a la empresa` : '';
+            
+            // ⚡ ETIQUETA ROJA DE DEUDA DE HORAS
+            const kpiDeudaHoras = document.getElementById('kpi-deuda-horas');
+            if (kpiDeudaHoras) {
+                if (sumHorasReponer > 0) {
+                    kpiDeudaHoras.innerHTML = `<i class="fas fa-history mr-1"></i> Debe reponer ${sumHorasReponer.toFixed(2)} Hrs`;
+                    kpiDeudaHoras.className = "text-[10px] font-bold text-red-600 mt-1 bg-red-50 p-1 rounded border border-red-200 block";
+                } else {
+                    kpiDeudaHoras.className = "hidden";
+                }
+            }
         }
 
         // 🧠 Función inteligente para detectar si una hora pertenece al día siguiente en turnos nocturnos

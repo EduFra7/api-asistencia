@@ -1630,15 +1630,32 @@ def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, 
             resumen["estado"] = "Pendiente"
         return resumen
 
-    # 1. Tolerancia
+    # 🚀 1. AJUSTE DINÁMICO POR PERMISOS PARCIALES
     hora_oficial = turno['hora_ingreso']
-    min_llegada = (resumen["hora_entrada"].hour * 60) + resumen["hora_entrada"].minute
+    min_llegada = (resumen["hora_entrada"].hour * 60) + resumen["hora_entrada"].minute if resumen["hora_entrada"] else 0
     min_oficial = (hora_oficial.hour * 60) + hora_oficial.minute
-    retraso = min_llegada - min_oficial
-    if retraso > turno.get('tolerancia_min', 0):
-        resumen["minutos_retraso_entrada"] = retraso
+    
+    if permisos and resumen["hora_entrada"]:
+        for p in permisos:
+            if p.get('hora_inicio') and p.get('hora_fin'): # Es un permiso por horas
+                p_in = (p['hora_inicio'].hour * 60) + p['hora_inicio'].minute
+                p_out = (p['hora_fin'].hour * 60) + p['hora_fin'].minute
+                
+                # Si el permiso cubre la mañana, movemos la hora oficial de llegada
+                if p_in <= min_oficial <= p_out:
+                    min_oficial = p_out
+                    
+                # Si llegó DENTRO del horario del permiso, se le perdona el retraso
+                if p_in <= min_llegada <= p_out:
+                    min_llegada = min_oficial 
 
-    # 2. Almuerzo
+    # 2. Evaluación de Retraso Entrada (Con la nueva regla inteligente)
+    if resumen["hora_entrada"]:
+        retraso = min_llegada - min_oficial
+        if retraso > turno.get('tolerancia_min', 0):
+            resumen["minutos_retraso_entrada"] = retraso
+
+    # 3. Evaluación de Almuerzo
     if resumen["hora_inicio_almuerzo"] and resumen["hora_fin_almuerzo"]:
         alm_in = (resumen["hora_inicio_almuerzo"].hour * 60) + resumen["hora_inicio_almuerzo"].minute
         alm_out = (resumen["hora_fin_almuerzo"].hour * 60) + resumen["hora_fin_almuerzo"].minute
@@ -1647,13 +1664,7 @@ def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, 
         if duracion > limite_alm and limite_alm > 0:
             resumen["minutos_exceso_almuerzo"] = duracion - limite_alm
 
-    if permisos:
-        for p in permisos:
-            p_out = (p['hora_fin'].hour * 60) + p['hora_fin'].minute
-            if min_llegada <= p_out:
-                resumen["minutos_retraso_entrada"] = 0 
-
-    # 🚀 3. CÁLCULO REAL DE HORAS TRABAJADAS
+    # 🚀 4. CÁLCULO REAL DE HORAS TRABAJADAS
     if resumen["hora_entrada"] and resumen["hora_salida"]:
         base_date = fecha_dia or hoy
         dt_in = datetime.combine(base_date, resumen["hora_entrada"])
@@ -1675,7 +1686,7 @@ def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, 
                 
         resumen["horas_trabajadas"] = round(max(0, segundos_trab_brutos) / 3600.0, 2)
 
-    # 🚀 4. DINAMISMO FINANCIERO (Descuentos)
+    # 🚀 5. DINAMISMO FINANCIERO (Descuentos)
     total_min_deuda = resumen["minutos_retraso_entrada"] + resumen["minutos_exceso_almuerzo"]
     if turno.get('descuento', True) == True:
         valor_minuto = (float(salario_base) / 30 / 8 / 60) if salario_base > 0 else 0
@@ -1683,7 +1694,7 @@ def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, 
     else:
         resumen["deuda_generada_bs"] = 0.00
 
-    # 5. Veredicto Final
+    # 6. Veredicto Final
     marcajes_esperados = 4 if turno.get('almuerzo') else 2
     conteo = len(marcajes_limpios)
 
