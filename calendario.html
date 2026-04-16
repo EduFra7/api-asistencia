@@ -194,30 +194,38 @@
 
                         <!-- KPIs Limpios por defecto -->
                         <div class="grid grid-cols-2 xl:grid-cols-4 gap-2 md:gap-4 shrink-0">
+    
                             <div class="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
                                 <div><p class="text-xs text-gray-500 font-bold uppercase">Días Trab.</p><p id="kpi-dias" class="text-lg md:text-2xl font-black text-gray-800 mt-1">-</p></div>
                                 <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600"><i class="fas fa-calendar-check"></i></div>
                             </div>
+                            
                             <div class="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
                                 <div>
                                     <p class="text-[10px] md:text-xs text-gray-500 font-bold uppercase">Horas (Real/Turno)</p>
                                     <p id="kpi-horas" class="text-lg md:text-2xl font-black text-gray-800 mt-1">-</p>
-                                    <p id="kpi-horas-extra" class="text-[10px] font-bold text-green-600 mt-0.5 empty:hidden"></p>
                                 </div>
                                 <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600"><i class="fas fa-stopwatch"></i></div>
                             </div>
-                            <div class="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
-                                <div><p class="text-xs text-gray-500 font-bold uppercase">Retraso Mensual</p><p id="kpi-retraso" class="text-lg md:text-2xl font-black text-orange-600 mt-1">-</p></div>
-                                <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600"><i class="fas fa-running"></i></div>
-                            </div>
+                            
                             <div class="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
                                 <div>
-                                    <p class="text-xs text-gray-500 font-bold uppercase">Deuda Acumulada</p>
-                                    <p id="kpi-deuda" class="text-lg md:text-2xl font-black text-red-600 mt-1">-</p>
-                                    <p id="kpi-deuda-horas" class="text-[10px] font-bold text-red-600 mt-0.5 empty:hidden"></p>
+                                    <p class="text-xs text-gray-500 font-bold uppercase">Balance de Tiempo</p>
+                                    <p id="kpi-horas-extra" class="text-xs font-bold text-green-600 mt-1"><i class="fas fa-arrow-up mr-1"></i>0.00 Hrs Extras</p>
+                                    <p id="kpi-deuda-horas" class="text-xs font-bold text-red-600 mt-0.5"><i class="fas fa-arrow-down mr-1"></i>0.00 Hrs a Reponer</p>
                                 </div>
-                                <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600"><i class="fas fa-file-invoice-dollar"></i></div>
+                                <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600"><i class="fas fa-balance-scale"></i></div>
                             </div>
+                            
+                            <div class="bg-white p-3 md:p-4 rounded-xl border border-red-100 shadow-sm flex items-center justify-between">
+                                <div>
+                                    <p class="text-xs text-red-400 font-bold uppercase">Multas del Mes</p>
+                                    <p id="kpi-deuda" class="text-lg md:text-2xl font-black text-red-600 mt-1">Bs. 0.00</p>
+                                    <p id="kpi-retraso" class="text-[10px] font-bold text-orange-500 mt-0.5">0 min de retraso total</p>
+                                </div>
+                                <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-red-50 flex items-center justify-center text-red-500"><i class="fas fa-file-invoice-dollar"></i></div>
+                            </div>
+
                         </div>
 
                         <div class="flex flex-col lg:flex-row gap-4 md:gap-6 items-start w-full relative">
@@ -732,18 +740,27 @@
                 ausencias.forEach(a => { if (a.requiere_reposicion) sumHorasReponer += Number(a.horas_totales || 0); });
             }
 
+            // Inyección de Horas Reales vs Turno
             document.getElementById('kpi-horas').textContent = `${sumHorasTrabajadas.toFixed(2)} / ${sumHorasEsperadas.toFixed(2)}`;
-            document.getElementById('kpi-horas-extra').textContent = sumHorasExtras > 0 ? `+${sumHorasExtras.toFixed(2)} Hrs Extras acumuladas` : '';
             
-            // ⚡ ETIQUETA ROJA DE DEUDA DE HORAS
-            const kpiDeudaHoras = document.getElementById('kpi-deuda-horas');
-            if (kpiDeudaHoras) {
-                if (sumHorasReponer > 0) {
-                    kpiDeudaHoras.innerHTML = `<i class="fas fa-history mr-1"></i> Debe reponer ${sumHorasReponer.toFixed(2)} Hrs`;
-                    kpiDeudaHoras.className = "text-[10px] font-bold text-red-600 mt-1 bg-red-50 p-1 rounded border border-red-200 block";
-                } else {
-                    kpiDeudaHoras.className = "hidden";
-                }
+            // Inyección de Balance de Tiempo (Tarjeta 3)
+            const kpiExtras = document.getElementById('kpi-horas-extra');
+            const kpiDeudaH = document.getElementById('kpi-deuda-horas');
+
+            if (sumHorasExtras > 0) {
+                kpiExtras.innerHTML = `<i class="fas fa-arrow-up mr-1"></i>+${sumHorasExtras.toFixed(2)} Hrs Extras`;
+                kpiExtras.className = "text-xs font-bold text-green-600 mt-1";
+            } else {
+                kpiExtras.innerHTML = `<i class="fas fa-minus mr-1"></i>Sin Extras`;
+                kpiExtras.className = "text-xs font-bold text-gray-400 mt-1";
+            }
+
+            if (sumHorasReponer > 0) {
+                kpiDeudaH.innerHTML = `<i class="fas fa-arrow-down mr-1"></i>Debe reponer ${sumHorasReponer.toFixed(2)} Hrs`;
+                kpiDeudaH.className = "text-xs font-bold text-red-600 mt-0.5";
+            } else {
+                kpiDeudaH.innerHTML = `<i class="fas fa-check mr-1"></i>Sin Deudas`;
+                kpiDeudaH.className = "text-xs font-bold text-gray-400 mt-0.5";
             }
         }
 
@@ -838,12 +855,23 @@
                 htmlExtras = `<div class="flex justify-between border-b border-gray-200 pb-1 mb-1 bg-green-50 px-1 rounded"><span>Hrs. Extras:</span><span class="font-bold text-green-600">+${d.horas_extras.toFixed(2)} hrs</span></div>`;
             }
 
+            // ⚡ NUEVO: VISUALIZADOR DE HORAS A DEVOLVER
+            let htmlDeudaHoras = '';
+            if (d.ausencia_detalle && d.ausencia_detalle.tipo === 'permiso' && d.ausencia_detalle.requiere_reposicion) {
+                htmlDeudaHoras = `
+                <div class="flex justify-between mt-2 border-t border-red-200 pt-2 bg-red-50 p-1 rounded">
+                    <span class="text-red-700 font-bold"><i class="fas fa-history mr-1"></i>Debe reponer:</span>
+                    <span class="font-bold text-red-700">${Number(d.ausencia_detalle.horas_totales || 0).toFixed(2)} hrs</span>
+                </div>`;
+            }
+
             contenedorResumen.innerHTML = `
                 <div class="flex justify-between border-b border-gray-200 pb-1 mb-1"><span>Hrs. del Turno:</span><span class="font-bold text-gray-500">${d.horas_turno ? d.horas_turno.toFixed(2) : '0.00'} hrs</span></div>
                 <div class="flex justify-between border-b border-gray-200 pb-1 mb-1"><span>Hrs. Efectivas:</span><span class="font-bold text-blue-600">${d.horas_trabajadas ? d.horas_trabajadas.toFixed(2) : '0.00'} hrs</span></div>
                 ${htmlExtras}
                 <div class="flex justify-between mt-2"><span>Retraso:</span><span id="det-min-retraso" class="font-bold text-orange-600">${d.minutos_retraso_entrada || 0} min</span></div>
                 <div class="flex justify-between border-t border-gray-200 pt-1 mt-1"><span>Descuento:</span><span id="det-deuda" class="font-bold text-red-600">Bs. ${Number(d.deuda_generada_bs || 0).toFixed(2)}</span></div>
+                ${htmlDeudaHoras}
             `;
 
             // Exorcismo de Auditoría (Comentarios)
@@ -855,14 +883,18 @@
 
             const contenedorAcciones = document.getElementById('contenedor-acciones-edicion');
             contenedorAcciones.innerHTML = ''; 
-            if (!d.ausencia_detalle) { 
+            
+            // ⚡ REGLA DESBLOQUEADA: Solo bloqueamos si es VACACIÓN. Los permisos SIEMPRE se pueden editar.
+            let esBloqueadoCompleto = d.ausencia_detalle && d.ausencia_detalle.tipo === 'vacacion';
+
+            if (!esBloqueadoCompleto) { 
                 const pEnt = d.hora_entrada ? String(d.hora_entrada).substring(0,5) : '';
                 const pAlmIn = d.hora_inicio_almuerzo ? String(d.hora_inicio_almuerzo).substring(0,5) : '';
                 const pAlmOut = d.hora_fin_almuerzo ? String(d.hora_fin_almuerzo).substring(0,5) : '';
                 const pSal = d.hora_salida ? String(d.hora_salida).substring(0,5) : '';
                 const tAlm = turnoEmp && turnoEmp.almuerzo ? true : false;
                 
-                contenedorAcciones.innerHTML = `<button onclick="abrirModalEdicion('${d.fecha}', '${pEnt}', '${pAlmIn}', '${pAlmOut}', '${pSal}', ${tAlm})" class="w-full bg-slate-800 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition-colors shadow-md"><i class="fas fa-edit mr-2"></i> Editar / Completar Marcajes</button>`;
+                contenedorAcciones.innerHTML = `<button onclick="abrirModalEdicion('${d.fecha}', '${pEnt}', '${pAlmIn}', '${pAlmOut}', '${pSal}', ${tAlm})" class="w-full bg-slate-800 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition-colors shadow-md mt-4"><i class="fas fa-edit mr-2"></i> Editar / Completar Marcajes</button>`;
             }
         }
 
