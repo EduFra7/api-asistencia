@@ -692,9 +692,12 @@
                     
                     htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-2 left-2">${d}</span>`;
                     
-                    // ⚡ Si tiene permiso, le inyectamos un icono de hospital en la esquina superior derecha
+                    // ⚡ SUPERPOSICIÓN: Si hay permiso activo, añadimos el indicativo visual sin borrar el estado de asistencia
                     if (ausenciaActiva) {
-                        htmlInner += `<div class="absolute top-1 right-1 text-orange-500 bg-orange-50 rounded-full p-1 border border-orange-200 shadow-sm" title="Tiene Permiso"><i class="fas fa-notes-medical"></i></div>`;
+                        htmlInner += `
+                        <div class="absolute top-1 right-1 text-orange-600 bg-orange-50 border border-orange-200 rounded-full w-6 h-6 flex items-center justify-center shadow-sm" title="Jornada con Permiso Parcial">
+                            <i class="fas fa-file-medical text-[10px]"></i>
+                        </div>`;
                         datosClick.ausencia_detalle = ausenciaActiva; // Pasamos el permiso a la radiografía derecha
                     }
 
