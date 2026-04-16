@@ -1632,23 +1632,38 @@ def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, 
     min_cubiertos_permiso = 0
     nueva_hora_entrada_oficial = t_in
 
-# 3. Análisis de Cobertura de Permisos (BLINDADO CONTRA ERRORES NULL)
+# 3. Análisis de Cobertura de Permisos (BLINDADO EXTREMO)
     if permisos:
         for p in permisos:
-            # ⚡ SEGURO CONTRA NULL: Si la hora en BD es NULL, asignamos 00:00 o 23:59
             h_ini = p.get('hora_inicio')
             h_ini = h_ini if h_ini is not None else time(0, 0)
             
             h_fin = p.get('hora_fin')
             h_fin = h_fin if h_fin is not None else time(23, 59)
 
+            # ⚡ BLINDAJE DE FECHAS (Soporta Date, Datetime, String o Nulos)
+            f_ini_raw = p.get('fecha_inicio', fecha_dia)
+            if hasattr(f_ini_raw, 'date') and callable(getattr(f_ini_raw, 'date')): 
+                f_ini = f_ini_raw.date()
+            elif isinstance(f_ini_raw, str): 
+                f_ini = date.fromisoformat(f_ini_raw[:10])
+            else: 
+                f_ini = f_ini_raw
+
+            f_fin_raw = p.get('fecha_fin', fecha_dia)
+            if hasattr(f_fin_raw, 'date') and callable(getattr(f_fin_raw, 'date')): 
+                f_fin = f_fin_raw.date()
+            elif isinstance(f_fin_raw, str): 
+                f_fin = date.fromisoformat(f_fin_raw[:10])
+            else: 
+                f_fin = f_fin_raw
+
             # Normalizamos el permiso al rango del turno de hoy
-            p_ini = max(t_in, datetime.combine(p['fecha_inicio'], h_ini))
-            p_fin = min(t_out, datetime.combine(p['fecha_fin'], h_fin))
+            p_ini = max(t_in, datetime.combine(f_ini, h_ini))
+            p_fin = min(t_out, datetime.combine(f_fin, h_fin))
             
             if p_ini < p_fin:
                 min_cubiertos_permiso += (p_fin - p_ini).total_seconds() / 60
-                # Si el permiso cubre el inicio del turno, la entrada oficial se desplaza al fin del permiso
                 if p_ini <= t_in <= p_fin:
                     nueva_hora_entrada_oficial = p_fin
 

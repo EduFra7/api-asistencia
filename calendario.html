@@ -737,7 +737,16 @@
             // ⚡ MAGIA FINANCIERA: Actualización Final de los KPIs Globales
             let sumHorasReponer = 0;
             if (ausencias && Array.isArray(ausencias)) {
-                ausencias.forEach(a => { if (a.requiere_reposicion) sumHorasReponer += Number(a.horas_totales || 0); });
+                ausencias.forEach(a => { 
+                    // ⚡ DETECCIÓN AGRESIVA DE DEUDA: Soporta booleanos, strings o números (1/0)
+                    const exigeReposicion = a.requiere_reposicion === true || 
+                                            String(a.requiere_reposicion).toLowerCase() === 'true' || 
+                                            a.requiere_reposicion === 1;
+                    
+                    if (exigeReposicion) {
+                        sumHorasReponer += parseFloat(a.horas_totales || 0);
+                    } 
+                });
             }
 
             // Inyección de Horas Reales vs Turno
