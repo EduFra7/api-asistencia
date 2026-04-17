@@ -608,7 +608,7 @@
             let fechaIngreso = empleadoActual && empleadoActual.fecha_ingreso ? new Date(empleadoActual.fecha_ingreso + 'T00:00:00') : null;
             if (fechaIngreso) fechaIngreso.setHours(0,0,0,0);
 
-            // ⚡ MAGIA FINANCIERA: Preparar variables del Turno
+            // ⚡ Preparar variables del Turno
             const turnoEmpleado = turnosGlobal.find(t => String(t.id) === String(empleadoActual.turno_id));
             let horasTurnoBase = 0;
             let permiteExtras = false;
@@ -652,7 +652,7 @@
                 if (diasTurno && Object.keys(diasTurno).length > 0) esDiaLaboral = String(diasTurno[letraDia]).toLowerCase() === 'true';
                 else esDiaLaboral = (letraDia !== 'S' && letraDia !== 'D');
 
-                // ⚡ MAGIA FINANCIERA: Cálculo del día
+                // Cálculo del día
                 let factorDia = (esDiaLaboral && turnoEmpleado && turnoEmpleado.medio_tiempo_fines && (letraDia === 'S' || letraDia === 'D')) ? 0.5 : 1.0;
                 let hrsEsperadasHoy = horasTurnoBase * factorDia;
                 let hExtrasHoy = 0;
@@ -662,7 +662,6 @@
                     let esDiaLibreCompleto = ausenciaActiva && (ausenciaActiva.tipo === 'vacacion' || !ausenciaActiva.hora_inicio);
                     if (!esDiaLibreCompleto) {
                         let hrsParaSumar = hrsEsperadasHoy;
-                        // ⚡ RESTAMOS LAS HORAS DEL PERMISO DE LA EXPECTATIVA DIARIA (Arregla el 56.00)
                         if (ausenciaActiva && ausenciaActiva.horas_totales) {
                             hrsParaSumar -= Number(ausenciaActiva.horas_totales);
                             if (hrsParaSumar < 0) hrsParaSumar = 0;
@@ -673,10 +672,10 @@
 
                 if (datos && datos.horas_trabajadas > 0) {
                     sumHorasTrabajadas += datos.horas_trabajadas;
-                    if (permiteExtras && datos.horas_trabajadas > hrsEsperadasHoy) {
-                        hExtrasHoy = Number((datos.horas_trabajadas - hrsEsperadasHoy).toFixed(2));
-                        sumHorasExtras += hExtrasHoy;
-                    }
+                    // El Backend ahora calcula las horas extras reales en datos.horas_extras,
+                    // pero mantenemos tu fallback frontend por seguridad.
+                    hExtrasHoy = datos.horas_extras ? parseFloat(datos.horas_extras) : 0;
+                    sumHorasExtras += hExtrasHoy;
                 }
 
                 let clases = "estado-futuro";
@@ -693,30 +692,28 @@
                 } else if (nombreFeriado && !datos) {
                     clases = "bg-purple-50 text-center justify-center relative"; htmlInner = `<span class="text-xs font-bold text-purple-900 absolute top-1 md:top-2 left-1 md:left-2">${d}</span><i class="fas fa-flag text-xl md:text-2xl text-purple-300 mb-1"></i><p class="text-[10px] md:text-[11px] text-purple-700 font-bold uppercase mt-1 leading-tight">${nombreFeriado}</p>`; permiteClic = false;
                 } else if (datos && datos.estado && datos.estado !== 'Pendiente') {
-                    // ⚡ AQUÍ ESTÁ EL TRUCO VISUAL: Mostrar Huellas Y Permisos juntos
                     let ic = "", l = "", cIc = "", cTx = "";
                     if(datos.estado === 'Puntual') { clases = "estado-puntual text-center justify-center relative"; ic = "fa-check-circle"; cIc = "text-green-500"; l = "Puntual"; cTx = "text-green-700"; }
                     else if(datos.estado === 'Tarde') { clases = "estado-tarde text-center justify-center relative"; ic = "fa-clock"; cIc = "text-orange-500"; l = "Tarde"; cTx = "text-orange-700"; }
                     else if(datos.estado === 'Trabajando') { clases = "bg-blue-50/50 text-center justify-center relative border-b-4 border-blue-400"; ic = "fa-user-clock animate-pulse"; cIc = "text-blue-500"; l = "En Curso"; cTx = "text-blue-700"; }
                     else if(datos.estado === 'Incompleto') { clases = "bg-yellow-50 text-center justify-center relative border-b-4 border-yellow-400"; ic = "fa-exclamation-triangle"; cIc = "text-yellow-500"; l = "Incompleto"; cTx = "text-yellow-700"; }
                     else if(datos.estado === 'Falta') { clases = "estado-falta text-center justify-center relative"; ic = "fa-times-circle"; cIc = "text-red-500"; l = "Falta"; cTx = "text-red-700"; }
+                    else if(datos.estado === 'Descanso') { clases = "estado-inhabiles text-center justify-center relative bg-gray-100/40 hover:bg-blue-50/50"; ic = "fa-bed opacity-60"; cIc = "text-gray-300"; l = "Descanso"; cTx = "text-gray-400"; }
                     
                     htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-2 left-2">${d}</span>`;
                     
-                    // ⚡ SUPERPOSICIÓN: Si hay permiso activo, añadimos el indicativo visual sin borrar el estado de asistencia
                     if (ausenciaActiva) {
                         htmlInner += `
                         <div class="absolute top-1 right-1 text-orange-600 bg-orange-50 border border-orange-200 rounded-full w-6 h-6 flex items-center justify-center shadow-sm" title="Jornada con Permiso Parcial">
                             <i class="fas fa-file-medical text-[10px]"></i>
                         </div>`;
-                        datosClick.ausencia_detalle = ausenciaActiva; // Pasamos el permiso a la radiografía derecha
+                        datosClick.ausencia_detalle = ausenciaActiva; 
                     }
 
                     if (ic) htmlInner += `<i class="fas ${ic} text-2xl md:text-3xl opacity-50 mb-1 ${cIc}"></i><p class="text-[10px] md:text-xs ${cTx} font-bold uppercase mt-1">${l}</p>`;
                     if (datos.estado === 'Tarde') htmlInner += `<p class="text-[9px] text-orange-600 font-bold">-${datos.minutos_retraso_entrada}m</p>`;
-                    if (hExtrasHoy > 0) htmlInner += `<p class="text-[9px] text-green-600 font-bold bg-green-100 px-1 rounded absolute bottom-1">+${hExtrasHoy}H</p>`;
+                    if (hExtrasHoy > 0) htmlInner += `<p class="text-[9px] text-green-600 font-bold bg-green-100 px-1 rounded absolute bottom-1">+${hExtrasHoy.toFixed(2)}H</p>`;
                 } else if (ausenciaActiva) {
-                    // Solo permiso puro (sin huellas)
                     clases = ausenciaActiva.tipo === 'vacacion' ? "estado-vacacion text-center justify-center relative" : "estado-permiso text-center justify-center relative";
                     htmlInner += `<i class="fas ${ausenciaActiva.tipo === 'vacacion' ? 'fa-umbrella-beach text-blue-500' : 'fa-user-md text-yellow-500'} text-2xl md:text-3xl opacity-40 mb-1"></i><p class="text-[10px] md:text-xs ${ausenciaActiva.tipo === 'vacacion' ? 'text-blue-700' : 'text-yellow-700'} font-bold uppercase mt-1">${ausenciaActiva.tipo}</p>`;
                     datosClick.estado = ausenciaActiva.tipo; datosClick.ausencia_detalle = ausenciaActiva;
@@ -737,42 +734,64 @@
                 cuadricula.appendChild(div);
             }
 
-            // ⚡ MAGIA FINANCIERA: Actualización Final de los KPIs Globales
+            // Inyección de Horas Reales vs Turno
+            document.getElementById('kpi-horas').textContent = `${sumHorasTrabajadas.toFixed(2)} / ${sumHorasEsperadas.toFixed(2)}`;
+
+            // =====================================================================
+            // ⚡ MOTOR DE COMPENSACIÓN: BOLSILLOS SEPARADOS (NUEVO)
+            // =====================================================================
             let sumHorasReponer = 0;
             if (ausencias && Array.isArray(ausencias)) {
                 ausencias.forEach(a => { 
-                    // ⚡ DETECCIÓN AGRESIVA DE DEUDA: Soporta booleanos, strings o números (1/0)
-                    const exigeReposicion = a.requiere_reposicion === true || 
-                                            String(a.requiere_reposicion).toLowerCase() === 'true' || 
-                                            a.requiere_reposicion === 1;
-                    
-                    if (exigeReposicion) {
-                        sumHorasReponer += parseFloat(a.horas_totales || 0);
-                    } 
+                    const exigeReposicion = a.requiere_reposicion === true || String(a.requiere_reposicion).toLowerCase() === 'true' || a.requiere_reposicion === 1;
+                    if (exigeReposicion) sumHorasReponer += parseFloat(a.horas_totales || 0);
                 });
             }
 
-            // Inyección de Horas Reales vs Turno
-            document.getElementById('kpi-horas').textContent = `${sumHorasTrabajadas.toFixed(2)} / ${sumHorasEsperadas.toFixed(2)}`;
+            // 1. Calculamos el Saldo Neto (Banco de Horas)
+            // sumHorasExtras ya viene acumulado de los días trabajados en el bucle
+            const saldoNeto = sumHorasExtras - sumHorasReponer;
             
-            // Inyección de Balance de Tiempo (Tarjeta 3)
-            const kpiExtras = document.getElementById('kpi-horas-extra');
-            const kpiDeudaH = document.getElementById('kpi-deuda-horas');
+            // 2. Verificamos si este turno específico autoriza el PAGO de horas extras
+            const pagaExtras = turnoEmpleado && (turnoEmpleado.horas_extras === true || turnoEmpleado.horas_extras === 1 || String(turnoEmpleado.horas_extras).toLowerCase() === 'true');
+            
+            const kpiTextoPrincipal = document.getElementById('kpi-horas-extra');
+            const kpiTextoSecundario = document.getElementById('kpi-deuda-horas');
+            const kpiIconoCompensacion = kpiTextoPrincipal.parentElement.nextElementSibling; // El div que contiene el ícono
 
-            if (sumHorasExtras > 0) {
-                kpiExtras.innerHTML = `<i class="fas fa-arrow-up mr-1"></i>+${sumHorasExtras.toFixed(2)} Hrs Extras`;
-                kpiExtras.className = "text-xs font-bold text-green-600 mt-1";
-            } else {
-                kpiExtras.innerHTML = `<i class="fas fa-minus mr-1"></i>Sin Extras`;
-                kpiExtras.className = "text-xs font-bold text-gray-400 mt-1";
-            }
-
-            if (sumHorasReponer > 0) {
-                kpiDeudaH.innerHTML = `<i class="fas fa-arrow-down mr-1"></i>Debe reponer ${sumHorasReponer.toFixed(2)} Hrs`;
-                kpiDeudaH.className = "text-xs font-bold text-red-600 mt-0.5";
-            } else {
-                kpiDeudaH.innerHTML = `<i class="fas fa-check mr-1"></i>Sin Deudas`;
-                kpiDeudaH.className = "text-xs font-bold text-gray-400 mt-0.5";
+            if (saldoNeto < 0) {
+                // ESTADO 1: DEUDA (El empleado aún debe horas)
+                kpiTextoPrincipal.innerHTML = `<i class="fas fa-exclamation-circle mr-1"></i>Debe ${Math.abs(saldoNeto).toFixed(2)} Hrs`;
+                kpiTextoPrincipal.className = "text-lg md:text-2xl font-black text-red-600 mt-1";
+                kpiTextoSecundario.innerHTML = `Compensación pendiente`;
+                kpiTextoSecundario.className = "text-[10px] font-bold text-red-400 uppercase";
+                kpiIconoCompensacion.className = "w-8 h-8 md:w-10 md:h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600";
+            } 
+            else if (saldoNeto === 0) {
+                // ESTADO 2: EQUILIBRADO PERFECTO (Pagó lo justo)
+                kpiTextoPrincipal.innerHTML = `0.00 <span class="text-xs font-normal text-gray-400">Hrs</span>`;
+                kpiTextoPrincipal.className = "text-lg md:text-2xl font-black text-slate-400 mt-1";
+                kpiTextoSecundario.innerHTML = `Jornada Equilibrada`;
+                kpiTextoSecundario.className = "text-[10px] font-bold text-slate-400 uppercase";
+                kpiIconoCompensacion.className = "w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400";
+            } 
+            else {
+                // ESTADO 3: SUPERÁVIT (Sobran horas después de pagar deudas)
+                if (pagaExtras) {
+                    // La empresa PAGA extras -> Se muestra en Verde como dinero a favor
+                    kpiTextoPrincipal.innerHTML = `<i class="fas fa-plus-circle mr-1"></i>${saldoNeto.toFixed(2)} <span class="text-xs font-normal">Hrs</span>`;
+                    kpiTextoPrincipal.className = "text-lg md:text-2xl font-black text-green-600 mt-1";
+                    kpiTextoSecundario.innerHTML = `Horas Extra a Pagar`;
+                    kpiTextoSecundario.className = "text-[10px] font-bold text-green-600 uppercase";
+                    kpiIconoCompensacion.className = "w-8 h-8 md:w-10 md:h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600";
+                } else {
+                    // La empresa NO PAGA extras -> Se pone en gris/amarillo. Saldo a favor no remunerable.
+                    kpiTextoPrincipal.innerHTML = `0.00 <span class="text-xs font-normal text-gray-400">Hrs</span>`;
+                    kpiTextoPrincipal.className = "text-lg md:text-2xl font-black text-slate-400 mt-1";
+                    kpiTextoSecundario.innerHTML = `+${saldoNeto.toFixed(2)} Hrs no remunerables`;
+                    kpiTextoSecundario.className = "text-[10px] font-bold text-yellow-600 uppercase";
+                    kpiIconoCompensacion.className = "w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400";
+                }
             }
         }
 

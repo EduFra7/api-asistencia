@@ -1618,7 +1618,8 @@ def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, 
         "estado": "Falta",
         "deuda_generada_bs": 0.00,
         "horas_trabajadas": 0.00,
-        "horas_permiso_dia": 0.00
+        "horas_permiso_dia": 0.00,
+        "horas_extras": 0.00
     }
 
     # ⚡ FIX 1: Identificador universal de día libre
@@ -1719,9 +1720,32 @@ def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, 
         if retraso_seg > (turno.get('tolerancia_min', 0) * 60):
             resumen["minutos_retraso_entrada"] = int(retraso_seg / 60)
 
+    # (El código anterior: cálculo de horas trabajadas)
     if len(marcajes_limpios) >= 2:
         segundos_brutos = (marcajes_limpios[-1] - marcajes_limpios[0]).total_seconds()
         resumen["horas_trabajadas"] = round(max(0, segundos_brutos) / 3600.0, 2)
+
+    # ⚡ FIX: BOLSILLO "C" (Tiempo Extra Real - Fuera de Fronteras)
+    # Comparamos las huellas reales (datetime) contra los límites del turno (t_in y t_out)
+    minutos_extra_total = 0
+    if len(marcajes_limpios) > 0:
+        dt_in_real = marcajes_limpios[0]
+        if dt_in_real < t_in: # Llegó antes de su turno
+            minutos_extra_total += (t_in - dt_in_real).total_seconds() / 60
+            
+    if len(marcajes_limpios) >= 2:
+        dt_out_real = marcajes_limpios[-1]
+        if dt_out_real > t_out: # Se quedó después de su turno
+            minutos_extra_total += (dt_out_real - t_out).total_seconds() / 60
+
+    resumen["horas_extras"] = round(minutos_extra_total / 60, 2)
+
+    # Veredicto de Estado (El código original)
+    conteo = len(marcajes_limpios)
+    if conteo < marcajes_esperados:
+        resumen["estado"] = "Incompleto"
+    else:
+        resumen["estado"] = "Tarde" if resumen["minutos_retraso_entrada"] > 0 else "Puntual"
 
     conteo = len(marcajes_limpios)
     if conteo < marcajes_esperados:
