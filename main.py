@@ -1601,7 +1601,6 @@ async def editar_ausencia(ausencia_id: int, data: dict, usuario = Depends(verifi
 # ==============================================================================
 
 def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, salario_base: float, fecha_dia: date = None):
-    # 1. Limpieza de marcajes (Debounce de 3 minutos)
     marcajes_limpios = []
     for m in sorted(marcajes_brutos):
         if not marcajes_limpios or (m - marcajes_limpios[-1]).total_seconds() > 180:
@@ -1609,7 +1608,6 @@ def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, 
 
     if not fecha_dia: fecha_dia = date.today()
 
-    # Inicialización del resumen
     resumen = {
         "hora_entrada": marcajes_limpios[0].time() if len(marcajes_limpios) > 0 else None,
         "hora_inicio_almuerzo": marcajes_limpios[1].time() if len(marcajes_limpios) > 1 else None,
@@ -1623,105 +1621,108 @@ def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, 
         "horas_permiso_dia": 0.00
     }
 
-    # 2. Definición de la Ventana del Turno (Datetime para manejar cruces de medianoche)
+    # ⚡ FIX 1: Identificador universal de día libre
+    mapa_dias = {0: 'L', 1: 'M', 2: 'X', 3: 'J', 4: 'V', 5: 'S', 6: 'D'}
+    letra_dia = mapa_dias[fecha_dia.weekday()]
+    dias_json = turno.get('dias', {})
+    if isinstance(dias_json, str): 
+        import json
+        try: dias_json = json.loads(dias_json)
+        except: dias_json = {}
+    es_dia_laboral = dias_json.get(letra_dia, False)
+
+    # 1. Establecer el Bloque del Turno Total
     t_in = datetime.combine(fecha_dia, turno['hora_ingreso'])
     t_out = datetime.combine(fecha_dia, turno['hora_salida'])
     if t_out < t_in: t_out += timedelta(days=1)
-    
-    duracion_turno_mins = (t_out - t_in).total_seconds() / 60
-    min_cubiertos_permiso = 0
-    nueva_hora_entrada_oficial = t_in
 
-# 3. Análisis de Cobertura de Permisos (BLINDADO EXTREMO)
+    # 2. Establecer el Muro del Almuerzo
+    tiene_almuerzo = turno.get('almuerzo', False)
+    if tiene_almuerzo and turno.get('hora_inicio_almuerzo') and turno.get('hora_fin_almuerzo'):
+        l_in = datetime.combine(fecha_dia, turno['hora_inicio_almuerzo'])
+        l_out = datetime.combine(fecha_dia, turno['hora_fin_almuerzo'])
+        if l_in < t_in: l_in += timedelta(days=1)
+        if l_out < l_in: l_out += timedelta(days=1)
+    else:
+        l_in = t_out
+        l_out = t_out # Si no hay almuerzo, colapsamos el muro al final del turno
+
+    nueva_hora_entrada_oficial = t_in
+    min_cubiertos_permiso = 0
+    p_in = t_out
+    p_out = t_out
+
+    # 3. Mapeo del Bloque de Permiso
     if permisos:
         for p in permisos:
-            h_ini = p.get('hora_inicio')
-            h_ini = h_ini if h_ini is not None else time(0, 0)
-            
-            h_fin = p.get('hora_fin')
-            h_fin = h_fin if h_fin is not None else time(23, 59)
+            h_ini = p.get('hora_inicio') if p.get('hora_inicio') is not None else time(0, 0)
+            h_fin = p.get('hora_fin') if p.get('hora_fin') is not None else time(23, 59)
 
-            # ⚡ BLINDAJE DE FECHAS (Soporta Date, Datetime, String o Nulos)
             f_ini_raw = p.get('fecha_inicio', fecha_dia)
-            if hasattr(f_ini_raw, 'date') and callable(getattr(f_ini_raw, 'date')): 
-                f_ini = f_ini_raw.date()
-            elif isinstance(f_ini_raw, str): 
-                f_ini = date.fromisoformat(f_ini_raw[:10])
-            else: 
-                f_ini = f_ini_raw
-
+            f_ini = f_ini_raw.date() if hasattr(f_ini_raw, 'date') and callable(getattr(f_ini_raw, 'date')) else (date.fromisoformat(f_ini_raw[:10]) if isinstance(f_ini_raw, str) else f_ini_raw)
             f_fin_raw = p.get('fecha_fin', fecha_dia)
-            if hasattr(f_fin_raw, 'date') and callable(getattr(f_fin_raw, 'date')): 
-                f_fin = f_fin_raw.date()
-            elif isinstance(f_fin_raw, str): 
-                f_fin = date.fromisoformat(f_fin_raw[:10])
-            else: 
-                f_fin = f_fin_raw
+            f_fin = f_fin_raw.date() if hasattr(f_fin_raw, 'date') and callable(getattr(f_fin_raw, 'date')) else (date.fromisoformat(f_fin_raw[:10]) if isinstance(f_fin_raw, str) else f_fin_raw)
 
-            # Normalizamos el permiso al rango del turno de hoy
-            p_ini = max(t_in, datetime.combine(f_ini, h_ini))
-            p_fin = min(t_out, datetime.combine(f_fin, h_fin))
+            p_in = max(t_in, datetime.combine(f_ini, h_ini))
+            p_out = min(t_out, datetime.combine(f_fin, h_fin))
             
-            if p_ini < p_fin:
-                min_cubiertos_permiso += (p_fin - p_ini).total_seconds() / 60
-                if p_ini <= t_in <= p_fin:
-                    nueva_hora_entrada_oficial = p_fin
+            if p_in < p_out:
+                min_cubiertos_permiso += (p_out - p_in).total_seconds() / 60
+                if p_in <= t_in <= p_out:
+                    nueva_hora_entrada_oficial = p_out
 
     resumen["horas_permiso_dia"] = round(min_cubiertos_permiso / 60, 2)
-    ventana_laboral_libre_mins = duracion_turno_mins - min_cubiertos_permiso
+    es_permiso_total = min_cubiertos_permiso >= ((t_out - t_in).total_seconds() / 60 * 0.9)
 
-    # 4. Decisión Dinámica de Marcajes Esperados
-    # Si el permiso cubre > 90% del turno, es un día de permiso total
-    es_permiso_total = min_cubiertos_permiso >= (duracion_turno_mins * 0.9)
-    
+    # ⚡ FIX 3: EL MOTOR TOPOLÓGICO PARA MARCAS ESPERADAS
+    def minutos_libres(b_start, b_end):
+        """Calcula los minutos libres en un bloque, restando la sombra del permiso"""
+        if b_end <= b_start: return 0
+        overlap_start = max(b_start, p_in)
+        overlap_end = min(b_end, p_out)
+        overlap_mins = max(0, (overlap_end - overlap_start).total_seconds() / 60)
+        return max(0, ((b_end - b_start).total_seconds() / 60) - overlap_mins)
+
+    min_libres_manana = minutos_libres(t_in, l_in)
+    min_libres_tarde = minutos_libres(l_out, t_out)
+
     if es_permiso_total:
         marcajes_esperados = 0
-    elif ventana_laboral_libre_mins < 300: # Menos de 5 horas libres, solo pedimos Entrada/Salida
-        marcajes_esperados = 2
+    elif min_libres_manana > 0 and min_libres_tarde > 0:
+        marcajes_esperados = 4 if tiene_almuerzo else 2
     else:
-        marcajes_esperados = 4 if turno.get('almuerzo') else 2
+        # Si el permiso se comió la mañana o la tarde entera, solo queda un bloque de trabajo
+        marcajes_esperados = 2
 
-    # 5. Evaluación de Marcajes vs Expectativa
-    hoy_ahora = datetime.now()
+    # Veredicto si no hay marcas
     if not marcajes_limpios:
         if es_permiso_total:
             resumen["estado"] = "Permiso"
-        elif t_out > hoy_ahora:
+        elif not es_dia_laboral:
+            resumen["estado"] = "Descanso" # ⚡ FIX 1 APLICADO
+        elif t_out > datetime.now():
             resumen["estado"] = "Pendiente"
+        else:
+            resumen["estado"] = "Falta"
         return resumen
 
-    # 6. Cálculo de Retraso (Comparando con la nueva hora oficial ajustada por permiso)
+    # Cálculos normales
     if resumen["hora_entrada"]:
         dt_entrada_real = datetime.combine(fecha_dia, resumen["hora_entrada"])
-        # Si la entrada real es después de la oficial ajustada, hay retraso
         retraso_seg = (dt_entrada_real - nueva_hora_entrada_oficial).total_seconds()
         if retraso_seg > (turno.get('tolerancia_min', 0) * 60):
             resumen["minutos_retraso_entrada"] = int(retraso_seg / 60)
 
-    # 7. Cálculo de Horas Trabajadas Reales
     if len(marcajes_limpios) >= 2:
-        dt_first = marcajes_limpios[0]
-        dt_last = marcajes_limpios[-1]
-        segundos_brutos = (dt_last - dt_first).total_seconds()
-        
-        # Descontar almuerzo solo si la ventana libre permitía almuerzo
-        if marcajes_esperados == 4 and len(marcajes_limpios) >= 3:
-            # Si marcó almuerzo, calculamos el exceso
-            if resumen["hora_inicio_almuerzo"] and resumen["hora_fin_almuerzo"]:
-                # (Lógica de almuerzo similar a la anterior...)
-                pass
-        
+        segundos_brutos = (marcajes_limpios[-1] - marcajes_limpios[0]).total_seconds()
         resumen["horas_trabajadas"] = round(max(0, segundos_brutos) / 3600.0, 2)
 
-    # 8. Veredicto Final de Estado
     conteo = len(marcajes_limpios)
     if conteo < marcajes_esperados:
         resumen["estado"] = "Incompleto"
     else:
-        # El estado lo define el retraso, pero el icono médico (en el front) justificará la jornada corta
         resumen["estado"] = "Tarde" if resumen["minutos_retraso_entrada"] > 0 else "Puntual"
 
-    # 9. Dinamismo Financiero
     if turno.get('descuento', True):
         valor_minuto = (float(salario_base) / 30 / 8 / 60) if salario_base > 0 else 0
         resumen["deuda_generada_bs"] = round(resumen["minutos_retraso_entrada"] * valor_minuto, 2)

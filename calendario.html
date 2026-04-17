@@ -37,6 +37,9 @@
         /* Fija el scroll y evita saltos visuales al abrir modales */
         body.swal2-shown { padding-right: 0 !important; }
         html.swal2-shown { overflow: auto !important; }
+        /* ⚡ FIX 5: Blindaje para que el modal de SweetAlert no colapse el Flexbox */
+        #menu-lateral { flex-shrink: 0 !important; min-width: 16rem !important; }
+        #panel-directorio { flex-shrink: 0 !important; }
     </style>
 </head>
 <body class="bg-gray-50 font-sans flex h-screen overflow-hidden text-gray-800 relative">
@@ -903,7 +906,14 @@
                 const pSal = d.hora_salida ? String(d.hora_salida).substring(0,5) : '';
                 const tAlm = turnoEmp && turnoEmp.almuerzo ? true : false;
                 
-                contenedorAcciones.innerHTML = `<button onclick="abrirModalEdicion('${d.fecha}', '${pEnt}', '${pAlmIn}', '${pAlmOut}', '${pSal}', ${tAlm})" class="w-full bg-slate-800 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition-colors shadow-md mt-4"><i class="fas fa-edit mr-2"></i> Editar / Completar Marcajes</button>`;
+                // Extraemos las horas del permiso para la UI
+                let pIni = '', pFin = '';
+                if (d.ausencia_detalle && d.ausencia_detalle.tipo === 'permiso' && d.ausencia_detalle.hora_inicio) {
+                    pIni = String(d.ausencia_detalle.hora_inicio).substring(0,5);
+                    pFin = String(d.ausencia_detalle.hora_fin).substring(0,5);
+                }
+                
+                contenedorAcciones.innerHTML = `<button onclick="abrirModalEdicion('${d.fecha}', '${pEnt}', '${pAlmIn}', '${pAlmOut}', '${pSal}', ${tAlm}, '${pIni}', '${pFin}')" class="w-full bg-slate-800 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition-colors shadow-md mt-4"><i class="fas fa-edit mr-2"></i> Editar / Completar Marcajes</button>`;
             }
         }
 
@@ -941,12 +951,44 @@
         }
 
         // 🌟 1. ABRIR EL MODAL DE EDICIÓN (SWEETALERT2 DINÁMICO)
-        async function abrirModalEdicion(fecha, hIn, hAlmIn, hAlmOut, hOut, tieneAlmuerzo) {
+        async function abrirModalEdicion(fecha, hIn, hAlmIn, hAlmOut, hOut, tieneAlmuerzo, pIni, pFin) {
             const emp = listaEmpleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
+            const turnoEmp = turnosGlobal.find(t => String(t.id) === String(emp.turno_id));
             
-            // ⚡ Si el turno tiene almuerzo, generamos los inputs extra
+            // ⚡ TOPOLOGÍA FRONTEND (Error 4): Decidimos si exigir 2 o 4 marcas visualmente
+            let exigir4Marcas = tieneAlmuerzo;
+            
+            if (tieneAlmuerzo && pIni && pFin && turnoEmp.hora_inicio_almuerzo) {
+                // Convertimos horas a minutos puros para comparar
+                const aMin = (h, m) => (parseInt(h) * 60) + parseInt(m);
+                const t_in = aMin(...turnoEmp.hora_ingreso.split(':'));
+                const l_in = aMin(...turnoEmp.hora_inicio_almuerzo.split(':'));
+                const l_out = aMin(...turnoEmp.hora_fin_almuerzo.split(':'));
+                let t_out = aMin(...turnoEmp.hora_salida.split(':'));
+                if (t_out < t_in) t_out += 1440; // Nocturnos
+                
+                const pm_in = aMin(...pIni.split(':'));
+                let pm_out = aMin(...pFin.split(':'));
+                if (pm_out < pm_in) pm_out += 1440;
+
+                // ¿Queda trabajo en la mañana? (De t_in a l_in, menos el permiso)
+                let minManana = Math.max(0, l_in - t_in);
+                let overM_start = Math.max(t_in, pm_in);
+                let overM_end = Math.min(l_in, pm_out);
+                if (overM_start < overM_end) minManana -= (overM_end - overM_start);
+
+                // ¿Queda trabajo en la tarde? (De l_out a t_out, menos el permiso)
+                let minTarde = Math.max(0, t_out - l_out);
+                let overT_start = Math.max(l_out, pm_in);
+                let overT_end = Math.min(t_out, pm_out);
+                if (overT_start < overT_end) minTarde -= (overT_end - overT_start);
+
+                // Si se "devoró" un bloque entero, solo exigimos 2 marcas (Entrada y Salida del bloque que sobrevivió)
+                if (minManana <= 0 || minTarde <= 0) exigir4Marcas = false;
+            }
+
             let htmlAlmuerzo = '';
-            if (tieneAlmuerzo) {
+            if (exigir4Marcas) {
                 htmlAlmuerzo = `
                     <div class="flex gap-4 mb-4 bg-gray-50 p-2 rounded-lg border border-gray-200">
                         <div class="flex-1 text-left">
@@ -959,10 +1001,12 @@
                         </div>
                     </div>
                 `;
+            } else if (pIni) {
+                htmlAlmuerzo = `<div class="text-[11px] bg-yellow-50 text-yellow-700 p-3 rounded-lg border border-yellow-200 mb-4 shadow-inner"><i class="fas fa-info-circle mr-1"></i><b>Jornada Fragmentada:</b> Debido a la topología del permiso, el sistema solo exige marcajes de <b>Entrada</b> y <b>Salida</b>.</div>`;
             }
             
             const { value: formValues } = await Swal.fire({
-                scrollbarPadding: false, // ⚡ ESTA LÍNEA MÁGICA EVITA EL SALTO DEL DIRECTORIO
+                scrollbarPadding: false, 
                 title: `<p class="text-xl font-bold text-slate-800">Completar Asistencia</p>`,
                 html: `
                     <p class="text-sm text-gray-500 mb-4">Modifica los marcajes del <b>${fecha}</b> para ${emp.nombres}.<br><span class="text-xs text-blue-500">Los campos vacíos se considerarán como "No marcó".</span></p>
@@ -1025,6 +1069,16 @@
         // 🌟 2. ENVIAR LOS DATOS AL BACKEND
         async function enviarEdicionBackend(fecha, formValues) {
             try {
+                // ⚡ FIX 6: Bloquear la pantalla con un Loading hermoso
+                Swal.fire({
+                    title: 'Procesando...',
+                    html: 'Recalculando la topología de tiempos del mes.<br>Por favor espere...',
+                    allowOutsideClick: false,
+                    allowEscapeKey: false,
+                    showConfirmButton: false,
+                    didOpen: () => { Swal.showLoading(); }
+                });
+
                 const emp = listaEmpleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
                 
                 const res = await fetch(`${API_URL}/asistencia/${emp.id}/editar-dia`, {
@@ -1035,22 +1089,17 @@
 
                 const data = await res.json();
 
-                // 🛑 EL CINTURÓN DE SEGURIDAD: Si el status no es 200/20x, bloqueamos
                 if (!res.ok) {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Acceso Denegado',
-                        text: data.detail || 'Contraseña incorrecta o error de servidor.'
-                    });
-                    return; // Matamos la ejecución aquí. NO recarga la página.
+                    Swal.fire({ icon: 'error', title: 'Acceso Denegado', text: data.detail || 'Contraseña incorrecta o error de servidor.' });
+                    return; 
                 }
 
-                // ✅ Si llega hasta aquí, la contraseña era correcta
-                Swal.fire('¡Actualizado!', 'El historial ha sido modificado con éxito.', 'success');
-                
-                // Recargamos el calendario para ver los cambios
+                // ⚡ FIX 6: Recargamos el calendario MIENTRAS el popup de "Cargando" sigue activo
                 const turnoEmp = turnosGlobal.find(t => String(t.id) === String(emp.turno_id));
-                cargarCalendario(turnoEmp);
+                await cargarCalendario(turnoEmp);
+
+                // ✅ Éxito final: Cambiamos el popup de carga por el de éxito
+                Swal.fire('¡Actualizado!', 'El historial ha sido modificado y calculado con éxito.', 'success');
 
             } catch (error) {
                 console.error(error);

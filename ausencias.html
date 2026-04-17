@@ -648,6 +648,9 @@
                 payload.hora_inicio_permiso = h_ini;
                 payload.fecha_fin_permiso = f_fin;
                 payload.hora_fin_permiso = h_fin;
+                
+                // ⚡ FIX: Inyectamos la instrucción de reposición que faltaba para permisos por horas
+                payload.requiere_reposicion = requiere_reposicion; 
             }
 
             const btn = document.getElementById('btnGuardarAusencia');
