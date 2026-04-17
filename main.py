@@ -1297,16 +1297,16 @@ async def calcular_vacaciones(empleado_id: int, usuario = Depends(verificar_toke
 # ------------------------------------------------------------------------------
 # 2. HISTORIAL DE AUSENCIAS (Trae la lista de vacaciones/permisos tomados)
 # ------------------------------------------------------------------------------
-# ⚡ AQUÍ ESTABA EL ERROR 404: Faltaba esta línea exacta de @app.get
 @app.get("/empleados/{empleado_id}/ausencias")
 async def obtener_historial_ausencias(empleado_id: int, usuario = Depends(verificar_token)):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
+        # ⚡ FIX: Agregamos 'requiere_reposicion' a la consulta para que el Calendario despierte el KPI de deudas
         cur.execute(f"""
             SELECT id, tipo, fecha_inicio, fecha_fin, hora_inicio, hora_fin, 
-                   horas_totales, dias_descontados, motivo, estado
+                   horas_totales, dias_descontados, motivo, estado, requiere_reposicion
             FROM {schema}.ausencias
             WHERE empleado_id = %s AND eliminado = FALSE
             ORDER BY fecha_inicio DESC
@@ -1670,6 +1670,12 @@ def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, 
                 min_cubiertos_permiso += (p_out - p_in).total_seconds() / 60
                 if p_in <= t_in <= p_out:
                     nueva_hora_entrada_oficial = p_out
+
+    # ⚡ FIX: EL SALTO DEL MURO DE ALMUERZO
+    # Si el permiso empujó la hora oficial de entrada de modo que caiga DENTRO del horario de almuerzo,
+    # el sistema perdona ese tiempo y espera al empleado directamente al finalizar el almuerzo.
+    if tiene_almuerzo and l_in <= nueva_hora_entrada_oficial < l_out:
+        nueva_hora_entrada_oficial = l_out
 
     resumen["horas_permiso_dia"] = round(min_cubiertos_permiso / 60, 2)
     es_permiso_total = min_cubiertos_permiso >= ((t_out - t_in).total_seconds() / 60 * 0.9)
