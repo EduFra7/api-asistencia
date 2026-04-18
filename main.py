@@ -355,6 +355,7 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
                 minutos_exceso_almuerzo INT DEFAULT 0,
                 minutos_salida_temprano INT DEFAULT 0,
                 horas_trabajadas NUMERIC(5,2) DEFAULT 0.00,
+                horas_extras NUMERIC(5,2) DEFAULT 0.00,
                 
                 -- Veredicto y Finanzas
                 estado VARCHAR(20) NOT NULL DEFAULT 'Incompleto', 
@@ -519,8 +520,8 @@ def procesar_asistencia_dia(schema: str, empleado_id: int, fecha: date):
         cur.execute(f"""
             INSERT INTO {schema}.asistencia_diaria 
             (empleado_id, fecha, turno_id, hora_entrada, hora_inicio_almuerzo, hora_fin_almuerzo, hora_salida, 
-             minutos_retraso_entrada, minutos_exceso_almuerzo, horas_trabajadas, estado, deuda_generada_bs, actualizado_en)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+             minutos_retraso_entrada, minutos_exceso_almuerzo, horas_trabajadas, horas_extras, estado, deuda_generada_bs, actualizado_en)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
             ON CONFLICT (empleado_id, fecha) 
             DO UPDATE SET 
                 hora_entrada = EXCLUDED.hora_entrada,
@@ -530,6 +531,7 @@ def procesar_asistencia_dia(schema: str, empleado_id: int, fecha: date):
                 minutos_retraso_entrada = EXCLUDED.minutos_retraso_entrada,
                 minutos_exceso_almuerzo = EXCLUDED.minutos_exceso_almuerzo,
                 horas_trabajadas = EXCLUDED.horas_trabajadas,
+                horas_extras = EXCLUDED.horas_extras,
                 estado = EXCLUDED.estado,
                 deuda_generada_bs = EXCLUDED.deuda_generada_bs,
                 actualizado_en = CURRENT_TIMESTAMP
@@ -538,7 +540,7 @@ def procesar_asistencia_dia(schema: str, empleado_id: int, fecha: date):
             empleado_id, fecha, emp_turno['turno_id'], resumen['hora_entrada'], 
             resumen['hora_inicio_almuerzo'], resumen['hora_fin_almuerzo'], resumen['hora_salida'], 
             resumen['minutos_retraso_entrada'], resumen['minutos_exceso_almuerzo'], 
-            resumen['horas_trabajadas'], resumen['estado'], resumen['deuda_generada_bs']
+            resumen['horas_trabajadas'], resumen.get('horas_extras', 0.0), resumen['estado'], resumen['deuda_generada_bs']
         ))
         
         conn.commit()
@@ -1720,9 +1722,23 @@ def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, 
         if retraso_seg > (turno.get('tolerancia_min', 0) * 60):
             resumen["minutos_retraso_entrada"] = int(retraso_seg / 60)
 
-    # (El código anterior: cálculo de horas trabajadas)
+    # 7. Cálculo de Horas Trabajadas Reales
     if len(marcajes_limpios) >= 2:
-        segundos_brutos = (marcajes_limpios[-1] - marcajes_limpios[0]).total_seconds()
+        dt_first = marcajes_limpios[0]
+        dt_last = marcajes_limpios[-1]
+        segundos_brutos = (dt_last - dt_first).total_seconds()
+        
+        # ⚡ FIX 1: Descuento real del almuerzo (Destruyendo las 11 horas)
+        if marcajes_esperados == 4 and len(marcajes_limpios) >= 3:
+            if resumen["hora_inicio_almuerzo"] and resumen["hora_fin_almuerzo"]:
+                dt_alm_in = datetime.combine(fecha_dia, resumen["hora_inicio_almuerzo"])
+                dt_alm_out = datetime.combine(fecha_dia, resumen["hora_fin_almuerzo"])
+                if dt_alm_out < dt_alm_in: dt_alm_out += timedelta(days=1)
+                
+                # Cuánto tiempo estuvo comiendo realmente
+                segundos_almuerzo_real = max(0, (dt_alm_out - dt_alm_in).total_seconds())
+                segundos_brutos -= segundos_almuerzo_real
+        
         resumen["horas_trabajadas"] = round(max(0, segundos_brutos) / 3600.0, 2)
 
     # ⚡ FIX: BOLSILLO "C" (Tiempo Extra Real - Fuera de Fronteras)
@@ -1801,6 +1817,7 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
             dia["hora_fin_almuerzo"] = str(dia["hora_fin_almuerzo"]) if dia.get("hora_fin_almuerzo") else None
             dia["hora_salida"] = str(dia["hora_salida"]) if dia.get("hora_salida") else None
             dia["horas_trabajadas"] = float(dia["horas_trabajadas"] or 0)
+            dia["horas_extras"] = float(dia.get("horas_extras") or 0)
             dia["deuda_generada_bs"] = float(dia["deuda_generada_bs"] or 0)
             dia["modificado_manualmente"] = bool(dia.get("modificado_manualmente"))
             dia["observaciones"] = dia.get("observaciones") or ""

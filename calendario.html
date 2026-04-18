@@ -214,10 +214,10 @@
                             <div class="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
                                 <div>
                                     <p class="text-xs text-gray-500 font-bold uppercase">Balance de Tiempo</p>
-                                    <p id="kpi-horas-extra" class="text-xs font-bold text-green-600 mt-1"><i class="fas fa-arrow-up mr-1"></i>0.00 Hrs Extras</p>
-                                    <p id="kpi-deuda-horas" class="text-xs font-bold text-red-600 mt-0.5"><i class="fas fa-arrow-down mr-1"></i>0.00 Hrs a Reponer</p>
+                                    <p id="kpi-horas-extra" class="text-lg md:text-2xl font-black text-gray-400 mt-1">-</p>
+                                    <p id="kpi-deuda-horas" class="text-[10px] font-bold text-gray-400 uppercase mt-0.5">Sin calcular</p>
                                 </div>
-                                <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600"><i class="fas fa-balance-scale"></i></div>
+                                <div class="w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400"><i class="fas fa-balance-scale"></i></div>
                             </div>
                             
                             <div class="bg-white p-3 md:p-4 rounded-xl border border-red-100 shadow-sm flex items-center justify-between">
@@ -541,10 +541,28 @@
             
             const empleadoActual = listaEmpleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
             
+            // ⚡ UX: Ponemos TODOS los KPIs a girar y en colores neutros mientras el servidor responde
             document.getElementById('kpi-dias').innerHTML = '<i class="fas fa-spinner fa-spin text-gray-300"></i>';
             document.getElementById('kpi-horas').innerHTML = '<i class="fas fa-spinner fa-spin text-gray-300"></i>';
             document.getElementById('kpi-retraso').innerHTML = '<i class="fas fa-spinner fa-spin text-gray-300"></i>';
             document.getElementById('kpi-deuda').innerHTML = '<i class="fas fa-spinner fa-spin text-gray-300"></i>';
+            
+            // Uniformamos la tarjeta de Balance de Tiempo (La nueva tarjeta)
+            const kpiBalance = document.getElementById('kpi-horas-extra');
+            const kpiDeudaH = document.getElementById('kpi-deuda-horas');
+            
+            if(kpiBalance && kpiDeudaH) {
+                kpiBalance.innerHTML = '<i class="fas fa-spinner fa-spin text-gray-300"></i>';
+                kpiBalance.className = "text-lg md:text-2xl font-black text-gray-400 mt-1";
+                kpiDeudaH.innerHTML = 'Analizando...';
+                kpiDeudaH.className = "text-[10px] font-bold text-gray-400 uppercase mt-0.5";
+                
+                // Ponemos el ícono circular de la derecha en gris
+                const kpiIconoCompensacion = kpiBalance.parentElement.nextElementSibling;
+                if(kpiIconoCompensacion) {
+                    kpiIconoCompensacion.className = "w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-300";
+                }
+            }
             
             const cuadricula = document.getElementById('cuadriculaCalendario');
             cuadricula.innerHTML = `
@@ -569,8 +587,10 @@
                 const listaAusencias = await res.at(1).json(); 
 
                 document.getElementById('kpi-dias').textContent = dataAsistencia.kpis.dias_trabajados;
-                document.getElementById('kpi-horas').textContent = dataAsistencia.kpis.total_horas;
-                document.getElementById('kpi-retraso').textContent = `${dataAsistencia.kpis.retraso_total_min} min`;
+                
+                // NOTA: kpi-horas, kpi-horas-extra y kpi-deuda-horas se reescriben al final de renderizarDias()
+                
+                document.getElementById('kpi-retraso').textContent = `${dataAsistencia.kpis.retraso_total_min} min de retraso total`;
                 document.getElementById('kpi-deuda').textContent = `Bs. ${Number(dataAsistencia.kpis.deuda_total).toFixed(2)}`;
 
                 renderizarDias(anio, mes, dataAsistencia.dias, turnoEmpleado ? turnoEmpleado.dias : null, listaAusencias, empleadoActual);
