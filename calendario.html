@@ -704,32 +704,6 @@
             cargarCalendario();
         }
 
-        // 🧠 Función inteligente para detectar si una hora pertenece al día siguiente en turnos nocturnos
-        function formatearHoraMarcaje(horaStr, fechaBaseStr, turno) {
-            if (!horaStr) return '--:--';
-            const horaCorta = String(horaStr).substring(0, 5); // "00:15"
-            
-            let esDiaSiguiente = false;
-            // Si el turno cruza la medianoche y la hora del marcaje es menor a la hora de ingreso (ej. 00:15 < 20:00)
-            if (turno && turno.hora_salida < turno.hora_ingreso) {
-                if (horaStr < turno.hora_ingreso) {
-                    esDiaSiguiente = true;
-                }
-            }
-            
-            if (esDiaSiguiente) {
-                // Calculamos visualmente el día de mañana
-                let fechaObj = new Date(fechaBaseStr + 'T00:00:00');
-                fechaObj.setDate(fechaObj.getDate() + 1);
-                let diaSig = fechaObj.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
-                
-                // Retorna la hora con un pequeño indicativo del día
-                return `<span class="text-[9px] text-blue-500 font-bold bg-blue-50 px-1 rounded mr-1" title="Día Siguiente">${diaSig}.</span>${horaCorta}`;
-            }
-            
-            return horaCorta; // Si es un día normal, solo devuelve la hora
-        }
-
         document.getElementById('panel-derecho').addEventListener('scroll', function() {
             if(window.innerWidth >= 1024) return;
             const dir = document.getElementById('panel-directorio');
