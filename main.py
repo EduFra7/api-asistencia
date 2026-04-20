@@ -1756,16 +1756,14 @@ def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, 
 
     resumen["horas_extras"] = round(minutos_extra_total / 60, 2)
 
-    # Veredicto de Estado (El código original)
+    # ⚡ FIX: Veredicto de Estado Inteligente (Eliminamos el bloque duplicado)
     conteo = len(marcajes_limpios)
     if conteo < marcajes_esperados:
-        resumen["estado"] = "Incompleto"
-    else:
-        resumen["estado"] = "Tarde" if resumen["minutos_retraso_entrada"] > 0 else "Puntual"
-
-    conteo = len(marcajes_limpios)
-    if conteo < marcajes_esperados:
-        resumen["estado"] = "Incompleto"
+        # Si le faltan marcas, pero su turno aún no termina, está "Trabajando"
+        if t_out > datetime.now():
+            resumen["estado"] = "Trabajando"
+        else:
+            resumen["estado"] = "Incompleto"
     else:
         resumen["estado"] = "Tarde" if resumen["minutos_retraso_entrada"] > 0 else "Puntual"
 
