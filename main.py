@@ -861,12 +861,51 @@ def eliminar_seccion(seccion_id: int, usuario = Depends(verificar_token)):
 # 8. GESTIÓN DE PLANILLA (EMPLEADOS)
 # ==============================================================================
 
+# ⚡ NUEVO ENDPOINT: Extrae estadísticas y cargos únicos en milisegundos
+@app.get("/empleados/stats")
+async def obtener_empleados_stats(usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    conn = conectar_bd(schema)
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        # 1. Contamos usando la velocidad nativa de PostgreSQL
+        cur.execute(f"""
+            SELECT 
+                COUNT(*) filter (where activo = true) as activos, 
+                COUNT(*) filter (where activo = false) as inactivos, 
+                COUNT(*) as todos 
+            FROM {schema}.empleados WHERE eliminado = FALSE
+        """)
+        counts = cur.fetchone()
+
+        # 2. Extraemos los cargos únicos sin duplicados
+        cur.execute(f"""
+            SELECT DISTINCT cargo 
+            FROM {schema}.empleados 
+            WHERE eliminado = FALSE AND cargo IS NOT NULL AND cargo != '' 
+            ORDER BY cargo
+        """)
+        cargos = [row['cargo'] for row in cur.fetchall()]
+
+        return {
+            "activos": counts['activos'] or 0,
+            "inactivos": counts['inactivos'] or 0,
+            "todos": counts['todos'] or 0,
+            "cargos": cargos
+        }
+    finally:
+        cur.close()
+        conn.close()
+
+
+# ⚡ ENDPOINT ACTUALIZADO: Buscador avanzado (Dumb Frontend)
 @app.get("/empleados")
 async def obtener_empleados(
     estado: str = "activos", 
     q: str = "", 
     sucursal_id: str = "", 
     seccion_id: str = "", 
+    cargo: str = "", # ⚡ NUEVO FILTRO
     limite: int = 100,
     usuario = Depends(verificar_token)
 ):
@@ -874,7 +913,6 @@ async def obtener_empleados(
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        # 1. Base de la consulta
         query = f"""
             SELECT e.*, 
                    s.nombre as sucursal_nombre, s.ciudad as sucursal_ciudad,
@@ -889,11 +927,8 @@ async def obtener_empleados(
         """
         parametros = []
 
-        # 2. Agregamos los filtros dinámicamente
-        if estado == "activos":
-            query += " AND e.activo = TRUE"
-        elif estado == "inactivos":
-            query += " AND e.activo = FALSE"
+        if estado == "activos": query += " AND e.activo = TRUE"
+        elif estado == "inactivos": query += " AND e.activo = FALSE"
             
         if sucursal_id and sucursal_id.isdigit():
             query += " AND e.sucursal_id = %s"
@@ -902,24 +937,26 @@ async def obtener_empleados(
         if seccion_id and seccion_id.isdigit():
             query += " AND e.seccion_id = %s"
             parametros.append(int(seccion_id))
+            
+        if cargo:
+            query += " AND e.cargo = %s"
+            parametros.append(cargo)
 
         if q:
-            # ILIKE es la magia de PostgreSQL para buscar ignorando mayúsculas/minúsculas
-            query += " AND (e.nombres ILIKE %s OR e.apellidos ILIKE %s OR e.ci ILIKE %s)"
+            # ⚡ BUSCADOR MEJORADO: Ahora también busca por ID del reloj biométrico
+            query += " AND (e.nombres ILIKE %s OR e.apellidos ILIKE %s OR e.ci ILIKE %s OR CAST(e.bio_id AS TEXT) ILIKE %s)"
             termino = f"%{q}%"
-            parametros.extend([termino, termino, termino])
+            parametros.extend([termino, termino, termino, termino])
 
-        # 3. Orden y límite de seguridad para no saturar la red
         query += " ORDER BY e.nombres ASC LIMIT %s"
         parametros.append(limite)
 
         cur.execute(query, tuple(parametros))
         empleados = cur.fetchall()
         
-        # 4. Formateo seguro para JSON
         for emp in empleados:
-            for campo in ["fecha_ingreso", "fecha_antiguedad", "fecha_retiro", "turno_ingreso", "turno_salida"]:
-                if emp.get(campo): emp[campo] = str(emp[campo])
+            for c in ["fecha_ingreso", "fecha_antiguedad", "fecha_retiro", "turno_ingreso", "turno_salida"]:
+                if emp.get(c): emp[c] = str(emp[c])
             
         return empleados
     finally:

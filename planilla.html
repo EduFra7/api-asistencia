@@ -68,21 +68,21 @@
                     
                     <div>
                         <label class="text-xs font-semibold text-gray-500 uppercase">Sucursal (Ubicación)</label>
-                        <select id="filtro_sucursal" onchange="renderizarTabla()" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                        <select id="filtro_sucursal" onchange="busquedaOptimizadaPlanilla()" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
                             <option value="">Todas las sucursales</option>
                         </select>
                     </div>
 
                     <div>
                         <label class="text-xs font-semibold text-gray-500 uppercase">Sección (Depto)</label>
-                        <select id="filtro_seccion" onchange="renderizarTabla()" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                        <select id="filtro_seccion" onchange="busquedaOptimizadaPlanilla()" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
                             <option value="">Todas las secciones</option>
                         </select>
                     </div>
 
                     <div>
                         <label class="text-xs font-semibold text-gray-500 uppercase">Cargo</label>
-                        <select id="filtro_cargo" onchange="renderizarTabla()" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
+                        <select id="filtro_cargo" onchange="busquedaOptimizadaPlanilla()" class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500">
                             <option value="">Todos los cargos</option>
                         </select>
                     </div>
@@ -596,7 +596,8 @@
                 if(res.ok) {
                     mostrarExito("Empleado retirado del sistema");
                     cerrarPanel();
-                    await cargarEmpleados(); // Recarga la tabla para que desaparezca
+                    await actualizarStats();
+                    busquedaOptimizadaPlanilla();
                 } else {
                     const errorData = await res.json();
                     mostrarError(errorData.detail || "Error desconocido al eliminar", "Error en base de datos");
@@ -611,13 +612,12 @@
         }
 
         // ==============================================================================
-        // ── MOTOR DE DATOS: CONEXIÓN CON LA API ──
+        // ── MOTOR DE DATOS: CONEXIÓN CON LA API (FRONTEND TONTO) ──
         // ==============================================================================
 
-        // 1. Cargar las listas desplegables (Sucursal y Sección)
-        // 1. Cargar las listas desplegables (Formularios y Filtros)
         async function cargarCatalogos() {
             try {
+                // ⚡ Llamamos a las 3 rutas al mismo tiempo
                 const [resSucursales, resSecciones] = await Promise.all([
                     fetch(`${API_URL}/sucursales`, { headers: { 'Authorization': `Bearer ${token_api}` } }),
                     fetch(`${API_URL}/secciones`, { headers: { 'Authorization': `Bearer ${token_api}` } })
@@ -626,17 +626,10 @@
                 const sucursales = await resSucursales.json();
                 const secciones = await resSecciones.json();
 
-                // Llenar Selectores del Formulario
                 const selectSucursal = document.getElementById('emp_sucursal');
                 const selectSeccion = document.getElementById('emp_seccion');
-                selectSucursal.innerHTML = '<option value="">Seleccione Sucursal...</option>';
-                selectSeccion.innerHTML = '<option value="">Seleccione Sección...</option>';
-                
-                // Llenar Selectores de los Filtros de Búsqueda
                 const filtroSucursal = document.getElementById('filtro_sucursal');
                 const filtroSeccion = document.getElementById('filtro_seccion');
-                filtroSucursal.innerHTML = '<option value="">Todas las sucursales</option>';
-                filtroSeccion.innerHTML = '<option value="">Todas las secciones</option>';
 
                 sucursales.forEach(s => {
                     selectSucursal.innerHTML += `<option value="${s.id}">${s.nombre}</option>`;
@@ -648,22 +641,93 @@
                     filtroSeccion.innerHTML += `<option value="${s.id}">${s.nombre}</option>`;
                 });
 
-            } catch (error) {
-                console.error("Error al cargar catálogos:", error);
-            }
+                // Cargamos las estadísticas por primera vez
+                await actualizarStats();
+
+            } catch (error) { console.error("Error al cargar catálogos:", error); }
         }
 
-        let filtroActual = 'activos'; // Estado inicial
-
-        // 2. Cargar datos de Railway (Se ejecuta una vez o tras guardar/borrar)
-        async function cargarEmpleados() {
+        // ⚡ NUEVO: Extrae y pinta la matemática directa desde el servidor
+        async function actualizarStats() {
             try {
-                const res = await fetch(`${API_URL}/empleados`, { headers: { 'Authorization': `Bearer ${token_api}` } });
-                listaEmpleadosGlobal = await res.json();
-                renderizarTabla(); // Dibuja la tabla según el filtro
-            } catch (error) { 
-                document.getElementById('cuerpoTabla').innerHTML = '<tr><td colspan="7" class="p-4 text-center text-red-500">Error de conexión</td></tr>'; 
-            }
+                const res = await fetch(`${API_URL}/empleados/stats`, { headers: { 'Authorization': `Bearer ${token_api}` } });
+                const stats = await res.json();
+                
+                document.querySelector("button[onclick=\"cambiarFiltro('activos', this)\"]").innerHTML = `<i class="fas fa-user-check mr-2"></i>Activos (${stats.activos})`;
+                document.querySelector("button[onclick=\"cambiarFiltro('inactivos', this)\"]").innerHTML = `<i class="fas fa-user-times mr-2"></i>Inactivos (${stats.inactivos})`;
+                document.querySelector("button[onclick=\"cambiarFiltro('todos', this)\"]").innerHTML = `<i class="fas fa-users mr-2"></i>Todos (${stats.todos})`;
+
+                const selCargo = document.getElementById('filtro_cargo');
+                const cargoPrevio = selCargo.value;
+                selCargo.innerHTML = '<option value="">Todos los cargos</option>';
+                stats.cargos.forEach(c => {
+                    selCargo.innerHTML += `<option value="${c}" ${c === cargoPrevio ? 'selected' : ''}>${c}</option>`;
+                });
+            } catch(e) { console.error("Error al cargar stats:", e); }
+        }
+
+        let filtroActual = 'activos'; 
+
+        function cambiarFiltro(tipo, botonPresionado) {
+            filtroActual = tipo;
+            document.querySelectorAll('.filtro-btn').forEach(btn => {
+                btn.className = "filtro-btn px-4 py-2 bg-white hover:bg-gray-50 text-gray-600 font-medium rounded-lg text-sm border border-gray-200 transition-colors";
+            });
+            botonPresionado.className = "filtro-btn px-4 py-2 bg-blue-50 text-blue-700 font-semibold rounded-lg text-sm border border-blue-200 transition-colors";
+            
+            busquedaOptimizadaPlanilla(); // Dispara la búsqueda en el servidor
+        }
+
+        // ⚡ EL BUSCADOR Y EL RENDERIZADOR AHORA SON UNO SOLO (Debounce Server-Side)
+        let temporizadorBusquedaPlanilla;
+        function busquedaOptimizadaPlanilla() {
+            clearTimeout(temporizadorBusquedaPlanilla);
+            
+            const tbody = document.getElementById('cuerpoTabla');
+            tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-gray-500"><i class="fas fa-circle-notch fa-spin text-2xl mb-2"></i><p>Sincronizando con el servidor...</p></td></tr>';
+
+            temporizadorBusquedaPlanilla = setTimeout(async () => {
+                const params = new URLSearchParams({
+                    estado: filtroActual,
+                    q: document.getElementById('filtro_busqueda').value.toLowerCase(),
+                    sucursal_id: document.getElementById('filtro_sucursal').value,
+                    seccion_id: document.getElementById('filtro_seccion').value,
+                    cargo: document.getElementById('filtro_cargo').value,
+                    limite: 100 // Para visualización en pantalla
+                });
+
+                try {
+                    const res = await fetch(`${API_URL}/empleados?${params.toString()}`, { headers: { 'Authorization': `Bearer ${token_api}` } });
+                    listaEmpleadosGlobal = await res.json();
+                    
+                    tbody.innerHTML = '';
+                    if(listaEmpleadosGlobal.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-gray-500"><i class="fas fa-search text-2xl mb-2 text-gray-300"></i><p>No se encontró personal</p></td></tr>';
+                        return;
+                    }
+
+                    // ⚡ El Frontend YA NO FILTRA, solo pinta lo que dice el servidor
+                    listaEmpleadosGlobal.forEach(emp => {
+                        const iniciales = (emp.nombres.charAt(0) + emp.apellidos.charAt(0)).toUpperCase();
+                        const badgeEstado = emp.activo 
+                            ? '<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-[10px] font-bold shadow-sm border border-green-200 uppercase">Activo</span>'
+                            : '<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-[10px] font-bold shadow-sm border border-red-200 uppercase">Inactivo</span>';
+
+                        tbody.innerHTML += `
+                            <tr onclick="abrirPanelEdicion(${emp.id})" class="hover:bg-blue-50 transition-colors cursor-pointer group border-b border-gray-100">
+                                <td class="p-4 font-mono text-gray-500 text-xs">${emp.bio_id || '-'}</td>
+                                <td class="p-4"><div class="flex items-center"><div class="h-8 w-8 rounded-full bg-slate-800 text-white shadow-inner flex items-center justify-center font-bold text-xs mr-3">${iniciales}</div><p class="font-bold text-gray-800 group-hover:text-blue-600 transition-colors">${emp.nombres} ${emp.apellidos}</p></div></td>
+                                <td class="p-4 text-gray-600 text-sm">${emp.ci}</td>
+                                <td class="p-4 text-gray-600 text-sm font-medium">${emp.sucursal_nombre || '-'}</td>
+                                <td class="p-4 text-gray-600 text-sm">${emp.seccion_nombre || '-'}</td>
+                                <td class="p-4 text-gray-600 text-sm">${emp.cargo || '-'}</td>
+                                <td class="p-4">${badgeEstado}</td>
+                            </tr>`;
+                    });
+                } catch (error) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-red-500 font-bold">Error de conexión con el servidor</td></tr>'; 
+                }
+            }, 300);
         }
 
         // ⚡ CARGAR LOS TURNOS PARA EL DESPLEGABLE
@@ -688,104 +752,6 @@
                 console.error("Error al cargar turnos:", error);
                 selectTurno.innerHTML = '<option value="">Error al cargar</option>';
             }
-        }
-
-        // ⚡ SISTEMA ANTI-LAG (Debounce)
-        let temporizadorBusquedaPlanilla;
-        function busquedaOptimizadaPlanilla(valorTexto) {
-            clearTimeout(temporizadorBusquedaPlanilla);
-            temporizadorBusquedaPlanilla = setTimeout(() => {
-                renderizarTabla();
-            }, 300); // Espera 300ms después de que el usuario deja de teclear
-        }
-
-        // Dibuja la tabla aplicando TODOS los filtros simultáneamente
-        function renderizarTabla() {
-            const tbody = document.getElementById('cuerpoTabla');
-            tbody.innerHTML = '';
-            
-            // Capturamos los valores de la interfaz
-            const txtBusqueda = document.getElementById('filtro_busqueda').value.toLowerCase();
-            const valSucursal = document.getElementById('filtro_sucursal').value;
-            const valSeccion = document.getElementById('filtro_seccion').value;
-            const valCargo = document.getElementById('filtro_cargo').value;
-
-            // Filtramos la lista global
-            const listaFiltrada = listaEmpleadosGlobal.filter(emp => {
-                // 1. Filtro Botones Superiores (Activo/Inactivo)
-                if(filtroActual === 'activos' && !emp.activo) return false;
-                if(filtroActual === 'inactivos' && emp.activo) return false;
-
-                // 2. Filtro de Texto (Buscador inteligente)
-                const textoEmpleado = `${emp.nombres} ${emp.apellidos} ${emp.ci} ${emp.bio_id || ''}`.toLowerCase();
-                if (txtBusqueda && !textoEmpleado.includes(txtBusqueda)) return false;
-
-                // 3. Filtros Selectores
-                if (valSucursal && emp.sucursal_id != valSucursal) return false;
-                if (valSeccion && emp.seccion_id != valSeccion) return false;
-                if (valCargo && emp.cargo !== valCargo) return false;
-
-                return true; // Si pasa todos los filtros, sobrevive
-            });
-
-            // Actualizamos los contadores visuales superiores
-            const countActivos = listaEmpleadosGlobal.filter(e => e.activo).length;
-            const countInactivos = listaEmpleadosGlobal.filter(e => !e.activo).length;
-            document.querySelector("button[onclick=\"cambiarFiltro('activos', this)\"]").innerHTML = `<i class="fas fa-user-check mr-2"></i>Activos (${countActivos})`;
-            document.querySelector("button[onclick=\"cambiarFiltro('inactivos', this)\"]").innerHTML = `<i class="fas fa-user-times mr-2"></i>Inactivos (${countInactivos})`;
-            document.querySelector("button[onclick=\"cambiarFiltro('todos', this)\"]").innerHTML = `<i class="fas fa-users mr-2"></i>Todos (${listaEmpleadosGlobal.length})`;
-
-            // Extraemos cargos únicos de la BD para el filtro de Cargos (Truco Senior)
-            const selCargo = document.getElementById('filtro_cargo');
-            const cargoSeleccionadoPrevio = selCargo.value;
-            selCargo.innerHTML = '<option value="">Todos los cargos</option>';
-            const cargosUnicos = [...new Set(listaEmpleadosGlobal.map(e => e.cargo).filter(c => c))];
-            cargosUnicos.forEach(c => {
-                selCargo.innerHTML += `<option value="${c}" ${c === cargoSeleccionadoPrevio ? 'selected' : ''}>${c}</option>`;
-            });
-
-            // Si no hay resultados
-            if(listaFiltrada.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-gray-500"><i class="fas fa-search mr-2"></i>No se encontró personal con estos filtros</td></tr>';
-                return;
-            }
-            
-            // Dibujamos la tabla final
-            listaFiltrada.forEach(emp => {
-                const iniciales = (emp.nombres.charAt(0) + emp.apellidos.charAt(0)).toUpperCase();
-                const badgeEstado = emp.activo 
-                    ? '<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-semibold shadow-sm border border-green-200">Activo</span>'
-                    : '<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-xs font-semibold shadow-sm border border-red-200">Inactivo</span>';
-
-                tbody.innerHTML += `
-                    <tr onclick="abrirPanelEdicion(${emp.id})" class="hover:bg-blue-50 transition-colors cursor-pointer group border-b border-gray-100">
-                        <td class="p-4 font-mono text-gray-500 text-xs">${emp.bio_id || '-'}</td>
-                        <td class="p-4">
-                            <div class="flex items-center">
-                                <div class="h-8 w-8 rounded-full bg-slate-800 text-white shadow-inner flex items-center justify-center font-bold mr-3">${iniciales}</div>
-                                <p class="font-bold text-gray-800 group-hover:text-blue-600 transition-colors">${emp.nombres} ${emp.apellidos}</p>
-                            </div>
-                        </td>
-                        <td class="p-4 text-gray-600 text-sm">${emp.ci}</td>
-                        <td class="p-4 text-gray-600 text-sm font-medium">${emp.sucursal_nombre || '-'}</td>
-                        <td class="p-4 text-gray-600 text-sm">${emp.seccion_nombre || '-'}</td>
-                        <td class="p-4 text-gray-600 text-sm">${emp.cargo || '-'}</td>
-                        <td class="p-4">${badgeEstado}</td>
-                    </tr>`;
-            });
-        }
-
-        // Función que se llama cuando haces clic en los botones de arriba
-        function cambiarFiltro(tipo, botonPresionado) {
-            filtroActual = tipo;
-            
-            // Estilos de botones
-            document.querySelectorAll('.filtro-btn').forEach(btn => {
-                btn.className = "filtro-btn px-4 py-2 bg-white hover:bg-gray-50 text-gray-600 font-medium rounded-lg text-sm border border-gray-200 transition-colors";
-            });
-            botonPresionado.className = "filtro-btn px-4 py-2 bg-blue-50 text-blue-700 font-semibold rounded-lg text-sm border border-blue-200 transition-colors";
-            
-            renderizarTabla();
         }
 
         // 3. Enviar el Formulario al Backend (Horario NO obligatorio)
@@ -860,7 +826,8 @@
                 mostrarExito(data.mensaje || (empleadoEditandoId ? 'Empleado actualizado' : 'Empleado registrado'));
                 
                 cerrarPanel();
-                await cargarEmpleados(); 
+                await actualizarStats(); 
+                busquedaOptimizadaPlanilla();
                 
             } catch (error) { 
                 console.error("💥 [ERROR CRÍTICO CAPTURADO]:", error);
@@ -873,43 +840,54 @@
             }
         }
 
-        // ==========================================
-        // 4. EXPORTACIÓN A PDF (Nivel Corporativo)
-        // ==========================================
-        function generarReportePDF() {
-            // 1. Iniciamos el documento: 'l' (Landscape/Horizontal), 'pt' (Puntos), 'letter' (Tamaño Carta)
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF('l', 'pt', 'letter');
+        
 
-            // 2. Respetamos el filtro seleccionado actualmente en pantalla
-            const listaFiltrada = listaEmpleadosGlobal.filter(emp => {
-                if(filtroActual === 'activos') return emp.activo === true;
-                if(filtroActual === 'inactivos') return emp.activo === false;
-                return true; // Si es 'todos'
+
+        // ⚡ NUEVO: Función maestra para descargar datos masivos para PDF/Excel
+        async function obtenerDatosParaExportar() {
+            const params = new URLSearchParams({
+                estado: filtroActual,
+                q: document.getElementById('filtro_busqueda').value.toLowerCase(),
+                sucursal_id: document.getElementById('filtro_sucursal').value,
+                seccion_id: document.getElementById('filtro_seccion').value,
+                cargo: document.getElementById('filtro_cargo').value,
+                limite: 5000 // Descargamos hasta 5,000 registros de golpe solo para el reporte
             });
+            
+            Swal.fire({ title: 'Preparando Datos...', html: 'Consolidando la información del servidor.', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
-            if(listaFiltrada.length === 0) {
+            try {
+                const res = await fetch(`${API_URL}/empleados?${params.toString()}`, { headers: { 'Authorization': `Bearer ${token_api}` } });
+                const data = await res.json();
+                Swal.close();
+                return data;
+            } catch(e) {
+                Swal.fire('Error', 'No se pudieron obtener los datos para exportar', 'error');
+                return null;
+            }
+        }
+
+        // ==========================================
+        // 4. EXPORTACIÓN A PDF (Dumb Frontend)
+        // ==========================================
+        async function generarReportePDF() {
+            const dataExportar = await obtenerDatosParaExportar();
+            if(!dataExportar || dataExportar.length === 0) {
                 mostrarError("No hay información de empleados para exportar con el filtro actual.", "Reporte Vacío");
                 return;
             }
 
-            // 3. Preparar los datos. Agrupamos en bloques para que quepa perfecto en la hoja
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('l', 'pt', 'letter');
+
             const head = [['ID', 'Datos Personales', 'Contacto', 'Ubicación Laboral', 'Contrato e Ingresos', 'Estado / Retiro']];
             
-            const body = listaFiltrada.map(emp => {
-                // Bloque 1: Personal
+            const body = dataExportar.map(emp => {
                 const personal = `${emp.nombres} ${emp.apellidos}\nC.I.: ${emp.ci}\nSexo: ${emp.sexo || 'N/A'}`;
-                
-                // Bloque 2: Contacto
                 const contacto = `Cel: ${emp.celular || '-'}\nCorreo: ${emp.correo || '-'}\nDir: ${emp.direccion || '-'}`;
-                
-                // Bloque 3: Laboral
                 const laboral = `Cargo: ${emp.cargo || '-'}\nSucursal: ${emp.sucursal_nombre || '-'}\nSección: ${emp.seccion_nombre || '-'}\nTurno: ${emp.turno_nombre || 'No asignado'}\nIngreso: ${emp.fecha_ingreso ? emp.fecha_ingreso.split('T')[0] : '-'}`;
-                
-                // Bloque 4: Económico
                 const ingresos = `Contrato: ${emp.tipo_contrato || '-'}\nSalario: Bs. ${emp.salario_base || '0.00'}\nBono: Bs. ${emp.bono || '0.00'}\nInicio Ant.: ${emp.fecha_antiguedad ? emp.fecha_antiguedad.split('T')[0] : '-'}`;
                 
-                // Bloque 5: Estado y Retiro
                 let retiro = emp.activo ? 'ACTIVO' : 'INACTIVO';
                 if (!emp.activo) {
                     retiro += `\nFecha Baja: ${emp.fecha_retiro ? emp.fecha_retiro.split('T')[0] : '-'}`;
@@ -919,17 +897,9 @@
                     retiro += `\n\n-- HISTORIAL --\n${emp.historial_movimientos}`;
                 }
 
-                return [
-                    emp.bio_id || '-',
-                    personal,
-                    contacto,
-                    laboral,
-                    ingresos,
-                    retiro
-                ];
+                return [ emp.bio_id || '-', personal, contacto, laboral, ingresos, retiro ];
             });
 
-            // 4. Encabezado del Documento
             const nombreEmpresa = userData.empresa || 'Empresa';
             const estadoTexto = filtroActual.toUpperCase();
             const fechaHoy = new Date().toLocaleDateString('es-ES');
@@ -942,99 +912,60 @@
             doc.setTextColor(100, 100, 100);
             doc.text(`Filtro Aplicado: EMPLEADOS ${estadoTexto}  |  Fecha de Emisión: ${fechaHoy}`, 40, 55);
 
-            // 5. Dibujar la Tabla
             doc.autoTable({
-                startY: 70,
-                head: head,
-                body: body,
-                theme: 'grid',
+                startY: 70, head: head, body: body, theme: 'grid',
                 styles: { fontSize: 8, cellPadding: 4, valign: 'middle', textColor: [50, 50, 50] },
                 headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold' },
                 alternateRowStyles: { fillColor: [249, 250, 251] },
-                // Configuramos los anchos de columna para que el contenido respire
                 columnStyles: {
-                    0: { cellWidth: 40, halign: 'center' }, // ID
-                    1: { cellWidth: 130 }, // Personal
-                    2: { cellWidth: 130 }, // Contacto
-                    3: { cellWidth: 140 }, // Laboral
-                    4: { cellWidth: 130 }, // Ingresos
-                    5: { cellWidth: 140 }  // Retiro
+                    0: { cellWidth: 40, halign: 'center' }, 1: { cellWidth: 130 }, 2: { cellWidth: 130 },
+                    3: { cellWidth: 140 }, 4: { cellWidth: 130 }, 5: { cellWidth: 140 }
                 }
             });
 
-            // 6. Descargar el archivo
-            const nombreArchivo = `Planilla_${nombreEmpresa}_${estadoTexto}_${new Date().getTime()}.pdf`;
-            doc.save(nombreArchivo);
+            doc.save(`Planilla_${nombreEmpresa}_${estadoTexto}_${new Date().getTime()}.pdf`);
         }
 
         // ==========================================
         // EXPORTACIÓN A EXCEL NATIVO (.xlsx)
         // ==========================================
-        function exportarExcel() {
-            const listaFiltrada = listaEmpleadosGlobal.filter(emp => {
-                if(filtroActual === 'activos') return emp.activo === true;
-                if(filtroActual === 'inactivos') return emp.activo === false;
-                return true; 
-            });
-
-            if(listaFiltrada.length === 0) {
+        async function exportarExcel() {
+            const dataExportar = await obtenerDatosParaExportar();
+            if(!dataExportar || dataExportar.length === 0) {
                  mostrarError("No hay datos en la tabla para generar el archivo Excel.", "Tabla Vacía");
                  return;
             }
-            // 1. Preparamos los datos en una matriz (Array de Arrays)
+
             const datosParaExcel = [];
-            
-            // 2. Insertamos la cabecera real (Agregamos "Inicio Antigüedad")
             datosParaExcel.push([
                 "ID Lector", "Nombres", "Apellidos", "C.I.", "Sexo", "Celular", "Correo", 
                 "Cargo", "Sucursal", "Sección", "Turno", "Fecha Ingreso", "Inicio Antigüedad", "Contrato", 
                 "Salario Base", "Bono", "Estado", "Fecha Baja", "Motivo Baja", "Historial de Movimientos"
             ]);
 
-            // 3. Insertamos los datos fila por fila
-            listaFiltrada.forEach(emp => {
+            dataExportar.forEach(emp => {
                 datosParaExcel.push([
-                    emp.bio_id || '', 
-                    emp.nombres, 
-                    emp.apellidos, 
-                    emp.ci,
-                    emp.sexo || '', 
-                    emp.celular || '', 
-                    emp.correo || '',
-                    emp.cargo || '', 
-                    emp.sucursal_nombre || '', 
-                    emp.seccion_nombre || '',
-                    emp.turno_nombre || 'Sin Turno Asignado', // ⚡ EL NUEVO DATO AQUÍ
-                    emp.fecha_ingreso ? emp.fecha_ingreso.split('T')[0] : '',
-                    emp.fecha_antiguedad ? emp.fecha_antiguedad.split('T')[0] : '', // ⚡ AQUÍ ESTÁ EL DATO FALTANTE
-                    emp.tipo_contrato || '', 
-                    Number(emp.salario_base) || 0, 
-                    Number(emp.bono) || 0,
-                    emp.activo ? 'ACTIVO' : 'INACTIVO',
-                    emp.fecha_retiro ? emp.fecha_retiro.split('T')[0] : '',
-                    emp.motivo_retiro || '', 
-                    emp.historial_movimientos || ''
+                    emp.bio_id || '', emp.nombres, emp.apellidos, emp.ci, emp.sexo || '', emp.celular || '', emp.correo || '',
+                    emp.cargo || '', emp.sucursal_nombre || '', emp.seccion_nombre || '', emp.turno_nombre || 'Sin Turno Asignado', 
+                    emp.fecha_ingreso ? emp.fecha_ingreso.split('T')[0] : '', emp.fecha_antiguedad ? emp.fecha_antiguedad.split('T')[0] : '', 
+                    emp.tipo_contrato || '', Number(emp.salario_base) || 0, Number(emp.bono) || 0,
+                    emp.activo ? 'ACTIVO' : 'INACTIVO', emp.fecha_retiro ? emp.fecha_retiro.split('T')[0] : '',
+                    emp.motivo_retiro || '', emp.historial_movimientos || ''
                 ]);
             });
 
-            // 4. Creamos el Libro de Trabajo (Workbook) y la Hoja (Worksheet)
             const wb = XLSX.utils.book_new();
             const ws = XLSX.utils.aoa_to_sheet(datosParaExcel);
 
-            // Ajustamos el ancho de las columnas (Añadimos un espacio más para la nueva fecha)
             const anchos = [
                 {wch: 10}, {wch: 20}, {wch: 20}, {wch: 15}, {wch: 12}, {wch: 15}, {wch: 25},
-                {wch: 20}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 18}, {wch: 15}, {wch: 12},  // <- Agregado {wch: 18}
+                {wch: 20}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 18}, {wch: 15}, {wch: 12}, 
                 {wch: 10}, {wch: 10}, {wch: 15}, {wch: 30}, {wch: 50}
             ];
             ws['!cols'] = anchos;
 
-            // 5. Añadimos la hoja al libro
             XLSX.utils.book_append_sheet(wb, ws, "Planilla_Personal");
-
-            // 6. Generamos y descargamos el archivo .xlsx nativo
-            const nombreArchivo = `Planilla_${filtroActual.toUpperCase()}_${new Date().getTime()}.xlsx`;
-            XLSX.writeFile(wb, nombreArchivo);
+            XLSX.writeFile(wb, `Planilla_${filtroActual.toUpperCase()}_${new Date().getTime()}.xlsx`);
         }
 
         // ==========================================
