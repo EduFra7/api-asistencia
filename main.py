@@ -1784,75 +1784,223 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     try:
-        # ⚡ LIMPIEZA PEREZOSA + EVOLUCIÓN HISTÓRICA
+        import calendar
+        from datetime import date
+
+        # 1. LIMPIEZA PEREZOSA (Revisa si hay días trancados)
         cur.execute(f"SELECT fecha, estado, horas_trabajadas FROM {schema}.asistencia_diaria WHERE empleado_id = %s AND EXTRACT(YEAR FROM fecha) = %s AND EXTRACT(MONTH FROM fecha) = %s", (empleado_id, anio, mes))
         dias_check = cur.fetchall()
         hoy_srv = date.today()
         
         for dc in dias_check:
-            # 1. Detectar días que se quedaron trancados en "Trabajando" de ayer o antes
             congelado = dc["estado"] in ["Trabajando", "Pendiente"] and dc["fecha"] < hoy_srv
-            
-            # 2. Detectar días viejos (antes de la actualización) que no tienen sus horas calculadas
             viejo_sin_horas = dc["estado"] not in ["Falta", "Pendiente"] and float(dc["horas_trabajadas"] or 0) == 0.0
-            
-            # Si cumple cualquiera de los dos, forzamos a que el cerebro actual recalcule todo ese día
             if congelado or viejo_sin_horas:
                 procesar_asistencia_dia(schema, empleado_id, dc["fecha"])
 
-        # Ahora sí, extraemos los datos limpios y reales
+        # 2. CARGAR TODA LA DATA DEL MES A LA MEMORIA DE PYTHON
         cur.execute(f"""
-            SELECT * FROM {schema}.asistencia_diaria 
-            WHERE empleado_id = %s AND EXTRACT(YEAR FROM fecha) = %s AND EXTRACT(MONTH FROM fecha) = %s 
-            ORDER BY fecha ASC
-        """, (empleado_id, anio, mes))
-        dias_procesados = cur.fetchall()
+            SELECT e.fecha_ingreso, s.ciudad as sucursal_ciudad, t.* FROM {schema}.empleados e
+            LEFT JOIN {schema}.sucursales s ON e.sucursal_id = s.id
+            LEFT JOIN {schema}.turnos t ON e.turno_id = t.id
+            WHERE e.id = %s
+        """, (empleado_id,))
+        emp_data = cur.fetchone()
 
-        for dia in dias_procesados:
-            dia["fecha"] = str(dia["fecha"]) if dia.get("fecha") else None
-            dia["hora_entrada"] = str(dia["hora_entrada"]) if dia.get("hora_entrada") else None
-            dia["hora_inicio_almuerzo"] = str(dia["hora_inicio_almuerzo"]) if dia.get("hora_inicio_almuerzo") else None
-            dia["hora_fin_almuerzo"] = str(dia["hora_fin_almuerzo"]) if dia.get("hora_fin_almuerzo") else None
-            dia["hora_salida"] = str(dia["hora_salida"]) if dia.get("hora_salida") else None
-            dia["horas_trabajadas"] = float(dia["horas_trabajadas"] or 0)
-            dia["horas_extras"] = float(dia.get("horas_extras") or 0)
-            dia["deuda_generada_bs"] = float(dia["deuda_generada_bs"] or 0)
-            dia["modificado_manualmente"] = bool(dia.get("modificado_manualmente"))
-            dia["observaciones"] = dia.get("observaciones") or ""
+        cur.execute(f"SELECT * FROM {schema}.asistencia_diaria WHERE empleado_id = %s AND EXTRACT(YEAR FROM fecha) = %s AND EXTRACT(MONTH FROM fecha) = %s", (empleado_id, anio, mes))
+        asistencia_raw = {str(d["fecha"]): d for d in cur.fetchall()}
 
         cur.execute(f"""
-            SELECT COUNT(id) as dias_trabajados, SUM(horas_trabajadas) as total_horas, 
-                   SUM(minutos_retraso_entrada + minutos_exceso_almuerzo) as retraso_total_min, 
-                   SUM(deuda_generada_bs) as deuda_total 
-            FROM {schema}.asistencia_diaria 
-            WHERE empleado_id = %s AND EXTRACT(YEAR FROM fecha) = %s AND EXTRACT(MONTH FROM fecha) = %s
-        """, (empleado_id, anio, mes))
-        kpis_raw = cur.fetchone()
-        
-        kpis = {
-            "dias_trabajados": kpis_raw["dias_trabajados"] if kpis_raw and kpis_raw["dias_trabajados"] else 0,
-            "total_horas": round(float(kpis_raw["total_horas"] or 0), 2) if kpis_raw else 0.0,
-            "retraso_total_min": int(kpis_raw["retraso_total_min"] or 0) if kpis_raw else 0,
-            "deuda_total": float(kpis_raw["deuda_total"] or 0) if kpis_raw else 0.0
-        }
-
-        cur.execute(f"SELECT t.dias FROM {schema}.empleados e LEFT JOIN {schema}.turnos t ON e.turno_id = t.id WHERE e.id = %s", (empleado_id,))
-        turno_data = cur.fetchone()
-        dias_laborales = turno_data["dias"] if turno_data and turno_data.get("dias") else {}
-
-        cur.execute(f"""
-            SELECT tipo, fecha_inicio, fecha_fin, estado, motivo, requiere_reposicion, horas_totales
-            FROM {schema}.ausencias 
+            SELECT * FROM {schema}.ausencias 
             WHERE empleado_id = %s AND eliminado = FALSE AND estado = 'aprobado'
             AND ((EXTRACT(YEAR FROM fecha_inicio) = %s AND EXTRACT(MONTH FROM fecha_inicio) = %s)
-                 OR (EXTRACT(YEAR FROM fecha_fin) = %s AND EXTRACT(MONTH FROM fecha_fin) = %s))
-        """, (empleado_id, anio, mes, anio, mes))
-        ausencias = cur.fetchall()
-        for a in ausencias:
-            a["fecha_inicio"] = str(a["fecha_inicio"])
-            a["fecha_fin"] = str(a["fecha_fin"])
+                 OR (EXTRACT(YEAR FROM fecha_fin) = %s AND EXTRACT(MONTH FROM fecha_fin) = %s)
+                 OR (fecha_inicio <= %s AND fecha_fin >= %s))
+        """, (empleado_id, anio, mes, anio, mes, f"{anio}-{mes}-31", f"{anio}-{mes}-01"))
+        ausencias_raw = cur.fetchall()
 
-        return {"dias": dias_procesados, "kpis": kpis, "dias_laborales": dias_laborales, "ausencias": ausencias}
+        cur.execute(f"SELECT * FROM {schema}.feriados WHERE eliminado = FALSE")
+        feriados_dict = {}
+        for f in cur.fetchall():
+            f_date = str(f['fecha'])
+            f_md = f_date[5:]
+            if f.get('recurrente'): feriados_dict[f_md] = f
+            else: feriados_dict[f_date] = f
+
+        # 3. 🧠 MOTOR MATEMÁTICO DE RENDERIZADO (El servidor arma el UI)
+        _, total_dias = calendar.monthrange(anio, mes)
+        primer_dia_semana = date(anio, mes, 1).weekday()
+        vacios_inicio = primer_dia_semana
+        
+        horas_turno_base = 0.0
+        paga_extras = False
+        dias_laborales_json = {}
+        es_medio_tiempo_fines = False
+        
+        if emp_data and emp_data.get('hora_ingreso') and emp_data.get('hora_salida'):
+            import json
+            raw_dias = emp_data.get('dias', '{}')
+            try: dias_laborales_json = json.loads(raw_dias) if isinstance(raw_dias, str) else raw_dias
+            except: dias_laborales_json = {}
+            
+            paga_extras = emp_data.get('horas_extras', False)
+            es_medio_tiempo_fines = emp_data.get('medio_tiempo_fines', False)
+            
+            in_h, in_m = emp_data['hora_ingreso'].hour, emp_data['hora_ingreso'].minute
+            out_h, out_m = emp_data['hora_salida'].hour, emp_data['hora_salida'].minute
+            min_in = in_h * 60 + in_m
+            min_out = out_h * 60 + out_m
+            if min_out < min_in: min_out += 24 * 60
+            mins = min_out - min_in
+            if emp_data.get('almuerzo'): mins -= emp_data.get('almuerzo_min', 0)
+            horas_turno_base = round(mins / 60.0, 2)
+
+        sum_horas_esperadas = 0.0
+        sum_horas_trabajadas = 0.0
+        sum_horas_extras = 0.0
+        sum_horas_reponer = 0.0
+        dias_trabajados_count = 0
+        retraso_total_min = 0
+        deuda_total_bs = 0.0
+
+        mapa_dias = {0: 'L', 1: 'M', 2: 'X', 3: 'J', 4: 'V', 5: 'S', 6: 'D'}
+        dias_calendario = []
+        
+        for d in range(1, total_dias + 1):
+            fecha_loop = date(anio, mes, d)
+            fecha_str = f"{anio}-{mes:02d}-{d:02d}"
+            mes_dia_str = f"{mes:02d}-{d:02d}"
+            letra_dia = mapa_dias[fecha_loop.weekday()]
+            
+            datos_asistencia = asistencia_raw.get(fecha_str)
+            
+            obj_feriado = feriados_dict.get(fecha_str) or feriados_dict.get(mes_dia_str)
+            nombre_feriado = None
+            if obj_feriado:
+                alcance = str(obj_feriado.get('tipo', '')).lower()
+                ciudad_emp = str(emp_data.get('sucursal_ciudad', '')).lower() if emp_data else ''
+                if alcance == 'nacional' or alcance == ciudad_emp:
+                    nombre_feriado = obj_feriado['descripcion']
+
+            ausencia_activa = next((a for a in ausencias_raw if str(a['fecha_inicio']) <= fecha_str <= str(a['fecha_fin'])), None)
+            es_dia_laboral = bool(dias_laborales_json.get(letra_dia, False)) if dias_laborales_json else (letra_dia not in ['S', 'D'])
+
+            factor_dia = 0.5 if (es_dia_laboral and es_medio_tiempo_fines and letra_dia in ['S', 'D']) else 1.0
+            hrs_esperadas_hoy = horas_turno_base * factor_dia
+
+            if es_dia_laboral and fecha_loop <= hoy_srv and not nombre_feriado:
+                es_dia_libre_completo = ausencia_activa and (ausencia_activa['tipo'] == 'vacacion' or not ausencia_activa.get('hora_inicio'))
+                if not es_dia_libre_completo:
+                    hrs_para_sumar = hrs_esperadas_hoy
+                    if ausencia_activa and ausencia_activa.get('horas_totales'):
+                        hrs_para_sumar -= float(ausencia_activa['horas_totales'])
+                        if hrs_para_sumar < 0: hrs_para_sumar = 0
+                    sum_horas_esperadas += hrs_para_sumar
+
+            h_extras_hoy = 0.0
+            if datos_asistencia and float(datos_asistencia.get('horas_trabajadas') or 0) > 0:
+                sum_horas_trabajadas += float(datos_asistencia['horas_trabajadas'])
+                h_extras_hoy = float(datos_asistencia.get('horas_extras') or 0)
+                sum_horas_extras += h_extras_hoy
+                dias_trabajados_count += 1
+                retraso_total_min += int(datos_asistencia.get('minutos_retraso_entrada', 0))
+                deuda_total_bs += float(datos_asistencia.get('deuda_generada_bs', 0))
+
+            # DECISIÓN VISUAL EN EL BACKEND
+            tipo_dia = "laboral"
+            estado_asistencia = "Futuro"
+            permite_clic = True
+
+            if emp_data and emp_data.get('fecha_ingreso') and fecha_loop < emp_data['fecha_ingreso']:
+                tipo_dia = "previo_contrato"
+                permite_clic = False
+            elif nombre_feriado and not datos_asistencia:
+                tipo_dia = "feriado"
+                estado_asistencia = nombre_feriado
+                permite_clic = False
+            elif datos_asistencia and datos_asistencia.get('estado') != 'Pendiente':
+                tipo_dia = "laboral"
+                estado_asistencia = datos_asistencia['estado']
+            elif ausencia_activa:
+                tipo_dia = ausencia_activa['tipo']
+                estado_asistencia = ausencia_activa['tipo'].capitalize()
+            elif not es_dia_laboral:
+                tipo_dia = "descanso"
+                estado_asistencia = "Descanso"
+            elif fecha_loop < hoy_srv:
+                tipo_dia = "laboral"
+                estado_asistencia = "Falta"
+            else:
+                tipo_dia = "laboral"
+                estado_asistencia = "Pendiente"
+
+            # EMPAQUETAR DATOS PARA EL POPUP
+            datos_modal = {}
+            if permite_clic:
+                datos_modal = {
+                    "fecha": fecha_str,
+                    "estado": estado_asistencia,
+                    "horas_turno": hrs_esperadas_hoy,
+                    "horas_trabajadas": float(datos_asistencia['horas_trabajadas']) if datos_asistencia else 0.0,
+                    "horas_extras": h_extras_hoy,
+                    "minutos_retraso_entrada": int(datos_asistencia['minutos_retraso_entrada']) if datos_asistencia else 0,
+                    "deuda_generada_bs": float(datos_asistencia['deuda_generada_bs']) if datos_asistencia else 0.0,
+                    "hora_entrada": str(datos_asistencia['hora_entrada']) if datos_asistencia and datos_asistencia.get('hora_entrada') else None,
+                    "hora_inicio_almuerzo": str(datos_asistencia['hora_inicio_almuerzo']) if datos_asistencia and datos_asistencia.get('hora_inicio_almuerzo') else None,
+                    "hora_fin_almuerzo": str(datos_asistencia['hora_fin_almuerzo']) if datos_asistencia and datos_asistencia.get('hora_fin_almuerzo') else None,
+                    "hora_salida": str(datos_asistencia['hora_salida']) if datos_asistencia and datos_asistencia.get('hora_salida') else None,
+                    "modificado_manualmente": bool(datos_asistencia['modificado_manualmente']) if datos_asistencia else False,
+                    "observaciones": datos_asistencia['observaciones'] if datos_asistencia else ""
+                }
+                if ausencia_activa:
+                    datos_modal["ausencia_detalle"] = {
+                        "tipo": ausencia_activa["tipo"],
+                        "motivo": ausencia_activa.get("motivo", ""),
+                        "hora_inicio": str(ausencia_activa["hora_inicio"]) if ausencia_activa.get("hora_inicio") else None,
+                        "hora_fin": str(ausencia_activa["hora_fin"]) if ausencia_activa.get("hora_fin") else None,
+                        "horas_totales": float(ausencia_activa["horas_totales"] or 0),
+                        "requiere_reposicion": bool(ausencia_activa.get("requiere_reposicion"))
+                    }
+
+            dias_calendario.append({
+                "dia": d,
+                "fecha": fecha_str,
+                "tipo_dia": tipo_dia,
+                "estado_asistencia": estado_asistencia,
+                "horas_extras_hoy": h_extras_hoy,
+                "minutos_retraso": int(datos_asistencia['minutos_retraso_entrada']) if datos_asistencia else 0,
+                "permite_clic": permite_clic,
+                "tiene_permiso_parcial": bool(ausencia_activa) and tipo_dia == 'laboral',
+                "datos_modal": datos_modal
+            })
+
+        # 4. BOLSILLO (Cálculo Financiero)
+        for a in ausencias_raw:
+            if a.get('requiere_reposicion'):
+                sum_horas_reponer += float(a.get('horas_totales') or 0)
+                
+        saldo_neto = sum_horas_extras - sum_horas_reponer
+        
+        estado_bolsillo = "equilibrado"
+        if saldo_neto < 0: estado_bolsillo = "deuda"
+        elif saldo_neto > 0: estado_bolsillo = "superavit_pagable" if paga_extras else "superavit_no_pagable"
+
+        # 5. RETORNO ESTRUCTURADO Y LISTO
+        return {
+            "calendario": { "vacios_inicio": vacios_inicio, "dias": dias_calendario },
+            "kpis": {
+                "dias_trabajados": dias_trabajados_count,
+                "horas_trabajadas": round(sum_horas_trabajadas, 2),
+                "horas_esperadas": round(sum_horas_esperadas, 2),
+                "retraso_total_min": retraso_total_min,
+                "deuda_total_bs": round(deuda_total_bs, 2)
+            },
+            "bolsillo": {
+                "saldo_neto": round(saldo_neto, 2),
+                "horas_reponer": round(sum_horas_reponer, 2),
+                "estado": estado_bolsillo
+            }
+        }
     finally:
         cur.close()
         conn.close()

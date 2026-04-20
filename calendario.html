@@ -534,34 +534,27 @@
         }
 
         // 🛠️ TU FUNCIÓN ACTUALIZADA
+        
         async function cargarCalendario(turnoEmpleado) {
             if (!empleadoSeleccionadoId) return;
             const anio = fechaVisualizada.getFullYear();
             const mes = fechaVisualizada.getMonth() + 1;
             
-            const empleadoActual = listaEmpleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
-            
-            // ⚡ UX: Ponemos TODOS los KPIs a girar y en colores neutros mientras el servidor responde
+            // ⚡ UX: Ponemos TODOS los KPIs a girar
             document.getElementById('kpi-dias').innerHTML = '<i class="fas fa-spinner fa-spin text-gray-300"></i>';
             document.getElementById('kpi-horas').innerHTML = '<i class="fas fa-spinner fa-spin text-gray-300"></i>';
             document.getElementById('kpi-retraso').innerHTML = '<i class="fas fa-spinner fa-spin text-gray-300"></i>';
             document.getElementById('kpi-deuda').innerHTML = '<i class="fas fa-spinner fa-spin text-gray-300"></i>';
             
-            // Uniformamos la tarjeta de Balance de Tiempo (La nueva tarjeta)
             const kpiBalance = document.getElementById('kpi-horas-extra');
             const kpiDeudaH = document.getElementById('kpi-deuda-horas');
-            
             if(kpiBalance && kpiDeudaH) {
                 kpiBalance.innerHTML = '<i class="fas fa-spinner fa-spin text-gray-300"></i>';
                 kpiBalance.className = "text-lg md:text-2xl font-black text-gray-400 mt-1";
                 kpiDeudaH.innerHTML = 'Analizando...';
                 kpiDeudaH.className = "text-[10px] font-bold text-gray-400 uppercase mt-0.5";
-                
-                // Ponemos el ícono circular de la derecha en gris
                 const kpiIconoCompensacion = kpiBalance.parentElement.nextElementSibling;
-                if(kpiIconoCompensacion) {
-                    kpiIconoCompensacion.className = "w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-300";
-                }
+                if(kpiIconoCompensacion) kpiIconoCompensacion.className = "w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-300";
             }
             
             const cuadricula = document.getElementById('cuadriculaCalendario');
@@ -569,40 +562,66 @@
                 <div class="cal-header">Lun</div><div class="cal-header">Mar</div><div class="cal-header">Mié</div><div class="cal-header">Jue</div><div class="cal-header">Vie</div><div class="cal-header">Sáb</div><div class="cal-header">Dom</div>
                 <div class="col-span-7 p-10 flex flex-col items-center justify-center text-blue-500 bg-white">
                     <i class="fas fa-circle-notch fa-spin text-3xl mb-2"></i>
-                    <p class="text-xs font-bold text-gray-500">Analizando asistencia...</p>
+                    <p class="text-xs font-bold text-gray-500">Renderizando con Backend Inteligente...</p>
                 </div>
             `;
 
             try {
-                // 🌟 MAGIA: Antes de pedir la asistencia, aseguramos que el año tenga sus feriados
                 await verificarSincronizacionFeriados(anio);
 
-                const promesasDatos = new Array(
-                    fetch(`${API_URL}/empleados/${empleadoSeleccionadoId}/asistencia/${anio}/${mes}`, { headers: { 'Authorization': `Bearer ${token_api}` } }),
-                    fetch(`${API_URL}/empleados/${empleadoSeleccionadoId}/ausencias`, { headers: { 'Authorization': `Bearer ${token_api}` } })
-                );
-                
-                const res = await Promise.all(promesasDatos);
-                const dataAsistencia = await res.at(0).json();
-                const listaAusencias = await res.at(1).json(); 
+                // ⚡ ÚNICA PETICIÓN: El servidor nos trae el paquete UI completo
+                const res = await fetch(`${API_URL}/empleados/${empleadoSeleccionadoId}/asistencia/${anio}/${mes}`, { headers: { 'Authorization': `Bearer ${token_api}` } });
+                const dataMaster = await res.json();
 
-                document.getElementById('kpi-dias').textContent = dataAsistencia.kpis.dias_trabajados;
-                
-                // NOTA: kpi-horas, kpi-horas-extra y kpi-deuda-horas se reescriben al final de renderizarDias()
-                
-                document.getElementById('kpi-retraso').textContent = `${dataAsistencia.kpis.retraso_total_min} min de retraso total`;
-                document.getElementById('kpi-deuda').textContent = `Bs. ${Number(dataAsistencia.kpis.deuda_total).toFixed(2)}`;
+                // 1. PINTAR KPIs BÁSICOS
+                document.getElementById('kpi-dias').textContent = dataMaster.kpis.dias_trabajados;
+                document.getElementById('kpi-horas').textContent = `${dataMaster.kpis.horas_trabajadas.toFixed(2)} / ${dataMaster.kpis.horas_esperadas.toFixed(2)}`;
+                document.getElementById('kpi-retraso').textContent = `${dataMaster.kpis.retraso_total_min} min de retraso total`;
+                document.getElementById('kpi-deuda').textContent = `Bs. ${dataMaster.kpis.deuda_total_bs.toFixed(2)}`;
 
-                renderizarDias(anio, mes, dataAsistencia.dias, turnoEmpleado ? turnoEmpleado.dias : null, listaAusencias, empleadoActual);
+                // 2. PINTAR BOLSILLO DIRECTO DEL SERVIDOR
+                const saldo = dataMaster.bolsillo.saldo_neto;
+                const kpiIcono = kpiBalance.parentElement.nextElementSibling;
+
+                if (dataMaster.bolsillo.estado === 'deuda') {
+                    kpiBalance.innerHTML = `<i class="fas fa-exclamation-circle mr-1"></i>Debe ${Math.abs(saldo).toFixed(2)} Hrs`;
+                    kpiBalance.className = "text-lg md:text-2xl font-black text-red-600 mt-1";
+                    kpiDeudaH.innerHTML = `Compensación pendiente`;
+                    kpiDeudaH.className = "text-[10px] font-bold text-red-400 uppercase";
+                    kpiIcono.className = "w-8 h-8 md:w-10 md:h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600";
+                } else if (dataMaster.bolsillo.estado === 'equilibrado') {
+                    kpiBalance.innerHTML = `0.00 <span class="text-xs font-normal text-gray-400">Hrs</span>`;
+                    kpiBalance.className = "text-lg md:text-2xl font-black text-slate-400 mt-1";
+                    kpiDeudaH.innerHTML = `Jornada Equilibrada`;
+                    kpiDeudaH.className = "text-[10px] font-bold text-slate-400 uppercase";
+                    kpiIcono.className = "w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400";
+                } else if (dataMaster.bolsillo.estado === 'superavit_pagable') {
+                    kpiBalance.innerHTML = `<i class="fas fa-plus-circle mr-1"></i>${saldo.toFixed(2)} <span class="text-xs font-normal">Hrs</span>`;
+                    kpiBalance.className = "text-lg md:text-2xl font-black text-green-600 mt-1";
+                    kpiDeudaH.innerHTML = `Horas Extra a Pagar`;
+                    kpiDeudaH.className = "text-[10px] font-bold text-green-600 uppercase";
+                    kpiIcono.className = "w-8 h-8 md:w-10 md:h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600";
+                } else {
+                    kpiBalance.innerHTML = `0.00 <span class="text-xs font-normal text-gray-400">Hrs</span>`;
+                    kpiBalance.className = "text-lg md:text-2xl font-black text-slate-400 mt-1";
+                    kpiDeudaH.innerHTML = `+${saldo.toFixed(2)} Hrs no remunerables`;
+                    kpiDeudaH.className = "text-[10px] font-bold text-yellow-600 uppercase";
+                    kpiIcono.className = "w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400";
+                }
+
+                // 3. PINTAR EL CALENDARIO (Frontend Tonto)
+                renderizarDiasInteligente(anio, mes, dataMaster.calendario);
+                
             } catch (e) { 
                 console.error("Error asistencia", e); 
                 cuadricula.innerHTML = '<div class="col-span-7 p-10 text-center text-red-500 font-bold">Error al cargar datos del servidor</div>';
             }
         }
 
-        function renderizarDias(anio, mes, diasBD, diasLaboralesJSON, ausencias, empleadoActual) {
-            const nombresMeses = new Array("Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre");
-            document.getElementById('mesAnioTexto').textContent = `${nombresMeses.at(mes - 1)} ${anio}`;
+        // ⚡ LA NUEVA VERSIÓN ULTRA LIGERA: Sin matemáticas, solo pinta CSS
+        function renderizarDiasInteligente(anio, mes, calData) {
+            const nombresMeses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+            document.getElementById('mesAnioTexto').textContent = `${nombresMeses[mes - 1]} ${anio}`;
             
             const mesFormateado = String(mes).padStart(2, '0');
             if (document.getElementById('selectorMesRapido')) document.getElementById('selectorMesRapido').value = `${anio}-${mesFormateado}`;
@@ -610,209 +629,59 @@
             const cuadricula = document.getElementById('cuadriculaCalendario');
             cuadricula.innerHTML = '<div class="cal-header">Lun</div><div class="cal-header">Mar</div><div class="cal-header">Mié</div><div class="cal-header">Jue</div><div class="cal-header">Vie</div><div class="cal-header">Sáb</div><div class="cal-header">Dom</div>';
 
-            const primerDia = new Date(anio, mes - 1, 1).getDay();
-            const totalDias = new Date(anio, mes, 0).getDate();
-            let vacios = primerDia === 0 ? 6 : primerDia - 1;
+            for(let i=0; i < calData.vacios_inicio; i++) cuadricula.innerHTML += '<div class="cal-day empty"></div>';
 
-            for(let i=0; i<vacios; i++) cuadricula.innerHTML += '<div class="cal-day empty"></div>';
-
-            const mapaDatos = new Map();
-            if (diasBD && Array.isArray(diasBD)) diasBD.forEach(d => mapaDatos.set(d.fecha, d));
-
-            const mapaDiasLetras = new Map();
-            mapaDiasLetras.set(1, 'L'); mapaDiasLetras.set(2, 'M'); mapaDiasLetras.set(3, 'X');
-            mapaDiasLetras.set(4, 'J'); mapaDiasLetras.set(5, 'V'); mapaDiasLetras.set(6, 'S'); mapaDiasLetras.set(0, 'D');
-
-            const hoy = new Date(); hoy.setHours(0,0,0,0);
-            
-            let fechaIngreso = empleadoActual && empleadoActual.fecha_ingreso ? new Date(empleadoActual.fecha_ingreso + 'T00:00:00') : null;
-            if (fechaIngreso) fechaIngreso.setHours(0,0,0,0);
-
-            // ⚡ Preparar variables del Turno
-            const turnoEmpleado = turnosGlobal.find(t => String(t.id) === String(empleadoActual.turno_id));
-            let horasTurnoBase = 0;
-            let permiteExtras = false;
-            
-            if (turnoEmpleado && turnoEmpleado.hora_ingreso && turnoEmpleado.hora_salida) {
-                permiteExtras = turnoEmpleado.horas_extras || false;
-                let [inH, inM] = turnoEmpleado.hora_ingreso.split(':').map(Number);
-                let [outH, outM] = turnoEmpleado.hora_salida.split(':').map(Number);
-                let minIn = inH * 60 + inM;
-                let minOut = outH * 60 + outM;
-                if (minOut < minIn) minOut += 24 * 60;
-                let mins = minOut - minIn;
-                if (turnoEmpleado.almuerzo) mins -= (turnoEmpleado.almuerzo_min || 0);
-                horasTurnoBase = Number((mins / 60).toFixed(2));
-            }
-
-            // ⚡ Contadores del Mes
-            let sumHorasEsperadas = 0;
-            let sumHorasTrabajadas = 0;
-            let sumHorasExtras = 0;
-
-            for(let d=1; d<=totalDias; d++) {
-                const fechaActualLoop = new Date(anio, mes - 1, d);
-                const fechaStr = `${anio}-${mesFormateado}-${String(d).padStart(2, '0')}`;
-                const mesDiaStr = `${mesFormateado}-${String(d).padStart(2, '0')}`; 
-                
-                const letraDia = mapaDiasLetras.get(fechaActualLoop.getDay());
-                const datos = mapaDatos.get(fechaStr);
-                
-                let ausenciaActiva = ausencias ? ausencias.find(a => a.estado === 'aprobado' && fechaStr >= String(a.fecha_inicio).substring(0,10) && fechaStr <= String(a.fecha_fin).substring(0,10)) : null;
-
-                let objFeriado = feriadosBolivia.get(fechaStr) || feriadosBolivia.get(mesDiaStr);
-                let nombreFeriado = null;
-                if (objFeriado) {
-                    const alcance = String(objFeriado.tipo).toLowerCase();
-                    if (alcance === 'nacional' || alcance === (empleadoActual.sucursal_ciudad || '').toLowerCase()) nombreFeriado = objFeriado.descripcion;
-                }
-
-                let esDiaLaboral = false;
-                let diasTurno = typeof diasLaboralesJSON === 'string' ? JSON.parse(diasLaboralesJSON || "{}") : diasLaboralesJSON;
-                if (diasTurno && Object.keys(diasTurno).length > 0) esDiaLaboral = String(diasTurno[letraDia]).toLowerCase() === 'true';
-                else esDiaLaboral = (letraDia !== 'S' && letraDia !== 'D');
-
-                // Cálculo del día
-                let factorDia = (esDiaLaboral && turnoEmpleado && turnoEmpleado.medio_tiempo_fines && (letraDia === 'S' || letraDia === 'D')) ? 0.5 : 1.0;
-                let hrsEsperadasHoy = horasTurnoBase * factorDia;
-                let hExtrasHoy = 0;
-
-                // Sumamos la cuota si es laboral y no es feriado/vacación
-                if (esDiaLaboral && fechaActualLoop <= hoy && !nombreFeriado) {
-                    let esDiaLibreCompleto = ausenciaActiva && (ausenciaActiva.tipo === 'vacacion' || !ausenciaActiva.hora_inicio);
-                    if (!esDiaLibreCompleto) {
-                        let hrsParaSumar = hrsEsperadasHoy;
-                        if (ausenciaActiva && ausenciaActiva.horas_totales) {
-                            hrsParaSumar -= Number(ausenciaActiva.horas_totales);
-                            if (hrsParaSumar < 0) hrsParaSumar = 0;
-                        }
-                        sumHorasEsperadas += hrsParaSumar;
-                    }
-                }
-
-                if (datos && datos.horas_trabajadas > 0) {
-                    sumHorasTrabajadas += datos.horas_trabajadas;
-                    // El Backend ahora calcula las horas extras reales en datos.horas_extras,
-                    // pero mantenemos tu fallback frontend por seguridad.
-                    hExtrasHoy = datos.horas_extras ? parseFloat(datos.horas_extras) : 0;
-                    sumHorasExtras += hExtrasHoy;
-                }
-
+            calData.dias.forEach(d => {
                 let clases = "estado-futuro";
-                let htmlInner = `<span class="text-xs font-bold text-gray-700">${d}</span>`;
+                let htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-2 left-2">${d.dia}</span>`;
                 
-                let datosClick = datos ? Object.assign({}, datos) : { fecha: fechaStr, estado: 'Pendiente' };
-                datosClick.horas_turno = hrsEsperadasHoy;
-                datosClick.horas_extras = hExtrasHoy;
-
-                let permiteClic = true;
-
-                if (fechaIngreso && fechaActualLoop < fechaIngreso) {
-                    clases = "bg-gray-100 opacity-50"; htmlInner += `<p class="text-[10px] text-gray-400 mt-2 text-center leading-tight">Previo a contrato</p>`; permiteClic = false;
-                } else if (nombreFeriado && !datos) {
-                    clases = "bg-purple-50 text-center justify-center relative"; htmlInner = `<span class="text-xs font-bold text-purple-900 absolute top-1 md:top-2 left-1 md:left-2">${d}</span><i class="fas fa-flag text-xl md:text-2xl text-purple-300 mb-1"></i><p class="text-[10px] md:text-[11px] text-purple-700 font-bold uppercase mt-1 leading-tight">${nombreFeriado}</p>`; permiteClic = false;
-                } else if (datos && datos.estado && datos.estado !== 'Pendiente') {
-                    let ic = "", l = "", cIc = "", cTx = "";
-                    if(datos.estado === 'Puntual') { clases = "estado-puntual text-center justify-center relative"; ic = "fa-check-circle"; cIc = "text-green-500"; l = "Puntual"; cTx = "text-green-700"; }
-                    else if(datos.estado === 'Tarde') { clases = "estado-tarde text-center justify-center relative"; ic = "fa-clock"; cIc = "text-orange-500"; l = "Tarde"; cTx = "text-orange-700"; }
-                    else if(datos.estado === 'Trabajando') { clases = "bg-blue-50/50 text-center justify-center relative border-b-4 border-blue-400"; ic = "fa-user-clock animate-pulse"; cIc = "text-blue-500"; l = "En Curso"; cTx = "text-blue-700"; }
-                    else if(datos.estado === 'Incompleto') { clases = "bg-yellow-50 text-center justify-center relative border-b-4 border-yellow-400"; ic = "fa-exclamation-triangle"; cIc = "text-yellow-500"; l = "Incompleto"; cTx = "text-yellow-700"; }
-                    else if(datos.estado === 'Falta') { clases = "estado-falta text-center justify-center relative"; ic = "fa-times-circle"; cIc = "text-red-500"; l = "Falta"; cTx = "text-red-700"; }
-                    else if(datos.estado === 'Descanso') { clases = "estado-inhabiles text-center justify-center relative bg-gray-100/40 hover:bg-blue-50/50"; ic = "fa-bed opacity-60"; cIc = "text-gray-300"; l = "Descanso"; cTx = "text-gray-400"; }
+                if (d.tipo_dia === 'previo_contrato') {
+                    clases = "bg-gray-100 opacity-50"; 
+                    htmlInner = `<span class="text-xs font-bold text-gray-700">${d.dia}</span><p class="text-[10px] text-gray-400 mt-2 text-center leading-tight">Previo a contrato</p>`;
+                } 
+                else if (d.tipo_dia === 'feriado') {
+                    clases = "bg-purple-50 text-center justify-center relative"; 
+                    htmlInner += `<i class="fas fa-flag text-xl md:text-2xl text-purple-300 mb-1"></i><p class="text-[10px] md:text-[11px] text-purple-700 font-bold uppercase mt-1 leading-tight">${d.estado_asistencia}</p>`;
+                } 
+                else if (d.tipo_dia === 'descanso') {
+                    clases = "estado-inhabiles text-center justify-center relative bg-gray-100/40 hover:bg-blue-50/50"; 
+                    htmlInner += `<i class="fas fa-bed text-2xl md:text-3xl text-gray-300 opacity-60 mb-1"></i><p class="text-[10px] text-gray-400 font-bold uppercase mt-1">Descanso</p>`;
+                } 
+                else if (d.tipo_dia === 'vacacion') {
+                    clases = "estado-vacacion text-center justify-center relative";
+                    htmlInner += `<i class="fas fa-umbrella-beach text-blue-500 text-2xl md:text-3xl opacity-40 mb-1"></i><p class="text-[10px] md:text-xs text-blue-700 font-bold uppercase mt-1">Vacación</p>`;
+                }
+                else if (d.tipo_dia === 'permiso') {
+                    clases = "estado-permiso text-center justify-center relative";
+                    htmlInner += `<i class="fas fa-user-md text-yellow-500 text-2xl md:text-3xl opacity-40 mb-1"></i><p class="text-[10px] md:text-xs text-yellow-700 font-bold uppercase mt-1">Permiso</p>`;
+                }
+                else {
+                    let ic = "", cIc = "", cTx = "";
+                    if(d.estado_asistencia === 'Puntual') { clases = "estado-puntual text-center justify-center relative"; ic = "fa-check-circle"; cIc = "text-green-500"; cTx = "text-green-700"; }
+                    else if(d.estado_asistencia === 'Tarde') { clases = "estado-tarde text-center justify-center relative"; ic = "fa-clock"; cIc = "text-orange-500"; cTx = "text-orange-700"; }
+                    else if(d.estado_asistencia === 'En Curso' || d.estado_asistencia === 'Trabajando') { clases = "bg-blue-50/50 text-center justify-center relative border-b-4 border-blue-400"; ic = "fa-user-clock animate-pulse"; cIc = "text-blue-500"; cTx = "text-blue-700"; d.estado_asistencia = "En Curso"; }
+                    else if(d.estado_asistencia === 'Incompleto') { clases = "bg-yellow-50 text-center justify-center relative border-b-4 border-yellow-400"; ic = "fa-exclamation-triangle"; cIc = "text-yellow-500"; cTx = "text-yellow-700"; }
+                    else if(d.estado_asistencia === 'Falta') { clases = "estado-falta text-center justify-center relative"; ic = "fa-times-circle"; cIc = "text-red-500"; cTx = "text-red-700"; }
+                    else if(d.estado_asistencia === 'Pendiente') { htmlInner = `<span class="text-xs font-bold text-gray-700">${d.dia}</span>`; }
                     
-                    htmlInner = `<span class="text-xs font-bold text-gray-700 absolute top-2 left-2">${d}</span>`;
-                    
-                    if (ausenciaActiva) {
-                        htmlInner += `
-                        <div class="absolute top-1 right-1 text-orange-600 bg-orange-50 border border-orange-200 rounded-full w-6 h-6 flex items-center justify-center shadow-sm" title="Jornada con Permiso Parcial">
-                            <i class="fas fa-file-medical text-[10px]"></i>
-                        </div>`;
-                        datosClick.ausencia_detalle = ausenciaActiva; 
+                    if (d.tiene_permiso_parcial) {
+                        htmlInner += `<div class="absolute top-1 right-1 text-orange-600 bg-orange-50 border border-orange-200 rounded-full w-6 h-6 flex items-center justify-center shadow-sm" title="Permiso Parcial"><i class="fas fa-file-medical text-[10px]"></i></div>`;
                     }
 
-                    if (ic) htmlInner += `<i class="fas ${ic} text-2xl md:text-3xl opacity-50 mb-1 ${cIc}"></i><p class="text-[10px] md:text-xs ${cTx} font-bold uppercase mt-1">${l}</p>`;
-                    if (datos.estado === 'Tarde') htmlInner += `<p class="text-[9px] text-orange-600 font-bold">-${datos.minutos_retraso_entrada}m</p>`;
-                    if (hExtrasHoy > 0) htmlInner += `<p class="text-[9px] text-green-600 font-bold bg-green-100 px-1 rounded absolute bottom-1">+${hExtrasHoy.toFixed(2)}H</p>`;
-                } else if (ausenciaActiva) {
-                    clases = ausenciaActiva.tipo === 'vacacion' ? "estado-vacacion text-center justify-center relative" : "estado-permiso text-center justify-center relative";
-                    htmlInner += `<i class="fas ${ausenciaActiva.tipo === 'vacacion' ? 'fa-umbrella-beach text-blue-500' : 'fa-user-md text-yellow-500'} text-2xl md:text-3xl opacity-40 mb-1"></i><p class="text-[10px] md:text-xs ${ausenciaActiva.tipo === 'vacacion' ? 'text-blue-700' : 'text-yellow-700'} font-bold uppercase mt-1">${ausenciaActiva.tipo}</p>`;
-                    datosClick.estado = ausenciaActiva.tipo; datosClick.ausencia_detalle = ausenciaActiva;
-                } else if (!esDiaLaboral) {
-                    clases = "estado-inhabiles text-center justify-center relative bg-gray-100/40 hover:bg-blue-50/50"; htmlInner += `<i class="fas fa-bed text-2xl md:text-3xl text-gray-300 opacity-60 mb-1"></i><p class="text-[10px] text-gray-400 font-bold uppercase mt-1">Descanso</p>`;
-                } else if (fechaActualLoop < hoy) {
-                    clases = "estado-falta text-center justify-center relative"; htmlInner += `<i class="fas fa-times-circle text-2xl md:text-3xl opacity-40 mb-1 text-red-500"></i><p class="text-[10px] md:text-xs text-red-700 font-bold uppercase mt-1">Falta</p>`;
-                    datosClick.estado = 'Falta';
+                    if (ic) htmlInner += `<i class="fas ${ic} text-2xl md:text-3xl opacity-50 mb-1 ${cIc}"></i><p class="text-[10px] md:text-xs ${cTx} font-bold uppercase mt-1">${d.estado_asistencia}</p>`;
+                    if (d.estado_asistencia === 'Tarde' && d.minutos_retraso > 0) htmlInner += `<p class="text-[9px] text-orange-600 font-bold">-${d.minutos_retraso}m</p>`;
+                    if (d.horas_extras_hoy > 0) htmlInner += `<p class="text-[9px] text-green-600 font-bold bg-green-100 px-1 rounded absolute bottom-1">+${d.horas_extras_hoy.toFixed(2)}H</p>`;
                 }
 
                 const div = document.createElement('div');
                 div.className = `cal-day ${clases}`; div.innerHTML = htmlInner;
                 
-                if (permiteClic) {
-                    div.onclick = () => verDetalleDia(datosClick);
+                if (d.permite_clic) {
+                    div.onclick = () => verDetalleDia(d.datos_modal);
                     div.classList.add("cursor-pointer", "hover:ring-2", "hover:ring-blue-400", "transition-all");
                 }
                 cuadricula.appendChild(div);
-            }
-
-            // Inyección de Horas Reales vs Turno
-            document.getElementById('kpi-horas').textContent = `${sumHorasTrabajadas.toFixed(2)} / ${sumHorasEsperadas.toFixed(2)}`;
-
-            // =====================================================================
-            // ⚡ MOTOR DE COMPENSACIÓN: BOLSILLOS SEPARADOS (NUEVO)
-            // =====================================================================
-            let sumHorasReponer = 0;
-            if (ausencias && Array.isArray(ausencias)) {
-                ausencias.forEach(a => { 
-                    const exigeReposicion = a.requiere_reposicion === true || String(a.requiere_reposicion).toLowerCase() === 'true' || a.requiere_reposicion === 1;
-                    if (exigeReposicion) sumHorasReponer += parseFloat(a.horas_totales || 0);
-                });
-            }
-
-            // 1. Calculamos el Saldo Neto (Banco de Horas)
-            // sumHorasExtras ya viene acumulado de los días trabajados en el bucle
-            const saldoNeto = sumHorasExtras - sumHorasReponer;
-            
-            // 2. Verificamos si este turno específico autoriza el PAGO de horas extras
-            const pagaExtras = turnoEmpleado && (turnoEmpleado.horas_extras === true || turnoEmpleado.horas_extras === 1 || String(turnoEmpleado.horas_extras).toLowerCase() === 'true');
-            
-            const kpiTextoPrincipal = document.getElementById('kpi-horas-extra');
-            const kpiTextoSecundario = document.getElementById('kpi-deuda-horas');
-            const kpiIconoCompensacion = kpiTextoPrincipal.parentElement.nextElementSibling; // El div que contiene el ícono
-
-            if (saldoNeto < 0) {
-                // ESTADO 1: DEUDA (El empleado aún debe horas)
-                kpiTextoPrincipal.innerHTML = `<i class="fas fa-exclamation-circle mr-1"></i>Debe ${Math.abs(saldoNeto).toFixed(2)} Hrs`;
-                kpiTextoPrincipal.className = "text-lg md:text-2xl font-black text-red-600 mt-1";
-                kpiTextoSecundario.innerHTML = `Compensación pendiente`;
-                kpiTextoSecundario.className = "text-[10px] font-bold text-red-400 uppercase";
-                kpiIconoCompensacion.className = "w-8 h-8 md:w-10 md:h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600";
-            } 
-            else if (saldoNeto === 0) {
-                // ESTADO 2: EQUILIBRADO PERFECTO (Pagó lo justo)
-                kpiTextoPrincipal.innerHTML = `0.00 <span class="text-xs font-normal text-gray-400">Hrs</span>`;
-                kpiTextoPrincipal.className = "text-lg md:text-2xl font-black text-slate-400 mt-1";
-                kpiTextoSecundario.innerHTML = `Jornada Equilibrada`;
-                kpiTextoSecundario.className = "text-[10px] font-bold text-slate-400 uppercase";
-                kpiIconoCompensacion.className = "w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400";
-            } 
-            else {
-                // ESTADO 3: SUPERÁVIT (Sobran horas después de pagar deudas)
-                if (pagaExtras) {
-                    // La empresa PAGA extras -> Se muestra en Verde como dinero a favor
-                    kpiTextoPrincipal.innerHTML = `<i class="fas fa-plus-circle mr-1"></i>${saldoNeto.toFixed(2)} <span class="text-xs font-normal">Hrs</span>`;
-                    kpiTextoPrincipal.className = "text-lg md:text-2xl font-black text-green-600 mt-1";
-                    kpiTextoSecundario.innerHTML = `Horas Extra a Pagar`;
-                    kpiTextoSecundario.className = "text-[10px] font-bold text-green-600 uppercase";
-                    kpiIconoCompensacion.className = "w-8 h-8 md:w-10 md:h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600";
-                } else {
-                    // La empresa NO PAGA extras -> Se pone en gris/amarillo. Saldo a favor no remunerable.
-                    kpiTextoPrincipal.innerHTML = `0.00 <span class="text-xs font-normal text-gray-400">Hrs</span>`;
-                    kpiTextoPrincipal.className = "text-lg md:text-2xl font-black text-slate-400 mt-1";
-                    kpiTextoSecundario.innerHTML = `+${saldoNeto.toFixed(2)} Hrs no remunerables`;
-                    kpiTextoSecundario.className = "text-[10px] font-bold text-yellow-600 uppercase";
-                    kpiIconoCompensacion.className = "w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400";
-                }
-            }
+            });
         }
 
         // 🧠 Función inteligente para detectar si una hora pertenece al día siguiente en turnos nocturnos
