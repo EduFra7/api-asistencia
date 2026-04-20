@@ -1948,11 +1948,22 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
             def format_ui_time(h_obj):
                 if not h_obj: return "--:--"
                 h_str = str(h_obj)[:5]
+                
+                # Detectamos si es turno nocturno
                 if emp_data and emp_data.get('hora_salida') and emp_data.get('hora_ingreso') and emp_data['hora_salida'] < emp_data['hora_ingreso']:
-                    if h_obj < emp_data['hora_ingreso']:
+                    from datetime import time
+                    
+                    # Frontera inteligente: Las 12:00 PM (Mediodía)
+                    # Si es menor a las 12:00, es la madrugada del DÍA SIGUIENTE
+                    if h_obj < time(12, 0):
                         d_sig = fecha_loop + timedelta(days=1)
                         txt_dia = f"{d_sig.day:02d} {meses_cortos[d_sig.month-1]}."
                         return f'<span class="text-[9px] text-blue-500 font-bold bg-blue-50 px-1 rounded mr-1" title="Día Siguiente">{txt_dia}</span>{h_str}'
+                    # Si es mayor a las 12:00, es la tarde/noche del DÍA ACTUAL
+                    else:
+                        txt_dia = f"{fecha_loop.day:02d} {meses_cortos[fecha_loop.month-1]}."
+                        return f'<span class="text-[9px] text-slate-500 font-bold bg-slate-100 border border-slate-200 px-1 rounded mr-1" title="Día Actual">{txt_dia}</span>{h_str}'
+                        
                 return h_str
 
             exige_almuerzo = emp_data.get('almuerzo', False) if emp_data else False
