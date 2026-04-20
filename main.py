@@ -2241,8 +2241,6 @@ async def editar_asistencia_manual(empleado_id: int, data: dict, request: Reques
         raise HTTPException(status_code=409, detail="Contraseña incorrecta. Edición denegada.")
 
     fecha = data.get("fecha")
-    
-    # ⚡ Recibimos los 4 posibles tiempos
     h_entrada = data.get("hora_entrada")
     h_salida = data.get("hora_salida")
     h_alm_in = data.get("hora_inicio_almuerzo")
@@ -2251,42 +2249,78 @@ async def editar_asistencia_manual(empleado_id: int, data: dict, request: Reques
     
     if not fecha: raise HTTPException(status_code=400, detail="Fecha requerida.")
     
+    from datetime import time, timedelta # ⚡ Aseguramos que timedelta esté disponible
+    
     conn = conectar_bd(schema)
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) # Usamos RealDictCursor para traer datos fácilmente
     try:
         device_id = "EDICIÓN-MANUAL"
         fecha_dt = datetime.strptime(fecha, "%Y-%m-%d").date()
         
-        cur.execute(f"SELECT bio_id FROM {schema}.empleados WHERE id = %s", (empleado_id,))
+        # ⚡ 1. TRAEMOS LA TOPOLOGÍA DEL TURNO PARA SABER SI ES NOCTURNO
+        cur.execute(f"""
+            SELECT e.bio_id, t.hora_ingreso, t.hora_salida 
+            FROM {schema}.empleados e
+            LEFT JOIN {schema}.turnos t ON e.turno_id = t.id
+            WHERE e.id = %s
+        """, (empleado_id,))
         emp_data = cur.fetchone()
-        bio_id = str(emp_data[0]) if emp_data and emp_data[0] else "S/N"
+        
+        bio_id = str(emp_data['bio_id']) if emp_data and emp_data['bio_id'] else "S/N"
+        t_ingreso = emp_data['hora_ingreso'] if emp_data else None
+        t_salida = emp_data['hora_salida'] if emp_data else None
+        
+        es_nocturno = False
+        if t_ingreso and t_salida and t_salida < t_ingreso:
+            es_nocturno = True
 
-        # 1. Limpiamos los marcajes viejos de ese día para evitar duplicados en el Motor
-        cur.execute(f"DELETE FROM {schema}.eventos_brutos WHERE item = %s AND DATE(fecha_hora) = %s", (bio_id, fecha_dt))
+        # ⚡ 2. LIMPIEZA INTELIGENTE (Respetando la ventana del turno)
+        if es_nocturno:
+            # Si es nocturno, limpiamos los eventos manuales desde las 12:00 PM de hoy hasta las 11:59 AM de mañana
+            inicio_ventana = f"{fecha} 12:00:00"
+            fin_ventana = f"{fecha_dt + timedelta(days=1)} 11:59:59"
+        else:
+            inicio_ventana = f"{fecha} 00:00:00"
+            fin_ventana = f"{fecha} 23:59:59"
 
-        # 2. Función auxiliar para inyectar marcajes limpios
+        cur.execute(f"""
+            DELETE FROM {schema}.eventos_brutos 
+            WHERE item = %s AND device_no = %s AND fecha_hora >= %s AND fecha_hora <= %s
+        """, (bio_id, device_id, inicio_ventana, fin_ventana))
+
+        # ⚡ 3. INYECTOR INTELIGENTE DE FECHAS (Detecta cruce de medianoche)
         def inyectar_marcaje(hora_str, accion, etiqueta):
             if hora_str:
-                fh = f"{fecha} {hora_str}:00"
+                h_obj = datetime.strptime(hora_str, "%H:%M").time()
+                fecha_asignada = fecha_dt
+                
+                # Si es turno nocturno y la hora es menor a las 12 del mediodía (Ej: 06:00 am)
+                # pertenece lógicamente al día siguiente.
+                if es_nocturno and h_obj < time(12, 0):
+                    fecha_asignada = fecha_dt + timedelta(days=1)
+                    
+                fh = f"{fecha_asignada} {hora_str}:00"
+                
                 cur.execute(f"""
                     INSERT INTO {schema}.eventos_brutos (device_no, item, action, fecha_hora, raw_data)
                     VALUES (%s, %s, %s, %s, %s)
                 """, (device_id, bio_id, accion, fh, psycopg2.extras.Json({"raw": etiqueta})))
 
-        # 3. ⚡ Inyectamos EXACTAMENTE lo que RRHH haya dejado en el formulario
+        # Inyectamos los 4 posibles marcajes
         inyectar_marcaje(h_entrada, '0', "MANUAL-IN")
         inyectar_marcaje(h_alm_in, '1', "MANUAL-LUNCH-OUT")
         inyectar_marcaje(h_alm_out, '0', "MANUAL-LUNCH-IN")
         inyectar_marcaje(h_salida, '1', "MANUAL-OUT")
         
-        # ⚡ DESBLOQUEAMOS EL DÍA TEMPORALMENTE PARA QUE EL MOTOR PUEDA REESCRIBIRLO
+        # Desbloqueamos temporalmente para permitir recálculo
         cur.execute(f"UPDATE {schema}.asistencia_diaria SET modificado_manualmente = FALSE WHERE empleado_id = %s AND fecha = %s", (empleado_id, fecha_dt))
         conn.commit()
 
-        # 4. 🧠 Despertamos al Cerebro para que lea la nueva historia
+        # 4. Despertamos al Cerebro para leer la nueva historia
         exito = procesar_asistencia_dia(schema, empleado_id, fecha_dt)
         
         if exito:
+            # Volvemos a sellar el día como "Modificado Manualmente" para que el ZKTeco no lo sobreescriba accidentalmente
             cur.execute(f"""
                 UPDATE {schema}.asistencia_diaria 
                 SET modificado_manualmente = TRUE, observaciones = %s
