@@ -862,45 +862,64 @@ def eliminar_seccion(seccion_id: int, usuario = Depends(verificar_token)):
 # ==============================================================================
 
 @app.get("/empleados")
-async def obtener_empleados(usuario = Depends(verificar_token)):
+async def obtener_empleados(
+    estado: str = "activos", 
+    q: str = "", 
+    sucursal_id: str = "", 
+    seccion_id: str = "", 
+    limite: int = 100,
+    usuario = Depends(verificar_token)
+):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        # ⚡ Traemos todos los datos (El Query está perfecto)
-        cur.execute(f"""
+        # 1. Base de la consulta
+        query = f"""
             SELECT e.*, 
-                   s.nombre as sucursal_nombre,
-                   s.ciudad as sucursal_ciudad,
+                   s.nombre as sucursal_nombre, s.ciudad as sucursal_ciudad,
                    sec.nombre as seccion_nombre,
-                   t.nombre as turno_nombre,
-                   t.hora_ingreso as turno_ingreso,
-                   t.hora_salida as turno_salida,
-                   t.almuerzo as turno_almuerzo,
-                   t.almuerzo_min as turno_almuerzo_min,
-                   (SELECT tipo 
-                    FROM {schema}.ausencias a 
-                    WHERE a.empleado_id = e.id 
-                      AND a.estado = 'aprobado' 
-                      AND a.eliminado = FALSE 
-                      AND CURRENT_DATE BETWEEN a.fecha_inicio AND a.fecha_fin 
-                    LIMIT 1) as estado_ausencia
+                   t.nombre as turno_nombre, t.hora_ingreso as turno_ingreso, t.hora_salida as turno_salida,
+                   (SELECT tipo FROM {schema}.ausencias a WHERE a.empleado_id = e.id AND a.estado = 'aprobado' AND a.eliminado = FALSE AND CURRENT_DATE BETWEEN a.fecha_inicio AND a.fecha_fin LIMIT 1) as estado_ausencia
             FROM {schema}.empleados e
             LEFT JOIN {schema}.sucursales s ON e.sucursal_id = s.id
             LEFT JOIN {schema}.secciones sec ON e.seccion_id = sec.id
             LEFT JOIN {schema}.turnos t ON e.turno_id = t.id
             WHERE e.eliminado = FALSE
-            ORDER BY e.id ASC
-        """)
+        """
+        parametros = []
+
+        # 2. Agregamos los filtros dinámicamente
+        if estado == "activos":
+            query += " AND e.activo = TRUE"
+        elif estado == "inactivos":
+            query += " AND e.activo = FALSE"
+            
+        if sucursal_id and sucursal_id.isdigit():
+            query += " AND e.sucursal_id = %s"
+            parametros.append(int(sucursal_id))
+            
+        if seccion_id and seccion_id.isdigit():
+            query += " AND e.seccion_id = %s"
+            parametros.append(int(seccion_id))
+
+        if q:
+            # ILIKE es la magia de PostgreSQL para buscar ignorando mayúsculas/minúsculas
+            query += " AND (e.nombres ILIKE %s OR e.apellidos ILIKE %s OR e.ci ILIKE %s)"
+            termino = f"%{q}%"
+            parametros.extend([termino, termino, termino])
+
+        # 3. Orden y límite de seguridad para no saturar la red
+        query += " ORDER BY e.nombres ASC LIMIT %s"
+        parametros.append(limite)
+
+        cur.execute(query, tuple(parametros))
         empleados = cur.fetchall()
         
-        # ⚡ CORRECCIÓN CRÍTICA: Formateo seguro para JSON
+        # 4. Formateo seguro para JSON
         for emp in empleados:
-            if emp.get("fecha_ingreso"): emp["fecha_ingreso"] = str(emp["fecha_ingreso"])
-            if emp.get("fecha_antiguedad"): emp["fecha_antiguedad"] = str(emp["fecha_antiguedad"])
-            if emp.get("fecha_retiro"): emp["fecha_retiro"] = str(emp["fecha_retiro"])
-            if emp.get("turno_ingreso"): emp["turno_ingreso"] = str(emp["turno_ingreso"])
-            if emp.get("turno_salida"): emp["turno_salida"] = str(emp["turno_salida"])
+            for campo in ["fecha_ingreso", "fecha_antiguedad", "fecha_retiro", "turno_ingreso", "turno_salida"]:
+                if emp.get(campo): emp[campo] = str(emp[campo])
             
         return empleados
     finally:
@@ -1785,7 +1804,7 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
 
     try:
         import calendar
-        from datetime import date
+        from datetime import date, timedelta
 
         # 1. LIMPIEZA PEREZOSA (Revisa si hay días trancados)
         cur.execute(f"SELECT fecha, estado, horas_trabajadas FROM {schema}.asistencia_diaria WHERE empleado_id = %s AND EXTRACT(YEAR FROM fecha) = %s AND EXTRACT(MONTH FROM fecha) = %s", (empleado_id, anio, mes))
@@ -1798,9 +1817,9 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
             if congelado or viejo_sin_horas:
                 procesar_asistencia_dia(schema, empleado_id, dc["fecha"])
 
-        # 2. CARGAR TODA LA DATA DEL MES A LA MEMORIA DE PYTHON
+        # 2. CARGAR DATA: Note el "t.nombre as turno_nombre"
         cur.execute(f"""
-            SELECT e.fecha_ingreso, s.ciudad as sucursal_ciudad, t.* FROM {schema}.empleados e
+            SELECT e.fecha_ingreso, s.ciudad as sucursal_ciudad, t.nombre as turno_nombre, t.* FROM {schema}.empleados e
             LEFT JOIN {schema}.sucursales s ON e.sucursal_id = s.id
             LEFT JOIN {schema}.turnos t ON e.turno_id = t.id
             WHERE e.id = %s
@@ -1810,10 +1829,7 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
         cur.execute(f"SELECT * FROM {schema}.asistencia_diaria WHERE empleado_id = %s AND EXTRACT(YEAR FROM fecha) = %s AND EXTRACT(MONTH FROM fecha) = %s", (empleado_id, anio, mes))
         asistencia_raw = {str(d["fecha"]): d for d in cur.fetchall()}
 
-        # ⚡ FIX: Calculamos los días exactos del mes (28, 30 o 31) para que PostgreSQL no se asuste
-        import calendar
         _, dias_del_mes = calendar.monthrange(anio, mes)
-
         cur.execute(f"""
             SELECT * FROM {schema}.ausencias 
             WHERE empleado_id = %s AND eliminado = FALSE AND estado = 'aprobado'
@@ -1821,7 +1837,6 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
                  OR (EXTRACT(YEAR FROM fecha_fin) = %s AND EXTRACT(MONTH FROM fecha_fin) = %s)
                  OR (fecha_inicio <= %s AND fecha_fin >= %s))
         """, (empleado_id, anio, mes, anio, mes, f"{anio}-{mes:02d}-{dias_del_mes:02d}", f"{anio}-{mes:02d}-01"))
-
         ausencias_raw = cur.fetchall()
 
         cur.execute(f"SELECT * FROM {schema}.feriados WHERE eliminado = FALSE")
@@ -1832,8 +1847,7 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
             if f.get('recurrente'): feriados_dict[f_md] = f
             else: feriados_dict[f_date] = f
 
-        # 3. 🧠 MOTOR MATEMÁTICO DE RENDERIZADO (El servidor arma el UI)
-        _, total_dias = calendar.monthrange(anio, mes)
+        # 3. 🧠 MOTOR MATEMÁTICO
         primer_dia_semana = date(anio, mes, 1).weekday()
         vacios_inicio = primer_dia_semana
         
@@ -1860,18 +1874,15 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
             if emp_data.get('almuerzo'): mins -= emp_data.get('almuerzo_min', 0)
             horas_turno_base = round(mins / 60.0, 2)
 
-        sum_horas_esperadas = 0.0
-        sum_horas_trabajadas = 0.0
-        sum_horas_extras = 0.0
-        sum_horas_reponer = 0.0
-        dias_trabajados_count = 0
-        retraso_total_min = 0
+        sum_horas_esperadas = sum_horas_trabajadas = sum_horas_extras = sum_horas_reponer = 0.0
+        dias_trabajados_count = retraso_total_min = 0
         deuda_total_bs = 0.0
 
         mapa_dias = {0: 'L', 1: 'M', 2: 'X', 3: 'J', 4: 'V', 5: 'S', 6: 'D'}
+        meses_cortos = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
         dias_calendario = []
         
-        for d in range(1, total_dias + 1):
+        for d in range(1, dias_del_mes + 1):
             fecha_loop = date(anio, mes, d)
             fecha_str = f"{anio}-{mes:02d}-{d:02d}"
             mes_dia_str = f"{mes:02d}-{d:02d}"
@@ -1884,8 +1895,7 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
             if obj_feriado:
                 alcance = str(obj_feriado.get('tipo', '')).lower()
                 ciudad_emp = str(emp_data.get('sucursal_ciudad', '')).lower() if emp_data else ''
-                if alcance == 'nacional' or alcance == ciudad_emp:
-                    nombre_feriado = obj_feriado['descripcion']
+                if alcance == 'nacional' or alcance == ciudad_emp: nombre_feriado = obj_feriado['descripcion']
 
             ausencia_activa = next((a for a in ausencias_raw if str(a['fecha_inicio']) <= fecha_str <= str(a['fecha_fin'])), None)
             es_dia_laboral = bool(dias_laborales_json.get(letra_dia, False)) if dias_laborales_json else (letra_dia not in ['S', 'D'])
@@ -1898,8 +1908,7 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
                 if not es_dia_libre_completo:
                     hrs_para_sumar = hrs_esperadas_hoy
                     if ausencia_activa and ausencia_activa.get('horas_totales'):
-                        hrs_para_sumar -= float(ausencia_activa['horas_totales'])
-                        if hrs_para_sumar < 0: hrs_para_sumar = 0
+                        hrs_para_sumar = max(0, hrs_para_sumar - float(ausencia_activa['horas_totales']))
                     sum_horas_esperadas += hrs_para_sumar
 
             h_extras_hoy = 0.0
@@ -1911,20 +1920,20 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
                 retraso_total_min += int(datos_asistencia.get('minutos_retraso_entrada', 0))
                 deuda_total_bs += float(datos_asistencia.get('deuda_generada_bs', 0))
 
-            # DECISIÓN VISUAL EN EL BACKEND
+            # ESTADOS VISUALES
             tipo_dia = "laboral"
-            estado_asistencia = "Futuro"
+            estado_asistencia = "Pendiente"
             permite_clic = True
 
             if emp_data and emp_data.get('fecha_ingreso') and fecha_loop < emp_data['fecha_ingreso']:
                 tipo_dia = "previo_contrato"
+                estado_asistencia = "Previo a Contrato"
                 permite_clic = False
             elif nombre_feriado and not datos_asistencia:
                 tipo_dia = "feriado"
                 estado_asistencia = nombre_feriado
                 permite_clic = False
             elif datos_asistencia and datos_asistencia.get('estado') != 'Pendiente':
-                tipo_dia = "laboral"
                 estado_asistencia = datos_asistencia['estado']
             elif ausencia_activa:
                 tipo_dia = ausencia_activa['tipo']
@@ -1933,13 +1942,25 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
                 tipo_dia = "descanso"
                 estado_asistencia = "Descanso"
             elif fecha_loop < hoy_srv:
-                tipo_dia = "laboral"
                 estado_asistencia = "Falta"
-            else:
-                tipo_dia = "laboral"
-                estado_asistencia = "Pendiente"
 
-            # EMPAQUETAR DATOS PARA EL POPUP
+            # ⚡ 4. EL BACKEND PREPARA EL UI PERFECTO PARA EL FRONTEND ⚡
+            def format_ui_time(h_obj):
+                if not h_obj: return "--:--"
+                h_str = str(h_obj)[:5]
+                if emp_data and emp_data.get('hora_salida') and emp_data.get('hora_ingreso') and emp_data['hora_salida'] < emp_data['hora_ingreso']:
+                    if h_obj < emp_data['hora_ingreso']:
+                        d_sig = fecha_loop + timedelta(days=1)
+                        txt_dia = f"{d_sig.day:02d} {meses_cortos[d_sig.month-1]}."
+                        return f'<span class="text-[9px] text-blue-500 font-bold bg-blue-50 px-1 rounded mr-1" title="Día Siguiente">{txt_dia}</span>{h_str}'
+                return h_str
+
+            exige_almuerzo = emp_data.get('almuerzo', False) if emp_data else False
+            if exige_almuerzo and ausencia_activa and ausencia_activa.get('hora_inicio') and emp_data.get('hora_inicio_almuerzo'):
+                # Si el permiso choca con el almuerzo, no exigimos llenar esas cajas.
+                if ausencia_activa['hora_fin'] >= emp_data['hora_inicio_almuerzo'] or ausencia_activa['hora_inicio'] <= emp_data['hora_fin_almuerzo']:
+                    exige_almuerzo = False
+
             datos_modal = {}
             if permite_clic:
                 datos_modal = {
@@ -1950,61 +1971,60 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
                     "horas_extras": h_extras_hoy,
                     "minutos_retraso_entrada": int(datos_asistencia['minutos_retraso_entrada']) if datos_asistencia else 0,
                     "deuda_generada_bs": float(datos_asistencia['deuda_generada_bs']) if datos_asistencia else 0.0,
-                    "hora_entrada": str(datos_asistencia['hora_entrada']) if datos_asistencia and datos_asistencia.get('hora_entrada') else None,
-                    "hora_inicio_almuerzo": str(datos_asistencia['hora_inicio_almuerzo']) if datos_asistencia and datos_asistencia.get('hora_inicio_almuerzo') else None,
-                    "hora_fin_almuerzo": str(datos_asistencia['hora_fin_almuerzo']) if datos_asistencia and datos_asistencia.get('hora_fin_almuerzo') else None,
-                    "hora_salida": str(datos_asistencia['hora_salida']) if datos_asistencia and datos_asistencia.get('hora_salida') else None,
                     "modificado_manualmente": bool(datos_asistencia['modificado_manualmente']) if datos_asistencia else False,
-                    "observaciones": datos_asistencia['observaciones'] if datos_asistencia else ""
+                    "observaciones": datos_asistencia['observaciones'] if datos_asistencia else "",
+                    
+                    # ⚡ Textos Visuales para el HTML
+                    "ui_entrada": format_ui_time(datos_asistencia.get('hora_entrada') if datos_asistencia else None),
+                    "ui_alm_in": format_ui_time(datos_asistencia.get('hora_inicio_almuerzo') if datos_asistencia else None),
+                    "ui_alm_out": format_ui_time(datos_asistencia.get('hora_fin_almuerzo') if datos_asistencia else None),
+                    "ui_salida": format_ui_time(datos_asistencia.get('hora_salida') if datos_asistencia else None),
+                    
+                    # ⚡ Datos Crudos para el Modal de Edición (SweetAlert)
+                    "exige_almuerzo_edicion": exige_almuerzo,
+                    "raw_entrada": str(datos_asistencia['hora_entrada'])[:5] if datos_asistencia and datos_asistencia.get('hora_entrada') else '',
+                    "raw_alm_in": str(datos_asistencia['hora_inicio_almuerzo'])[:5] if datos_asistencia and datos_asistencia.get('hora_inicio_almuerzo') else '',
+                    "raw_alm_out": str(datos_asistencia['hora_fin_almuerzo'])[:5] if datos_asistencia and datos_asistencia.get('hora_fin_almuerzo') else '',
+                    "raw_salida": str(datos_asistencia['hora_salida'])[:5] if datos_asistencia and datos_asistencia.get('hora_salida') else '',
                 }
                 if ausencia_activa:
                     datos_modal["ausencia_detalle"] = {
                         "tipo": ausencia_activa["tipo"],
                         "motivo": ausencia_activa.get("motivo", ""),
-                        "hora_inicio": str(ausencia_activa["hora_inicio"]) if ausencia_activa.get("hora_inicio") else None,
-                        "hora_fin": str(ausencia_activa["hora_fin"]) if ausencia_activa.get("hora_fin") else None,
+                        "hora_inicio": str(ausencia_activa["hora_inicio"])[:5] if ausencia_activa.get("hora_inicio") else None,
+                        "hora_fin": str(ausencia_activa["hora_fin"])[:5] if ausencia_activa.get("hora_fin") else None,
                         "horas_totales": float(ausencia_activa["horas_totales"] or 0),
                         "requiere_reposicion": bool(ausencia_activa.get("requiere_reposicion"))
                     }
 
             dias_calendario.append({
-                "dia": d,
-                "fecha": fecha_str,
-                "tipo_dia": tipo_dia,
-                "estado_asistencia": estado_asistencia,
-                "horas_extras_hoy": h_extras_hoy,
-                "minutos_retraso": int(datos_asistencia['minutos_retraso_entrada']) if datos_asistencia else 0,
-                "permite_clic": permite_clic,
-                "tiene_permiso_parcial": bool(ausencia_activa) and tipo_dia == 'laboral',
+                "dia": d, "fecha": fecha_str, "tipo_dia": tipo_dia, "estado_asistencia": estado_asistencia,
+                "horas_extras_hoy": h_extras_hoy, "minutos_retraso": int(datos_asistencia['minutos_retraso_entrada']) if datos_asistencia else 0,
+                "permite_clic": permite_clic, "tiene_permiso_parcial": bool(ausencia_activa) and tipo_dia == 'laboral',
                 "datos_modal": datos_modal
             })
 
-        # 4. BOLSILLO (Cálculo Financiero)
         for a in ausencias_raw:
-            if a.get('requiere_reposicion'):
-                sum_horas_reponer += float(a.get('horas_totales') or 0)
+            if a.get('requiere_reposicion'): sum_horas_reponer += float(a.get('horas_totales') or 0)
                 
         saldo_neto = sum_horas_extras - sum_horas_reponer
-        
-        estado_bolsillo = "equilibrado"
-        if saldo_neto < 0: estado_bolsillo = "deuda"
-        elif saldo_neto > 0: estado_bolsillo = "superavit_pagable" if paga_extras else "superavit_no_pagable"
+        estado_bolsillo = "deuda" if saldo_neto < 0 else ("superavit_pagable" if paga_extras and saldo_neto > 0 else ("superavit_no_pagable" if saldo_neto > 0 else "equilibrado"))
 
-        # 5. RETORNO ESTRUCTURADO Y LISTO
+        # ⚡ 5. PAQUETE JSON MAESTRO LISTO PARA SER PINTADO ⚡
         return {
+            "cabecera": {
+                "turno_nombre": emp_data.get('turno_nombre') or 'No asignado',
+                "turno_ingreso": str(emp_data['hora_ingreso'])[:5] if emp_data and emp_data.get('hora_ingreso') else '',
+                "turno_salida": str(emp_data['hora_salida'])[:5] if emp_data and emp_data.get('hora_salida') else '',
+                "turno_almuerzo_texto": f"Incluye {emp_data.get('almuerzo_min')}m Almuerzo" if emp_data and emp_data.get('almuerzo') else "Sin horario de almuerzo"
+            },
             "calendario": { "vacios_inicio": vacios_inicio, "dias": dias_calendario },
             "kpis": {
-                "dias_trabajados": dias_trabajados_count,
-                "horas_trabajadas": round(sum_horas_trabajadas, 2),
-                "horas_esperadas": round(sum_horas_esperadas, 2),
-                "retraso_total_min": retraso_total_min,
+                "dias_trabajados": dias_trabajados_count, "horas_trabajadas": round(sum_horas_trabajadas, 2),
+                "horas_esperadas": round(sum_horas_esperadas, 2), "retraso_total_min": retraso_total_min,
                 "deuda_total_bs": round(deuda_total_bs, 2)
             },
-            "bolsillo": {
-                "saldo_neto": round(saldo_neto, 2),
-                "horas_reponer": round(sum_horas_reponer, 2),
-                "estado": estado_bolsillo
-            }
+            "bolsillo": { "saldo_neto": round(saldo_neto, 2), "horas_reponer": round(sum_horas_reponer, 2), "estado": estado_bolsillo }
         }
     finally:
         cur.close()

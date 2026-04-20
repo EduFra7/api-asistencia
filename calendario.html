@@ -329,13 +329,10 @@
             renderizarMenu('asistencia');
             configurarBotonesFiltro();
             
-            // 1. Disparamos ambas descargas al mismo tiempo
-            const promesasInicio = [cargarCatalogos(), cargarEmpleados()];
+            // Solo descargamos catálogos (sucursales, secciones, turnos, feriados)
+            await cargarCatalogos();
             
-            // 2. Esperamos pacientemente a que AMBAS terminen al 100%
-            await Promise.all(promesasInicio);
-            
-            // 3. ⚡ FIX: Recién ahora que tenemos Empleados Y Turnos, dibujamos la lista interactiva
+            // El directorio se encarga de llamar al servidor para traer los primeros 100 empleados
             filtrarDirectorio();
         }
 
@@ -348,32 +345,17 @@
             }
         }
 
+        // ⚡ NUEVO: Solo descargamos Sucursales y Secciones para el buscador. ¡El resto lo hace el Backend!
         async function cargarCatalogos() {
             try {
                 const promesas = new Array(
                     fetch(`${API_URL}/sucursales`, { headers: { 'Authorization': `Bearer ${token_api}` } }),
-                    fetch(`${API_URL}/secciones`, { headers: { 'Authorization': `Bearer ${token_api}` } }),
-                    fetch(`${API_URL}/turnos`, { headers: { 'Authorization': `Bearer ${token_api}` } }),
-                    fetch(`${API_URL}/feriados`, { headers: { 'Authorization': `Bearer ${token_api}` } }) // ⚡ Nueva ruta
+                    fetch(`${API_URL}/secciones`, { headers: { 'Authorization': `Bearer ${token_api}` } })
                 );
                 const res = await Promise.all(promesas);
                 
                 const sucursales = await res.at(0).json();
                 const secciones = await res.at(1).json();
-                turnosGlobal = await res.at(2).json();
-                const feriadosDB = await res.at(3).json(); 
-                
-                // ⚡ Llenamos la memoria con la Base de Datos
-                feriadosBolivia.clear();
-                if (feriadosDB && Array.isArray(feriadosDB)) {
-                    feriadosDB.forEach(f => {
-                        const fechaCompleta = String(f.fecha); // "2026-05-01"
-                        const mesDia = fechaCompleta.substring(5, 10); // "05-01"
-                        // Guardamos un objeto con la descripción y la ciudad (tipo)
-                        if (f.recurrente) feriadosBolivia.set(mesDia, { descripcion: f.descripcion, tipo: f.tipo || 'Nacional' });
-                        else feriadosBolivia.set(fechaCompleta, { descripcion: f.descripcion, tipo: f.tipo || 'Nacional' });
-                    });
-                }
                 
                 const sSucursal = document.getElementById('filtro_sucursal');
                 const sSeccion = document.getElementById('filtro_seccion');
@@ -381,16 +363,6 @@
                 sucursales.forEach(s => sSucursal.innerHTML += `<option value="${s.id}">${s.nombre}</option>`);
                 secciones.forEach(s => sSeccion.innerHTML += `<option value="${s.id}">${s.nombre}</option>`);
             } catch (e) { console.error("Error catalogos", e); }
-        }
-
-        async function cargarEmpleados() {
-            try {
-                const res = await fetch(`${API_URL}/empleados`, { headers: { 'Authorization': `Bearer ${token_api}` } });
-                listaEmpleadosGlobal = await res.json();
-                
-                // ⚡ FIX: Borramos filtrarDirectorio() de aquí para que no dibuje la lista antes de tiempo
-                
-            } catch (e) { console.error("Error empleados", e); }
         }
 
         function cambiarFiltroEstado(nuevoEstado, botonPresionado) {
@@ -402,57 +374,47 @@
             filtrarDirectorio();
         }
 
+        let timeoutBusqueda = null;
         function filtrarDirectorio() {
-            const buscador = document.getElementById('busqueda').value.toLowerCase();
-            const sucursal = document.getElementById('filtro_sucursal').value;
-            const seccion = document.getElementById('filtro_seccion').value;
+            clearTimeout(timeoutBusqueda);
             const contenedor = document.getElementById('listaEmpleados');
-            
-            const filtrados = listaEmpleadosGlobal.filter(e => {
-                if (filtroEstadoActual === 'activos' && !e.activo) return false;
-                if (filtroEstadoActual === 'inactivos' && e.activo) return false;
-                if (sucursal && String(e.sucursal_id) !== String(sucursal)) return false;
-                if (seccion && String(e.seccion_id) !== String(seccion)) return false;
-                return `${e.nombres} ${e.apellidos} ${e.ci} ${e.bio_id || ''}`.toLowerCase().includes(buscador);
-            });
+            contenedor.innerHTML = `<div class="animate-pulse p-4"><div class="flex items-center mb-4"><div class="w-10 h-10 rounded-full bg-gray-200 mr-3"></div><div class="h-3 bg-gray-200 rounded w-3/4"></div></div><div class="flex items-center"><div class="w-10 h-10 rounded-full bg-gray-200 mr-3"></div><div class="h-3 bg-gray-200 rounded w-1/2"></div></div></div>`;
 
-            contenedor.innerHTML = '';
-            if (filtrados.length === 0) {
-                contenedor.innerHTML = '<div class="p-8 text-center text-gray-500"><i class="fas fa-search mb-2"></i><p class="text-xs">No hay resultados</p></div>';
-                return;
-            }
+            timeoutBusqueda = setTimeout(async () => {
+                const buscador = document.getElementById('busqueda').value;
+                const sucursal = document.getElementById('filtro_sucursal').value;
+                const seccion = document.getElementById('filtro_seccion').value;
+                
+                try {
+                    const params = new URLSearchParams({ estado: filtroEstadoActual, q: buscador, sucursal_id: sucursal, seccion_id: seccion });
+                    const res = await fetch(`${API_URL}/empleados?${params.toString()}`, { headers: { 'Authorization': `Bearer ${token_api}` } });
+                    listaEmpleadosGlobal = await res.json(); 
+                    
+                    contenedor.innerHTML = '';
+                    if (listaEmpleadosGlobal.length === 0) {
+                        contenedor.innerHTML = '<div class="p-8 text-center text-gray-500"><i class="fas fa-search text-2xl mb-2 text-gray-300"></i><p class="text-xs">No hay resultados</p></div>';
+                        return;
+                    }
 
-            filtrados.forEach(emp => {
-                const iniciales = (emp.nombres.charAt(0) + emp.apellidos.charAt(0)).toUpperCase();
-                const img = emp.foto_perfil ? `<img src="${emp.foto_perfil}" class="w-full h-full object-cover">` : `<div class="w-full h-full flex items-center justify-center bg-slate-800 text-white font-bold text-xs">${iniciales}</div>`;
-                
-                // 🌟 DISEÑO UX: Lógica de colores para el estado
-                const colorEstado = emp.activo ? 'bg-green-500' : 'bg-red-500';
-                const tituloEstado = emp.activo ? 'Activo' : 'Inactivo';
-                const badgeInactivo = !emp.activo ? `<span class="ml-2 px-1.5 py-0.5 text- bg-red-100 text-red-600 rounded font-bold">INACTIVO</span>` : '';
-                
-                contenedor.innerHTML += `
-                    <div onclick="seleccionarEmpleado(${emp.id})" id="item-emp-${emp.id}" class="p-3 border-b border-gray-100 hover:bg-blue-50 cursor-pointer flex items-center transition-colors border-l-4 border-transparent emp-item">
+                    listaEmpleadosGlobal.forEach(emp => {
+                        const iniciales = (emp.nombres.charAt(0) + emp.apellidos.charAt(0)).toUpperCase();
+                        const img = emp.foto_perfil ? `<img src="${emp.foto_perfil}" class="w-full h-full object-cover">` : `<div class="w-full h-full flex items-center justify-center bg-slate-800 text-white font-bold text-xs">${iniciales}</div>`;
+                        const colorEstado = emp.activo ? 'bg-green-500' : 'bg-red-500';
+                        const badgeInactivo = !emp.activo ? `<span class="ml-2 px-1.5 py-0.5 text-[9px] bg-red-100 text-red-600 rounded font-bold">INACTIVO</span>` : '';
                         
-                        <!-- Contenedor del Avatar con el Indicador de Estado estilo Slack -->
-                        <div class="relative w-10 h-10 mr-3 shrink-0">
-                            <div class="w-full h-full rounded-full bg-gray-200 overflow-hidden border border-gray-300">
-                                ${img}
-                            </div>
-                            <span class="absolute bottom-0 right-0 w-3 h-3 border-2 border-white rounded-full ${colorEstado}" title="${tituloEstado}"></span>
-                        </div>
+                        contenedor.innerHTML += `
+                            <div onclick="seleccionarEmpleado(${emp.id})" id="item-emp-${emp.id}" class="p-3 border-b border-gray-100 hover:bg-blue-50 cursor-pointer flex items-center transition-colors border-l-4 border-transparent emp-item">
+                                <div class="relative w-10 h-10 mr-3 shrink-0"><div class="w-full h-full rounded-full bg-gray-200 overflow-hidden border border-gray-300">${img}</div><span class="absolute bottom-0 right-0 w-3 h-3 border-2 border-white rounded-full ${colorEstado}"></span></div>
+                                <div class="truncate flex-1"><div class="flex items-center"><p class="text-sm font-bold text-gray-800 truncate">${emp.nombres} ${emp.apellidos}</p>${badgeInactivo}</div><p class="text-xs text-gray-500"><span class="font-bold text-blue-600">ID: ${emp.bio_id || '-'}</span> | CI: ${emp.ci}</p></div>
+                            </div>`;
+                    });
 
-                        <div class="truncate flex-1">
-                            <div class="flex items-center">
-                                <p class="text-sm font-bold text-gray-800 truncate">${emp.nombres} ${emp.apellidos}</p>
-                                ${badgeInactivo}
-                            </div>
-                            <!-- Reemplazo de 'Bio:' por 'ID:' -->
-                            <p class="text-xs text-gray-500"><span class="font-bold text-blue-600">ID: ${emp.bio_id || '-'}</span> | CI: ${emp.ci}</p>
-                        </div>
-                    </div>
-                `;
-            });
+                    if (empleadoSeleccionadoId) {
+                        const actual = document.getElementById(`item-emp-${empleadoSeleccionadoId}`);
+                        if(actual) actual.classList.add('bg-blue-50', 'border-blue-600');
+                    }
+                } catch (e) { contenedor.innerHTML = '<div class="p-8 text-center text-red-500"><p class="text-xs font-bold">Error de conexión</p></div>'; }
+            }, 300);
         }
 
         async function seleccionarEmpleado(id) {
@@ -460,12 +422,9 @@
             const emp = listaEmpleadosGlobal.find(e => e.id === id);
             if (!emp) return;
 
-            // 🌟 MAGIA UI: Ocultamos el mensaje gigante y revelamos el contenido de asistencia
             document.getElementById('estado-vacio-global').classList.add('hidden');
             document.getElementById('contenido-asistencia').classList.remove('hidden');
-            document.getElementById('contenido-asistencia').classList.add('flex'); // Lo activamos como Flexbox
-            
-            // 🌟 Aseguramos que el "Detalle del Día" derecho permanezca oculto hasta hacer clic en el calendario
+            document.getElementById('contenido-asistencia').classList.add('flex');
             document.getElementById('panel-radiografia').classList.add('hidden');
 
             document.querySelectorAll('.emp-item').forEach(i => i.classList.remove('bg-blue-50', 'border-blue-600'));
@@ -476,20 +435,7 @@
             document.getElementById('header-ci').innerHTML = `<i class="fas fa-id-card mr-1"></i>CI: ${emp.ci}`;
             document.getElementById('header-cargo').innerHTML = `<i class="fas fa-briefcase mr-1"></i>${emp.cargo || 'Sin cargo'}`;
             document.getElementById('header-sucursal').innerHTML = `<i class="fas fa-building mr-1"></i>${emp.sucursal_nombre || 'Sin Sucursal'}`;
-            
-            const turnoEmp = turnosGlobal.find(t => String(t.id) === String(emp.turno_id));
-            let turnoDetalleHTML = `<p class="text-xs md:text-sm font-medium"><i class="fas fa-clock mr-1 text-gray-400"></i>No asignado</p>`;
-            if (turnoEmp) {
-                const hIngreso = String(turnoEmp.hora_ingreso).substring(0,5);
-                const hSalida = String(turnoEmp.hora_salida).substring(0,5);
-                const txtAlmuerzo = turnoEmp.almuerzo ? `Incluye ${turnoEmp.almuerzo_min}m Almuerzo` : 'Sin horario de almuerzo';
-                
-                turnoDetalleHTML = `
-                    <p class="text-xs md:text-sm font-medium mb-1"><i class="fas fa-clock mr-1 text-blue-400"></i>${turnoEmp.nombre} (${hIngreso} - ${hSalida})</p>
-                    <p class="text- md:text-xs text-orange-300 font-normal"><i class="fas fa-utensils mr-1"></i>${txtAlmuerzo}</p>
-                `;
-            }
-            document.getElementById('header-turno').innerHTML = turnoDetalleHTML;
+            document.getElementById('header-turno').innerHTML = `<p class="text-xs md:text-sm font-medium"><i class="fas fa-spinner fa-spin mr-1"></i>Cargando turno...</p>`;
 
             const iniciales = (emp.nombres.charAt(0) + emp.apellidos.charAt(0)).toUpperCase();
             document.getElementById('header-foto').innerHTML = emp.foto_perfil ? `<img src="${emp.foto_perfil}" class="w-full h-full object-cover">` : `<div class="w-full h-full flex items-center justify-center bg-slate-800 text-white font-bold text-xl">${iniciales}</div>`;
@@ -499,48 +445,22 @@
                 if(panelDirect) panelDirect.classList.add('!h-0', '!opacity-0');
             }
 
-            await cargarCalendario(turnoEmp);
+            await cargarCalendario();
         }
 
-        // ⚡ FUNCIÓN OPTIMIZADA: Solo descarga feriados, no toda la empresa
         async function verificarSincronizacionFeriados(anio) {
             if (aniosSincronizados.has(anio)) return; 
-
             try {
-                const res = await fetch(`${API_URL}/sincronizar-feriados/${anio}`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${token_api}` }
-                });
-                
-                const data = await res.json();
+                await fetch(`${API_URL}/sincronizar-feriados/${anio}`, { method: 'POST', headers: { 'Authorization': `Bearer ${token_api}` } });
                 aniosSincronizados.add(anio);
-                
-                // SOLO si la IA insertó nuevos feriados, refrescamos la memoria de feriados
-                if (data.insertados && data.insertados > 0) {
-                    const resF = await fetch(`${API_URL}/feriados`, { headers: { 'Authorization': `Bearer ${token_api}` } });
-                    const feriadosDB = await resF.json();
-                    
-                    feriadosBolivia.clear();
-                    feriadosDB.forEach(f => {
-                        const fechaCompleta = String(f.fecha);
-                        const mesDia = fechaCompleta.substring(5, 10);
-                        if (f.recurrente) feriadosBolivia.set(mesDia, { descripcion: f.descripcion, tipo: f.tipo || 'Nacional' });
-                        else feriadosBolivia.set(fechaCompleta, { descripcion: f.descripcion, tipo: f.tipo || 'Nacional' });
-                    });
-                }
-            } catch(e) {
-                console.error("Error sincronizando feriados en segundo plano", e);
-            }
+            } catch(e) { console.error("Error sincronizando feriados", e); }
         }
 
-        // 🛠️ TU FUNCIÓN ACTUALIZADA
-        
-        async function cargarCalendario(turnoEmpleado) {
+        async function cargarCalendario() {
             if (!empleadoSeleccionadoId) return;
             const anio = fechaVisualizada.getFullYear();
             const mes = fechaVisualizada.getMonth() + 1;
             
-            // ⚡ UX: Ponemos TODOS los KPIs a girar
             document.getElementById('kpi-dias').innerHTML = '<i class="fas fa-spinner fa-spin text-gray-300"></i>';
             document.getElementById('kpi-horas').innerHTML = '<i class="fas fa-spinner fa-spin text-gray-300"></i>';
             document.getElementById('kpi-retraso').innerHTML = '<i class="fas fa-spinner fa-spin text-gray-300"></i>';
@@ -558,28 +478,27 @@
             }
             
             const cuadricula = document.getElementById('cuadriculaCalendario');
-            cuadricula.innerHTML = `
-                <div class="cal-header">Lun</div><div class="cal-header">Mar</div><div class="cal-header">Mié</div><div class="cal-header">Jue</div><div class="cal-header">Vie</div><div class="cal-header">Sáb</div><div class="cal-header">Dom</div>
-                <div class="col-span-7 p-10 flex flex-col items-center justify-center text-blue-500 bg-white">
-                    <i class="fas fa-circle-notch fa-spin text-3xl mb-2"></i>
-                    <p class="text-xs font-bold text-gray-500">Renderizando con Backend Inteligente...</p>
-                </div>
-            `;
+            cuadricula.innerHTML = `<div class="cal-header">Lun</div><div class="cal-header">Mar</div><div class="cal-header">Mié</div><div class="cal-header">Jue</div><div class="cal-header">Vie</div><div class="cal-header">Sáb</div><div class="cal-header">Dom</div><div class="col-span-7 p-10 flex flex-col items-center justify-center text-blue-500 bg-white"><i class="fas fa-circle-notch fa-spin text-3xl mb-2"></i><p class="text-xs font-bold text-gray-500">Renderizando con Backend Inteligente...</p></div>`;
 
             try {
                 await verificarSincronizacionFeriados(anio);
 
-                // ⚡ ÚNICA PETICIÓN: El servidor nos trae el paquete UI completo
                 const res = await fetch(`${API_URL}/empleados/${empleadoSeleccionadoId}/asistencia/${anio}/${mes}`, { headers: { 'Authorization': `Bearer ${token_api}` } });
                 const dataMaster = await res.json();
 
-                // 1. PINTAR KPIs BÁSICOS
+                // ⚡ 1. EL BACKEND NOS DICE QUÉ PONER EN LA CABECERA DEL TURNO
+                document.getElementById('header-turno').innerHTML = `
+                    <p class="text-xs md:text-sm font-medium mb-1"><i class="fas fa-clock mr-1 text-blue-400"></i>${dataMaster.cabecera.turno_nombre} ${dataMaster.cabecera.turno_ingreso ? `(${dataMaster.cabecera.turno_ingreso} - ${dataMaster.cabecera.turno_salida})` : ''}</p>
+                    <p class="text-[10px] md:text-xs text-orange-300 font-normal"><i class="fas fa-utensils mr-1"></i>${dataMaster.cabecera.turno_almuerzo_texto}</p>
+                `;
+
+                // 2. PINTAR KPIs BÁSICOS
                 document.getElementById('kpi-dias').textContent = dataMaster.kpis.dias_trabajados;
                 document.getElementById('kpi-horas').textContent = `${dataMaster.kpis.horas_trabajadas.toFixed(2)} / ${dataMaster.kpis.horas_esperadas.toFixed(2)}`;
                 document.getElementById('kpi-retraso').textContent = `${dataMaster.kpis.retraso_total_min} min de retraso total`;
                 document.getElementById('kpi-deuda').textContent = `Bs. ${dataMaster.kpis.deuda_total_bs.toFixed(2)}`;
 
-                // 2. PINTAR BOLSILLO DIRECTO DEL SERVIDOR
+                // 3. PINTAR BOLSILLO DIRECTO DEL SERVIDOR
                 const saldo = dataMaster.bolsillo.saldo_neto;
                 const kpiIcono = kpiBalance.parentElement.nextElementSibling;
 
@@ -609,7 +528,7 @@
                     kpiIcono.className = "w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400";
                 }
 
-                // 3. PINTAR EL CALENDARIO (Frontend Tonto)
+                // 4. PINTAR EL CALENDARIO
                 renderizarDiasInteligente(anio, mes, dataMaster.calendario);
                 
             } catch (e) { 
@@ -618,7 +537,6 @@
             }
         }
 
-        // ⚡ LA NUEVA VERSIÓN ULTRA LIGERA: Sin matemáticas, solo pinta CSS
         function renderizarDiasInteligente(anio, mes, calData) {
             const nombresMeses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
             document.getElementById('mesAnioTexto').textContent = `${nombresMeses[mes - 1]} ${anio}`;
@@ -684,31 +602,7 @@
             });
         }
 
-        // 🧠 Función inteligente para detectar si una hora pertenece al día siguiente en turnos nocturnos
-        function formatearHoraMarcaje(horaStr, fechaBaseStr, turno) {
-            if (!horaStr) return '--:--';
-            const horaCorta = String(horaStr).substring(0, 5); // "00:15"
-            
-            let esDiaSiguiente = false;
-            // Si el turno cruza la medianoche y la hora del marcaje es menor a la hora de ingreso (ej. 00:15 < 20:00)
-            if (turno && turno.hora_salida < turno.hora_ingreso) {
-                if (horaStr < turno.hora_ingreso) {
-                    esDiaSiguiente = true;
-                }
-            }
-            
-            if (esDiaSiguiente) {
-                // Calculamos visualmente el día de mañana
-                let fechaObj = new Date(fechaBaseStr + 'T00:00:00');
-                fechaObj.setDate(fechaObj.getDate() + 1);
-                let diaSig = fechaObj.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
-                
-                // Retorna la hora con un pequeño indicativo del día
-                return `<span class="text-[9px] text-blue-500 font-bold bg-blue-50 px-1 rounded mr-1" title="Día Siguiente">${diaSig}.</span>${horaCorta}`;
-            }
-            
-            return horaCorta; // Si es un día normal, solo devuelve la hora
-        }
+        // ⚡ LA ANTIGUA FUNCIÓN GIGANTE DE FECHAS FUE ELIMINADA ⚡
 
         function verDetalleDia(d) {
             const panel = document.getElementById('panel-radiografia');
@@ -746,44 +640,33 @@
                 
                 let textoDuracion = 'Día Completo';
                 if (d.ausencia_detalle.hora_inicio && d.ausencia_detalle.hora_fin) {
-                    textoDuracion = `${String(d.ausencia_detalle.hora_inicio).substring(0,5)} a ${String(d.ausencia_detalle.hora_fin).substring(0,5)} (${d.ausencia_detalle.horas_totales} hrs)`;
+                    textoDuracion = `${d.ausencia_detalle.hora_inicio} a ${d.ausencia_detalle.hora_fin} (${d.ausencia_detalle.horas_totales} hrs)`;
                 }
                 if (d.ausencia_detalle.tipo === 'permiso' && d.ausencia_detalle.requiere_reposicion) {
                     textoDuracion += `<br><span class="inline-block mt-1 bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold border border-red-200 shadow-sm"><i class="fas fa-exclamation-circle mr-1"></i>Requiere reposición de ${d.ausencia_detalle.horas_totales} hrs</span>`;
                 }
                 document.getElementById('det-ausencia-duracion').innerHTML = textoDuracion;
 
-                if (textoDuracion.includes('Día Completo') && (!d.hora_entrada && !d.hora_salida)) contMarcajes.classList.add('hidden');
+                if (textoDuracion.includes('Día Completo') && (!d.raw_entrada && !d.raw_salida)) contMarcajes.classList.add('hidden');
                 else contMarcajes.classList.remove('hidden');
             } else {
                 contAusencia.classList.add('hidden'); contMarcajes.classList.remove('hidden');
             }
 
-            const empActual = listaEmpleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
-            const turnoEmp = turnosGlobal.find(t => String(t.id) === String(empActual.turno_id));
-
-            document.getElementById('det-entrada').innerHTML = formatearHoraMarcaje(d.hora_entrada, d.fecha, turnoEmp);
-            document.getElementById('det-alm-ini').innerHTML = formatearHoraMarcaje(d.hora_inicio_almuerzo, d.fecha, turnoEmp);
-            document.getElementById('det-alm-fin').innerHTML = formatearHoraMarcaje(d.hora_fin_almuerzo, d.fecha, turnoEmp);
-            document.getElementById('det-salida').innerHTML = formatearHoraMarcaje(d.hora_salida, d.fecha, turnoEmp);
+            // ⚡ EL BACKEND YA NOS MANDÓ TODO PERFECTAMENTE FORMATEADO (Madrugadas, etc)
+            document.getElementById('det-entrada').innerHTML = d.ui_entrada;
+            document.getElementById('det-alm-ini').innerHTML = d.ui_alm_in;
+            document.getElementById('det-alm-fin').innerHTML = d.ui_alm_out;
+            document.getElementById('det-salida').innerHTML = d.ui_salida;
             
-            // ⚡ MAGIA FINANCIERA: Inyección del Resumen Económico SEGURO
             const contenedorResumen = document.getElementById('contenedor-resumen-economico');
+            let htmlExtras = d.horas_extras > 0 ? `<div class="flex justify-between border-b border-gray-200 pb-1 mb-1 bg-green-50 px-1 rounded"><span>Hrs. Extras:</span><span class="font-bold text-green-600">+${d.horas_extras.toFixed(2)} hrs</span></div>` : '';
             
-            let htmlExtras = '';
-            if (d.horas_extras > 0) {
-                htmlExtras = `<div class="flex justify-between border-b border-gray-200 pb-1 mb-1 bg-green-50 px-1 rounded"><span>Hrs. Extras:</span><span class="font-bold text-green-600">+${d.horas_extras.toFixed(2)} hrs</span></div>`;
-            }
-
-            // ⚡ NUEVO: VISUALIZADOR DE HORAS A DEVOLVER
-            let htmlDeudaHoras = '';
-            if (d.ausencia_detalle && d.ausencia_detalle.tipo === 'permiso' && d.ausencia_detalle.requiere_reposicion) {
-                htmlDeudaHoras = `
+            let htmlDeudaHoras = (d.ausencia_detalle && d.ausencia_detalle.tipo === 'permiso' && d.ausencia_detalle.requiere_reposicion) ? `
                 <div class="flex justify-between mt-2 border-t border-red-200 pt-2 bg-red-50 p-1 rounded">
                     <span class="text-red-700 font-bold"><i class="fas fa-history mr-1"></i>Debe reponer:</span>
                     <span class="font-bold text-red-700">${Number(d.ausencia_detalle.horas_totales || 0).toFixed(2)} hrs</span>
-                </div>`;
-            }
+                </div>` : '';
 
             contenedorResumen.innerHTML = `
                 <div class="flex justify-between border-b border-gray-200 pb-1 mb-1"><span>Hrs. del Turno:</span><span class="font-bold text-gray-500">${d.horas_turno ? d.horas_turno.toFixed(2) : '0.00'} hrs</span></div>
@@ -794,56 +677,57 @@
                 ${htmlDeudaHoras}
             `;
 
-            // Exorcismo de Auditoría (Comentarios)
             const cajaAuditoria = document.getElementById('contenedor-auditoria');
-            cajaAuditoria.innerHTML = ''; 
-            if (d.modificado_manualmente) {
-                cajaAuditoria.innerHTML = `<div class="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg shadow-inner"><p class="text-[10px] font-bold text-yellow-800 uppercase mb-1"><i class="fas fa-edit mr-1"></i>Modificado por RRHH</p><p class="text-xs text-yellow-700 italic leading-tight">"${d.observaciones || 'Edición manual justificada.'}"</p></div>`;
-            }
+            cajaAuditoria.innerHTML = d.modificado_manualmente ? `<div class="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg shadow-inner"><p class="text-[10px] font-bold text-yellow-800 uppercase mb-1"><i class="fas fa-edit mr-1"></i>Modificado por RRHH</p><p class="text-xs text-yellow-700 italic leading-tight">"${d.observaciones || 'Edición manual justificada.'}"</p></div>` : '';
 
             const contenedorAcciones = document.getElementById('contenedor-acciones-edicion');
             contenedorAcciones.innerHTML = ''; 
             
-            // ⚡ REGLA DESBLOQUEADA: Solo bloqueamos si es VACACIÓN. Los permisos SIEMPRE se pueden editar.
             let esBloqueadoCompleto = d.ausencia_detalle && d.ausencia_detalle.tipo === 'vacacion';
 
             if (!esBloqueadoCompleto) { 
-                const pEnt = d.hora_entrada ? String(d.hora_entrada).substring(0,5) : '';
-                const pAlmIn = d.hora_inicio_almuerzo ? String(d.hora_inicio_almuerzo).substring(0,5) : '';
-                const pAlmOut = d.hora_fin_almuerzo ? String(d.hora_fin_almuerzo).substring(0,5) : '';
-                const pSal = d.hora_salida ? String(d.hora_salida).substring(0,5) : '';
-                const tAlm = turnoEmp && turnoEmp.almuerzo ? true : false;
-                
-                // Extraemos las horas del permiso para la UI
-                let pIni = '', pFin = '';
-                if (d.ausencia_detalle && d.ausencia_detalle.tipo === 'permiso' && d.ausencia_detalle.hora_inicio) {
-                    pIni = String(d.ausencia_detalle.hora_inicio).substring(0,5);
-                    pFin = String(d.ausencia_detalle.hora_fin).substring(0,5);
-                }
-                
-                contenedorAcciones.innerHTML = `<button onclick="abrirModalEdicion('${d.fecha}', '${pEnt}', '${pAlmIn}', '${pAlmOut}', '${pSal}', ${tAlm}, '${pIni}', '${pFin}')" class="w-full bg-slate-800 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition-colors shadow-md mt-4"><i class="fas fa-edit mr-2"></i> Editar / Completar Marcajes</button>`;
+                // ⚡ LLAMADA AL MODAL CON LOS DATOS CRUDOS Y LA BANDERA INTELIGENTE DEL BACKEND
+                contenedorAcciones.innerHTML = `<button onclick="abrirModalEdicion('${d.fecha}', '${d.raw_entrada}', '${d.raw_alm_in}', '${d.raw_alm_out}', '${d.raw_salida}', ${d.exige_almuerzo_edicion})" class="w-full bg-slate-800 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-700 transition-colors shadow-md mt-4"><i class="fas fa-edit mr-2"></i> Editar / Completar Marcajes</button>`;
             }
         }
 
         function cambiarMes(dir) {
             fechaVisualizada.setMonth(fechaVisualizada.getMonth() + dir);
-            // ⚡ FIX BUG: Buscamos al empleado correcto primero, luego su turno
-            const empActual = listaEmpleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
-            const turnoEmp = turnosGlobal.find(t => String(t.id) === String(empActual.turno_id));
-            cargarCalendario(turnoEmp);
+            cargarCalendario();
         }
 
         function irAMesEspecifico(valorYyyyMm) {
             if(!valorYyyyMm) return; 
-            
             const partes = String(valorYyyyMm).split('-');
             fechaVisualizada.setFullYear(parseInt(partes[0]));
             fechaVisualizada.setMonth(parseInt(partes[1]) - 1); 
+            cargarCalendario();
+        }
+
+        // 🧠 Función inteligente para detectar si una hora pertenece al día siguiente en turnos nocturnos
+        function formatearHoraMarcaje(horaStr, fechaBaseStr, turno) {
+            if (!horaStr) return '--:--';
+            const horaCorta = String(horaStr).substring(0, 5); // "00:15"
             
-            // ⚡ FIX BUG: Igual que arriba
-            const empActual = listaEmpleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
-            const turnoEmp = turnosGlobal.find(t => String(t.id) === String(empActual.turno_id));
-            cargarCalendario(turnoEmp);
+            let esDiaSiguiente = false;
+            // Si el turno cruza la medianoche y la hora del marcaje es menor a la hora de ingreso (ej. 00:15 < 20:00)
+            if (turno && turno.hora_salida < turno.hora_ingreso) {
+                if (horaStr < turno.hora_ingreso) {
+                    esDiaSiguiente = true;
+                }
+            }
+            
+            if (esDiaSiguiente) {
+                // Calculamos visualmente el día de mañana
+                let fechaObj = new Date(fechaBaseStr + 'T00:00:00');
+                fechaObj.setDate(fechaObj.getDate() + 1);
+                let diaSig = fechaObj.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+                
+                // Retorna la hora con un pequeño indicativo del día
+                return `<span class="text-[9px] text-blue-500 font-bold bg-blue-50 px-1 rounded mr-1" title="Día Siguiente">${diaSig}.</span>${horaCorta}`;
+            }
+            
+            return horaCorta; // Si es un día normal, solo devuelve la hora
         }
 
         document.getElementById('panel-derecho').addEventListener('scroll', function() {
@@ -859,58 +743,18 @@
         }
 
         // 🌟 1. ABRIR EL MODAL DE EDICIÓN (SWEETALERT2 DINÁMICO)
-        async function abrirModalEdicion(fecha, hIn, hAlmIn, hAlmOut, hOut, tieneAlmuerzo, pIni, pFin) {
+        async function abrirModalEdicion(fecha, hIn, hAlmIn, hAlmOut, hOut, exigirAlmuerzo) {
             const emp = listaEmpleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
-            const turnoEmp = turnosGlobal.find(t => String(t.id) === String(emp.turno_id));
             
-            // ⚡ TOPOLOGÍA FRONTEND (Error 4): Decidimos si exigir 2 o 4 marcas visualmente
-            let exigir4Marcas = tieneAlmuerzo;
-            
-            if (tieneAlmuerzo && pIni && pFin && turnoEmp.hora_inicio_almuerzo) {
-                // Convertimos horas a minutos puros para comparar
-                const aMin = (h, m) => (parseInt(h) * 60) + parseInt(m);
-                const t_in = aMin(...turnoEmp.hora_ingreso.split(':'));
-                const l_in = aMin(...turnoEmp.hora_inicio_almuerzo.split(':'));
-                const l_out = aMin(...turnoEmp.hora_fin_almuerzo.split(':'));
-                let t_out = aMin(...turnoEmp.hora_salida.split(':'));
-                if (t_out < t_in) t_out += 1440; // Nocturnos
-                
-                const pm_in = aMin(...pIni.split(':'));
-                let pm_out = aMin(...pFin.split(':'));
-                if (pm_out < pm_in) pm_out += 1440;
-
-                // ¿Queda trabajo en la mañana? (De t_in a l_in, menos el permiso)
-                let minManana = Math.max(0, l_in - t_in);
-                let overM_start = Math.max(t_in, pm_in);
-                let overM_end = Math.min(l_in, pm_out);
-                if (overM_start < overM_end) minManana -= (overM_end - overM_start);
-
-                // ¿Queda trabajo en la tarde? (De l_out a t_out, menos el permiso)
-                let minTarde = Math.max(0, t_out - l_out);
-                let overT_start = Math.max(l_out, pm_in);
-                let overT_end = Math.min(t_out, pm_out);
-                if (overT_start < overT_end) minTarde -= (overT_end - overT_start);
-
-                // Si se "devoró" un bloque entero, solo exigimos 2 marcas (Entrada y Salida del bloque que sobrevivió)
-                if (minManana <= 0 || minTarde <= 0) exigir4Marcas = false;
-            }
-
             let htmlAlmuerzo = '';
-            if (exigir4Marcas) {
+            if (exigirAlmuerzo) {
                 htmlAlmuerzo = `
                     <div class="flex gap-4 mb-4 bg-gray-50 p-2 rounded-lg border border-gray-200">
-                        <div class="flex-1 text-left">
-                            <label class="text-[10px] font-bold text-gray-700 uppercase tracking-wide text-blue-600">Inicio Almuerzo</label>
-                            <input id="swal-alm-in" type="time" class="w-full border border-gray-300 p-2 rounded-lg mt-1 focus:ring-2 focus:ring-blue-500 outline-none" value="${hAlmIn || ''}">
-                        </div>
-                        <div class="flex-1 text-left">
-                            <label class="text-[10px] font-bold text-gray-700 uppercase tracking-wide text-blue-600">Fin Almuerzo</label>
-                            <input id="swal-alm-out" type="time" class="w-full border border-gray-300 p-2 rounded-lg mt-1 focus:ring-2 focus:ring-blue-500 outline-none" value="${hAlmOut || ''}">
-                        </div>
-                    </div>
-                `;
-            } else if (pIni) {
-                htmlAlmuerzo = `<div class="text-[11px] bg-yellow-50 text-yellow-700 p-3 rounded-lg border border-yellow-200 mb-4 shadow-inner"><i class="fas fa-info-circle mr-1"></i><b>Jornada Fragmentada:</b> Debido a la topología del permiso, el sistema solo exige marcajes de <b>Entrada</b> y <b>Salida</b>.</div>`;
+                        <div class="flex-1 text-left"><label class="text-[10px] font-bold text-gray-700 uppercase tracking-wide text-blue-600">Inicio Almuerzo</label><input id="swal-alm-in" type="time" class="w-full border border-gray-300 p-2 rounded-lg mt-1 focus:ring-2 focus:ring-blue-500 outline-none" value="${hAlmIn || ''}"></div>
+                        <div class="flex-1 text-left"><label class="text-[10px] font-bold text-gray-700 uppercase tracking-wide text-blue-600">Fin Almuerzo</label><input id="swal-alm-out" type="time" class="w-full border border-gray-300 p-2 rounded-lg mt-1 focus:ring-2 focus:ring-blue-500 outline-none" value="${hAlmOut || ''}"></div>
+                    </div>`;
+            } else {
+                htmlAlmuerzo = `<div class="text-[11px] bg-yellow-50 text-yellow-700 p-3 rounded-lg border border-yellow-200 mb-4 shadow-inner"><i class="fas fa-info-circle mr-1"></i><b>Jornada Modificada:</b> Debido al permiso o al turno actual, el sistema solo exige marcajes de <b>Entrada</b> y <b>Salida</b>.</div>`;
             }
             
             const { value: formValues } = await Swal.fire({
@@ -918,20 +762,11 @@
                 title: `<p class="text-xl font-bold text-slate-800">Completar Asistencia</p>`,
                 html: `
                     <p class="text-sm text-gray-500 mb-4">Modifica los marcajes del <b>${fecha}</b> para ${emp.nombres}.<br><span class="text-xs text-blue-500">Los campos vacíos se considerarán como "No marcó".</span></p>
-                    
                     <div class="flex gap-4 mb-4">
-                        <div class="flex-1 text-left">
-                            <label class="text-[10px] font-bold text-gray-700 uppercase tracking-wide">Entrada Día</label>
-                            <input id="swal-in" type="time" class="w-full border border-gray-300 p-2 rounded-lg mt-1 focus:ring-2 focus:ring-blue-500 outline-none" value="${hIn || ''}">
-                        </div>
-                        <div class="flex-1 text-left">
-                            <label class="text-[10px] font-bold text-gray-700 uppercase tracking-wide">Salida Día</label>
-                            <input id="swal-out" type="time" class="w-full border border-gray-300 p-2 rounded-lg mt-1 focus:ring-2 focus:ring-blue-500 outline-none" value="${hOut || ''}">
-                        </div>
+                        <div class="flex-1 text-left"><label class="text-[10px] font-bold text-gray-700 uppercase tracking-wide">Entrada Día</label><input id="swal-in" type="time" class="w-full border border-gray-300 p-2 rounded-lg mt-1 focus:ring-2 focus:ring-blue-500 outline-none" value="${hIn || ''}"></div>
+                        <div class="flex-1 text-left"><label class="text-[10px] font-bold text-gray-700 uppercase tracking-wide">Salida Día</label><input id="swal-out" type="time" class="w-full border border-gray-300 p-2 rounded-lg mt-1 focus:ring-2 focus:ring-blue-500 outline-none" value="${hOut || ''}"></div>
                     </div>
-
                     ${htmlAlmuerzo}
-
                     <div class="text-left mb-4">
                         <label class="text-xs font-bold text-gray-700 uppercase tracking-wide">Motivo de la Edición</label>
                         <input id="swal-obs" type="text" class="w-full border border-gray-300 p-2 rounded-lg mt-1 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ej: Olvidó marcar salida, completado por RRHH...">
@@ -940,28 +775,16 @@
                         <label class="text-[10px] font-bold text-red-700 uppercase tracking-wide"><i class="fas fa-lock mr-1"></i>Contraseña Administrador *</label>
                         <input id="swal-pass" type="password" class="w-full border border-red-300 p-2 rounded-lg mt-1 focus:ring-2 focus:ring-red-500 outline-none bg-white" placeholder="Firma electrónica requerida">
                     </div>
-                    
-                    <button onclick="irAPermisos('${fecha}')" class="w-full bg-blue-50 text-blue-700 border border-blue-200 py-2.5 rounded-lg text-sm font-bold hover:bg-blue-100 transition-colors flex items-center justify-center">
-                        <i class="fas fa-calendar-plus mr-2"></i>Convertir en Permiso / Vacación Médica
-                    </button>
-                    <button onclick="confirmarEliminacionAsistencia('${fecha}')" class="w-full mt-2 text-red-600 text-xs font-bold hover:underline py-2">
-                        <i class="fas fa-trash-alt mr-1"></i> Eliminar todos los registros de este día
-                    </button>
+                    <button onclick="irAPermisos('${fecha}')" class="w-full bg-blue-50 text-blue-700 border border-blue-200 py-2.5 rounded-lg text-sm font-bold hover:bg-blue-100 transition-colors flex items-center justify-center"><i class="fas fa-calendar-plus mr-2"></i>Convertir en Permiso / Vacación Médica</button>
+                    <button onclick="confirmarEliminacionAsistencia('${fecha}')" class="w-full mt-2 text-red-600 text-xs font-bold hover:underline py-2"><i class="fas fa-trash-alt mr-1"></i> Eliminar todos los registros de este día</button>
                 `,
-                focusConfirm: false,
-                showCancelButton: true,
-                confirmButtonText: '<i class="fas fa-save mr-1"></i> Guardar Historial',
-                cancelButtonText: 'Cancelar',
-                confirmButtonColor: '#1e293b',
-                width: '32em',
+                focusConfirm: false, showCancelButton: true, confirmButtonText: '<i class="fas fa-save mr-1"></i> Guardar Historial', cancelButtonText: 'Cancelar', confirmButtonColor: '#1e293b', width: '32em',
                 preConfirm: () => {
                     const almInInput = document.getElementById('swal-alm-in');
                     const almOutInput = document.getElementById('swal-alm-out');
                     return {
-                        hora_entrada: document.getElementById('swal-in').value,
-                        hora_salida: document.getElementById('swal-out').value,
-                        hora_inicio_almuerzo: almInInput ? almInInput.value : null,
-                        hora_fin_almuerzo: almOutInput ? almOutInput.value : null,
+                        hora_entrada: document.getElementById('swal-in').value, hora_salida: document.getElementById('swal-out').value,
+                        hora_inicio_almuerzo: almInInput ? almInInput.value : null, hora_fin_almuerzo: almOutInput ? almOutInput.value : null,
                         justificacion: document.getElementById('swal-obs').value || 'Edición manual por RRHH',
                         admin_password: document.getElementById('swal-pass').value
                     }
@@ -1004,7 +827,7 @@
 
                 // ⚡ FIX 6: Recargamos el calendario MIENTRAS el popup de "Cargando" sigue activo
                 const turnoEmp = turnosGlobal.find(t => String(t.id) === String(emp.turno_id));
-                await cargarCalendario(turnoEmp);
+                await cargarCalendario();
 
                 // ✅ Éxito final: Cambiamos el popup de carga por el de éxito
                 Swal.fire('¡Actualizado!', 'El historial ha sido modificado y calculado con éxito.', 'success');
@@ -1080,7 +903,7 @@
                     // Recargamos la interfaz
                     const empActual = listaEmpleadosGlobal.find(e => e.id === empleadoSeleccionadoId);
                     const turnoEmp = turnosGlobal.find(t => String(t.id) === String(empActual.turno_id));
-                    cargarCalendario(turnoEmp);
+                    cargarCalendario();
                     
                 } catch (error) {
                     console.error(error);
