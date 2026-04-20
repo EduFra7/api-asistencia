@@ -1810,13 +1810,18 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
         cur.execute(f"SELECT * FROM {schema}.asistencia_diaria WHERE empleado_id = %s AND EXTRACT(YEAR FROM fecha) = %s AND EXTRACT(MONTH FROM fecha) = %s", (empleado_id, anio, mes))
         asistencia_raw = {str(d["fecha"]): d for d in cur.fetchall()}
 
+        # ⚡ FIX: Calculamos los días exactos del mes (28, 30 o 31) para que PostgreSQL no se asuste
+        import calendar
+        _, dias_del_mes = calendar.monthrange(anio, mes)
+
         cur.execute(f"""
             SELECT * FROM {schema}.ausencias 
             WHERE empleado_id = %s AND eliminado = FALSE AND estado = 'aprobado'
             AND ((EXTRACT(YEAR FROM fecha_inicio) = %s AND EXTRACT(MONTH FROM fecha_inicio) = %s)
                  OR (EXTRACT(YEAR FROM fecha_fin) = %s AND EXTRACT(MONTH FROM fecha_fin) = %s)
                  OR (fecha_inicio <= %s AND fecha_fin >= %s))
-        """, (empleado_id, anio, mes, anio, mes, f"{anio}-{mes}-31", f"{anio}-{mes}-01"))
+        """, (empleado_id, anio, mes, anio, mes, f"{anio}-{mes:02d}-{dias_del_mes:02d}", f"{anio}-{mes:02d}-01"))
+
         ausencias_raw = cur.fetchall()
 
         cur.execute(f"SELECT * FROM {schema}.feriados WHERE eliminado = FALSE")
