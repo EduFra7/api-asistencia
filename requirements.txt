@@ -6,3 +6,5 @@ bcrypt
 pyjwt
 python-dateutil==2.9.0
 holidays
+openpyxl
+reportlab

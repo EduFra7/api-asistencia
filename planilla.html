@@ -6,11 +6,6 @@
     <title>Planilla - C.A Lector</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <!-- Librerías para exportación a PDF (jsPDF + AutoTable) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
-    <!-- Librería para exportación a Excel nativo (.xlsx) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body class="bg-gray-50 font-sans flex h-screen overflow-hidden text-gray-800">
 
@@ -840,133 +835,52 @@
             }
         }
 
-        
-
-
-        // ⚡ NUEVO: Función maestra para descargar datos masivos para PDF/Excel
-        async function obtenerDatosParaExportar() {
+        // ==========================================
+        // ⚡ EXPORTACIÓN INTELIGENTE (SERVER-SIDE) 
+        // ==========================================
+        async function descargarArchivoServidor(tipoFormato) {
             const params = new URLSearchParams({
                 estado: filtroActual,
                 q: document.getElementById('filtro_busqueda').value.toLowerCase(),
                 sucursal_id: document.getElementById('filtro_sucursal').value,
                 seccion_id: document.getElementById('filtro_seccion').value,
-                cargo: document.getElementById('filtro_cargo').value,
-                limite: 5000 // Descargamos hasta 5,000 registros de golpe solo para el reporte
+                cargo: document.getElementById('filtro_cargo').value
             });
-            
-            Swal.fire({ title: 'Preparando Datos...', html: 'Consolidando la información del servidor.', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+            Swal.fire({ 
+                title: `Generando ${tipoFormato.toUpperCase()}...`, 
+                html: 'El servidor está procesando el documento...', 
+                allowOutsideClick: false, 
+                didOpen: () => Swal.showLoading() 
+            });
 
             try {
-                const res = await fetch(`${API_URL}/empleados?${params.toString()}`, { headers: { 'Authorization': `Bearer ${token_api}` } });
-                const data = await res.json();
-                Swal.close();
-                return data;
-            } catch(e) {
-                Swal.fire('Error', 'No se pudieron obtener los datos para exportar', 'error');
-                return null;
-            }
-        }
-
-        // ==========================================
-        // 4. EXPORTACIÓN A PDF (Dumb Frontend)
-        // ==========================================
-        async function generarReportePDF() {
-            const dataExportar = await obtenerDatosParaExportar();
-            if(!dataExportar || dataExportar.length === 0) {
-                mostrarError("No hay información de empleados para exportar con el filtro actual.", "Reporte Vacío");
-                return;
-            }
-
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF('l', 'pt', 'letter');
-
-            const head = [['ID', 'Datos Personales', 'Contacto', 'Ubicación Laboral', 'Contrato e Ingresos', 'Estado / Retiro']];
-            
-            const body = dataExportar.map(emp => {
-                const personal = `${emp.nombres} ${emp.apellidos}\nC.I.: ${emp.ci}\nSexo: ${emp.sexo || 'N/A'}`;
-                const contacto = `Cel: ${emp.celular || '-'}\nCorreo: ${emp.correo || '-'}\nDir: ${emp.direccion || '-'}`;
-                const laboral = `Cargo: ${emp.cargo || '-'}\nSucursal: ${emp.sucursal_nombre || '-'}\nSección: ${emp.seccion_nombre || '-'}\nTurno: ${emp.turno_nombre || 'No asignado'}\nIngreso: ${emp.fecha_ingreso ? emp.fecha_ingreso.split('T')[0] : '-'}`;
-                const ingresos = `Contrato: ${emp.tipo_contrato || '-'}\nSalario: Bs. ${emp.salario_base || '0.00'}\nBono: Bs. ${emp.bono || '0.00'}\nInicio Ant.: ${emp.fecha_antiguedad ? emp.fecha_antiguedad.split('T')[0] : '-'}`;
+                // El frontend solo le pide la URL al backend y la descarga como archivo adjunto
+                const res = await fetch(`${API_URL}/empleados/exportar/${tipoFormato}?${params.toString()}`, { 
+                    headers: { 'Authorization': `Bearer ${token_api}` } 
+                });
                 
-                let retiro = emp.activo ? 'ACTIVO' : 'INACTIVO';
-                if (!emp.activo) {
-                    retiro += `\nFecha Baja: ${emp.fecha_retiro ? emp.fecha_retiro.split('T')[0] : '-'}`;
-                    retiro += `\nMotivo: ${emp.motivo_retiro || 'No especificado'}`;
-                }
-                if (emp.historial_movimientos) {
-                    retiro += `\n\n-- HISTORIAL --\n${emp.historial_movimientos}`;
-                }
+                if (!res.ok) throw new Error("Fallo en el servidor");
 
-                return [ emp.bio_id || '-', personal, contacto, laboral, ingresos, retiro ];
-            });
-
-            const nombreEmpresa = userData.empresa || 'Empresa';
-            const estadoTexto = filtroActual.toUpperCase();
-            const fechaHoy = new Date().toLocaleDateString('es-ES');
-
-            doc.setFontSize(16);
-            doc.setTextColor(31, 41, 55);
-            doc.text(`Reporte Maestro de Planilla - ${nombreEmpresa}`, 40, 40);
-            
-            doc.setFontSize(10);
-            doc.setTextColor(100, 100, 100);
-            doc.text(`Filtro Aplicado: EMPLEADOS ${estadoTexto}  |  Fecha de Emisión: ${fechaHoy}`, 40, 55);
-
-            doc.autoTable({
-                startY: 70, head: head, body: body, theme: 'grid',
-                styles: { fontSize: 8, cellPadding: 4, valign: 'middle', textColor: [50, 50, 50] },
-                headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold' },
-                alternateRowStyles: { fillColor: [249, 250, 251] },
-                columnStyles: {
-                    0: { cellWidth: 40, halign: 'center' }, 1: { cellWidth: 130 }, 2: { cellWidth: 130 },
-                    3: { cellWidth: 140 }, 4: { cellWidth: 130 }, 5: { cellWidth: 140 }
-                }
-            });
-
-            doc.save(`Planilla_${nombreEmpresa}_${estadoTexto}_${new Date().getTime()}.pdf`);
-        }
-
-        // ==========================================
-        // EXPORTACIÓN A EXCEL NATIVO (.xlsx)
-        // ==========================================
-        async function exportarExcel() {
-            const dataExportar = await obtenerDatosParaExportar();
-            if(!dataExportar || dataExportar.length === 0) {
-                 mostrarError("No hay datos en la tabla para generar el archivo Excel.", "Tabla Vacía");
-                 return;
+                // Convertimos la respuesta binaria en un archivo descargable
+                const blob = await res.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Planilla_${filtroActual}_${new Date().getTime()}.${tipoFormato === 'excel' ? 'xlsx' : 'pdf'}`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+                
+                Swal.close();
+            } catch (error) {
+                Swal.fire('Error', `No se pudo generar el ${tipoFormato.toUpperCase()}`, 'error');
             }
-
-            const datosParaExcel = [];
-            datosParaExcel.push([
-                "ID Lector", "Nombres", "Apellidos", "C.I.", "Sexo", "Celular", "Correo", 
-                "Cargo", "Sucursal", "Sección", "Turno", "Fecha Ingreso", "Inicio Antigüedad", "Contrato", 
-                "Salario Base", "Bono", "Estado", "Fecha Baja", "Motivo Baja", "Historial de Movimientos"
-            ]);
-
-            dataExportar.forEach(emp => {
-                datosParaExcel.push([
-                    emp.bio_id || '', emp.nombres, emp.apellidos, emp.ci, emp.sexo || '', emp.celular || '', emp.correo || '',
-                    emp.cargo || '', emp.sucursal_nombre || '', emp.seccion_nombre || '', emp.turno_nombre || 'Sin Turno Asignado', 
-                    emp.fecha_ingreso ? emp.fecha_ingreso.split('T')[0] : '', emp.fecha_antiguedad ? emp.fecha_antiguedad.split('T')[0] : '', 
-                    emp.tipo_contrato || '', Number(emp.salario_base) || 0, Number(emp.bono) || 0,
-                    emp.activo ? 'ACTIVO' : 'INACTIVO', emp.fecha_retiro ? emp.fecha_retiro.split('T')[0] : '',
-                    emp.motivo_retiro || '', emp.historial_movimientos || ''
-                ]);
-            });
-
-            const wb = XLSX.utils.book_new();
-            const ws = XLSX.utils.aoa_to_sheet(datosParaExcel);
-
-            const anchos = [
-                {wch: 10}, {wch: 20}, {wch: 20}, {wch: 15}, {wch: 12}, {wch: 15}, {wch: 25},
-                {wch: 20}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 18}, {wch: 15}, {wch: 12}, 
-                {wch: 10}, {wch: 10}, {wch: 15}, {wch: 30}, {wch: 50}
-            ];
-            ws['!cols'] = anchos;
-
-            XLSX.utils.book_append_sheet(wb, ws, "Planilla_Personal");
-            XLSX.writeFile(wb, `Planilla_${filtroActual.toUpperCase()}_${new Date().getTime()}.xlsx`);
         }
+
+        function generarReportePDF() { descargarArchivoServidor('pdf'); }
+        function exportarExcel() { descargarArchivoServidor('excel'); }
 
         // ==========================================
         // 📷 MOTOR DE CAPTURA DE FOTOS Y WEBCAM
@@ -1108,7 +1022,7 @@
                 cargarCatalogos(),
                 cargarTurnosParaSelect()
             ]);
-            await cargarEmpleados();
+            busquedaOptimizadaPlanilla(); // ✅ El nuevo buscador hace el trabajo inicial
         }
         
         arrancarPantallaPlanilla();
