@@ -1000,7 +1000,7 @@ async def obtener_empleados(
         conn.close()
 
 @app.post("/empleados")
-async def registrar_empleado(request: Request, usuario = Depends(verificar_token)):
+async def crear_empleado(request: Request, usuario = Depends(verificar_token)):
     schema = usuario["schema_name"]
     data = await request.json()
     
@@ -1008,20 +1008,26 @@ async def registrar_empleado(request: Request, usuario = Depends(verificar_token
     cur = conn.cursor()
     try:
         ci = data.get("ci")
-        bio_id = data.get("bio_id")
 
-        if not bio_id:
-            # Buscamos el ID más alto actual y le sumamos 1
-            cur.execute(f"SELECT MAX(bio_id) as max_id FROM {schema}.empleados")
-            resultado = cur.fetchone()
-            max_id = resultado['max_id'] if resultado and resultado['max_id'] is not None else 0
-            bio_id = max_id + 1
-            
-        # Validamos que el ID no exista ya (sea manual o autogenerado)
-        cur.execute(f"SELECT id FROM {schema}.empleados WHERE bio_id = %s", (bio_id,))
-        if cur.fetchone():
-            raise HTTPException(status_code=400, detail=f"El ID de lector {bio_id} ya está en uso por otro empleado.")
+        # ⚡ Lógica de ID Inteligente (Híbrida)
+        bio_id_recibido = data.get('bio_id')
         
+        # Si el campo está vacío o es None, autogeneramos
+        if bio_id_recibido is None or str(bio_id_recibido).strip() == "":
+            cur.execute(f"SELECT MAX(bio_id) as max_id FROM {schema}.empleados")
+            res_max = cur.fetchone()
+            # Si no hay empleados, empezamos en 1. Si hay, sumamos +1.
+            max_actual = res_max['max_id'] if res_max and res_max['max_id'] is not None else 0
+            bio_id_final = max_actual + 1
+        else:
+            # Si el usuario anotó un ID, lo usamos (convertido a entero)
+            bio_id_final = int(bio_id_recibido)
+
+        # Verificamos que no exista un duplicado de ese ID (sea manual o autogenerado)
+        cur.execute(f"SELECT id FROM {schema}.empleados WHERE bio_id = %s", (bio_id_final,))
+        if cur.fetchone():
+            raise HTTPException(status_code=400, detail=f"El ID de lector {bio_id_final} ya está asignado a otro empleado.")
+
         turno_id_raw = data.get("turno_id")
         turno_id_final = int(turno_id_raw) if turno_id_raw else None
         
@@ -1043,7 +1049,7 @@ async def registrar_empleado(request: Request, usuario = Depends(verificar_token
                         sucursal_id = %s, seccion_id = %s, cargo = %s, turno_id = %s,
                         eliminado = FALSE, activo = TRUE
                     WHERE id = %s
-                """, (bio_id, foto_perfil, data.get("nombres"), data.get("apellidos"), 
+                """, (bio_id_final, foto_perfil, data.get("nombres"), data.get("apellidos"), 
                       data.get("sucursal_id"), data.get("seccion_id"), data.get("cargo"), turno_id_final, id_db))
                 msg = "Empleado reactivado correctamente."
         else:
@@ -1053,7 +1059,7 @@ async def registrar_empleado(request: Request, usuario = Depends(verificar_token
              sexo, celular, correo, direccion, fecha_ingreso, fecha_antiguedad, tipo_contrato, salario_base, bono) 
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
-            bio_id, 
+            bio_id_final, 
             foto_perfil,          # ⚡ Inyectamos la foto aquí
             data.get("nombres"), 
             data.get("apellidos"), 
