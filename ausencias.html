@@ -624,10 +624,23 @@ const API_URL = "https://asistencia-api.up.railway.app";
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.detail || "Error en el servidor");
 
-                mostrarExito(data.mensaje);
-                
+                // ⚡ 1. Cerramos el panel visualmente para que se vea limpio
                 limpiarFormulario();
                 cerrarPanel();
+                
+                // ⚡ 2. Truco Maestro: Vamos al servidor, traemos el ID del registro que acabamos de crear y disparamos el PDF
+                setTimeout(async () => {
+                    try {
+                        const resH = await fetch(`${API_URL}/empleados/${empleadoSeleccionadoId}/ausencias`, { headers: { 'Authorization': `Bearer ${token_api}` } });
+                        const hist = await resH.json();
+                        if(hist.length > 0) {
+                            generarBoletaPDF(hist[0].id); // Dispara la boleta automáticamente
+                        }
+                    } catch(e) { console.log("No se pudo auto-abrir la boleta"); }
+                }, 300); // Pequeño retraso para que la Base de Datos respire
+
+                // 3. Actualizamos la pantalla de fondo
+                mostrarExito("¡Registro exitoso! Generando boleta...");
                 cargarKardexEmpleado(empleadoSeleccionadoId); 
                 actualizarContadoresFiltros();
                 renderizarTablaPrincipal();
@@ -814,11 +827,14 @@ const API_URL = "https://asistencia-api.up.railway.app";
             .then(res => res.blob())
             .then(blob => {
                 const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `Boleta_Autorizacion.pdf`;
-                a.click();
+                
+                // ⚡ MAGIA: Abre el PDF en una pestaña nueva para visualizarlo o imprimirlo al instante
+                window.open(url, '_blank'); 
+                
                 Swal.close();
+                
+                // Limpiamos la memoria del navegador después de 10 segundos
+                setTimeout(() => window.URL.revokeObjectURL(url), 10000);
             }).catch(e => Swal.fire('Error', 'Fallo al generar la boleta.', 'error'));
         }
 
@@ -855,7 +871,7 @@ const API_URL = "https://asistencia-api.up.railway.app";
                 mode: "range",
                 dateFormat: "Y-m-d",
                 locale: "es", 
-                minDate: "today", 
+                //minDate: "today", 
                 onChange: function(selectedDates, dateStr, instance) {
                     if (selectedDates.length > 0) {
                         let fInicio = instance.formatDate(selectedDates[0], "Y-m-d");

@@ -2392,6 +2392,9 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
             estado_asistencia = "Pendiente"
             permite_clic = True
 
+            # ⚡ Evaluamos primero si el permiso cubre todo el día
+            es_dia_libre_completo = ausencia_activa and (ausencia_activa['tipo'] == 'vacacion' or not ausencia_activa.get('hora_inicio'))
+
             if emp_data and emp_data.get('fecha_ingreso') and fecha_loop < emp_data['fecha_ingreso']:
                 tipo_dia = "previo_contrato"
                 estado_asistencia = "Previo a Contrato"
@@ -2400,11 +2403,12 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
                 tipo_dia = "feriado"
                 estado_asistencia = nombre_feriado
                 permite_clic = False
-            elif datos_asistencia and datos_asistencia.get('estado') != 'Pendiente':
-                estado_asistencia = datos_asistencia['estado']
-            elif ausencia_activa:
+            elif es_dia_libre_completo:
+                # ⚡ FIX: Prioridad visual absoluta a las ausencias de día completo
                 tipo_dia = ausencia_activa['tipo']
                 estado_asistencia = ausencia_activa['tipo'].capitalize()
+            elif datos_asistencia and datos_asistencia.get('estado') != 'Pendiente':
+                estado_asistencia = datos_asistencia['estado']
             elif not es_dia_laboral:
                 tipo_dia = "descanso"
                 estado_asistencia = "Descanso"
