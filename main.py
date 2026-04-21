@@ -717,20 +717,20 @@ async def crear_sucursal(data: dict, usuario = Depends(verificar_token)):
     conn = conectar_bd(schema)
     cur = conn.cursor()
     try:
-        # Asegúrate de que el query tenga 3 campos y 3 %s
+        # ⚡ CORRECCIÓN: 4 campos (%s) = 4 variables en la tupla inferior
         cur.execute(f"""
             INSERT INTO {schema}.sucursales (nombre, ciudad, direccion, telefono) 
             VALUES (%s, %s, %s, %s)
         """, (
             data.get("nombre"), 
+            data.get("ciudad"),       # ⚡ ¡ESTA ES LA LÍNEA QUE FALTABA!
             data.get("direccion"), 
-            data.get("telefono", "") # Capturamos el teléfono
+            data.get("telefono", "") 
         ))
         conn.commit()
         return {"mensaje": "Sucursal creada exitosamente"}
     except Exception as e:
         conn.rollback()
-        # Esto imprimirá el error real en los logs de Railway
         print(f"ERROR CRÍTICO EN POST SUCURSALES: {e}") 
         raise HTTPException(status_code=422, detail=str(e))
     finally:
@@ -1342,6 +1342,25 @@ async def exportar_empleados_pdf(estado: str="activos", q: str="", sucursal_id: 
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
+        # 1. CONSTRUCCIÓN DE LA ETIQUETA DE FILTROS (Inteligencia de Negocio)
+        filtros_texto = f"Estado: {estado.upper()}"
+        
+        if sucursal_id:
+            cur.execute(f"SELECT nombre FROM {schema}.sucursales WHERE id = %s", (sucursal_id,))
+            res = cur.fetchone()
+            if res: filtros_texto += f" | Sucursal: {res['nombre']}"
+            
+        if seccion_id:
+            cur.execute(f"SELECT nombre FROM {schema}.secciones WHERE id = %s", (seccion_id,))
+            res = cur.fetchone()
+            if res: filtros_texto += f" | Sección: {res['nombre']}"
+            
+        if cargo:
+            filtros_texto += f" | Cargo: {cargo}"
+            
+        if q:
+            filtros_texto += f" | Búsqueda: '{q}'"
+        
         # ⚡ RECONSTRUIDO: La consulta SQL completa y real (nada de tres puntos)
         query = f"""
             SELECT e.*, s.nombre as sucursal_nombre, sec.nombre as seccion_nombre, t.nombre as turno_nombre
@@ -2847,14 +2866,16 @@ async def editar_asistencia_manual(empleado_id: int, data: dict, request: Reques
         exito = procesar_asistencia_dia(schema, empleado_id, fecha_dt)
         
         if exito:
-            # Volvemos a sellar el día como "Modificado Manualmente" para que el ZKTeco no lo sobreescriba accidentalmente
+            # ⚡ CORRECCIÓN: Quitamos el "candado" (modificado_manualmente = TRUE)
+            # Como ahora tus cambios viven en 'eventos_brutos', están a salvo.
+            # Solo guardamos la observación y dejamos el día "Abierto" al reloj físico.
             cur.execute(f"""
                 UPDATE {schema}.asistencia_diaria 
-                SET modificado_manualmente = TRUE, observaciones = %s
+                SET observaciones = %s, modificado_manualmente = FALSE
                 WHERE empleado_id = %s AND fecha = %s
             """, (justificacion, empleado_id, fecha_dt))
             conn.commit()
-            return {"mensaje": "Historial reconstruido exitosamente."}
+            return {"mensaje": "Marcaje manual inyectado. El día sigue abierto para el reloj físico."}
         else:
             raise HTTPException(status_code=500, detail="Error en el Motor de Cálculo.")
 
