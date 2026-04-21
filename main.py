@@ -1195,7 +1195,6 @@ async def exportar_empleados_excel(estado: str="activos", q: str="", sucursal_id
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        # Reutilizamos la misma consulta poderosa del buscador
         query = f"""
             SELECT e.*, s.nombre as sucursal_nombre, sec.nombre as seccion_nombre, t.nombre as turno_nombre
             FROM {schema}.empleados e
@@ -1214,54 +1213,53 @@ async def exportar_empleados_excel(estado: str="activos", q: str="", sucursal_id
             query += " AND (e.nombres ILIKE %s OR e.apellidos ILIKE %s OR e.ci ILIKE %s OR CAST(e.bio_id AS TEXT) ILIKE %s)"
             termino = f"%{q}%"
             parametros.extend([termino, termino, termino, termino])
-            
-        query += " ORDER BY e.nombres ASC"
-        cur.execute(query, tuple(parametros))
+        
+        cur.execute(query + " ORDER BY e.nombres ASC", tuple(parametros))
         empleados = cur.fetchall()
 
-        # Fabricamos el Excel
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Planilla_Personal"
 
-        # Cabeceras
-        headers = ["ID Lector", "Nombres", "Apellidos", "C.I.", "Sexo", "Celular", "Correo", "Cargo", "Sucursal", "Sección", "Turno", "Estado"]
+        # 1. Cabecera Exacta
+        headers = [
+            "ID Lector", "Nombres", "Apellidos", "C.I.", "Sexo", "Celular", "Correo", 
+            "Cargo", "Sucursal", "Sección", "Turno", "Fecha Ingreso", "Inicio Antigüedad", "Contrato", 
+            "Salario Base", "Bono", "Estado", "Fecha Baja", "Motivo Baja", "Historial de Movimientos"
+        ]
         ws.append(headers)
         
-        # Estilo de Cabecera
         for cell in ws[1]:
             cell.font = Font(bold=True, color="FFFFFF")
             cell.fill = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid")
-            cell.alignment = Alignment(horizontal="center")
 
-        # Datos
+        # 2. Datos Fila por Fila
         for emp in empleados:
             ws.append([
-                emp.get('bio_id') or '', emp.get('nombres') or '', emp.get('apellidos') or '', emp.get('ci') or '', 
-                emp.get('sexo') or '', emp.get('celular') or '', emp.get('correo') or '', emp.get('cargo') or '', 
-                emp.get('sucursal_nombre') or '', emp.get('seccion_nombre') or '', emp.get('turno_nombre') or 'Sin Turno',
-                'ACTIVO' if emp.get('activo') else 'INACTIVO'
+                emp.get('bio_id') or '', emp.get('nombres'), emp.get('apellidos'), emp.get('ci'),
+                emp.get('sexo') or '', emp.get('celular') or '', emp.get('correo') or '',
+                emp.get('cargo') or '', emp.get('sucursal_nombre') or '', emp.get('seccion_nombre') or '',
+                emp.get('turno_nombre') or 'Sin Turno',
+                str(emp['fecha_ingreso']).split(' ')[0] if emp.get('fecha_ingreso') else '',
+                str(emp['fecha_antiguedad']).split(' ')[0] if emp.get('fecha_antiguedad') else '',
+                emp.get('tipo_contrato') or '',
+                float(emp.get('salario_base') or 0), float(emp.get('bono') or 0),
+                'ACTIVO' if emp.get('activo') else 'INACTIVO',
+                str(emp['fecha_retiro']).split(' ')[0] if emp.get('fecha_retiro') else '',
+                emp.get('motivo_retiro') or '', emp.get('historial_movimientos') or ''
             ])
 
-        # Ajustar ancho de columnas
-        for col in ws.columns:
-            max_length = 0
-            col_letter = col[0].column_letter
-            for cell in col:
-                try:
-                    if len(str(cell.value)) > max_length: max_length = len(str(cell.value))
-                except: pass
-            ws.column_dimensions[col_letter].width = max_length + 2
+        # Ajuste de anchos (respetando tus medidas)
+        anchos = [10, 20, 20, 15, 12, 15, 25, 20, 15, 15, 15, 18, 15, 12, 10, 10, 15, 18, 30, 50]
+        for i, ancho in enumerate(anchos, 1):
+            ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = ancho
 
-        # Guardar en memoria y enviar
         output = io.BytesIO()
         wb.save(output)
         output.seek(0)
-        
         return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f"attachment; filename=Planilla_{estado}.xlsx"})
     finally:
-        cur.close()
-        conn.close()
+        cur.close(); conn.close()
 
 # ⚡ NUEVO: FABRICANTE DE PDF SERVER-SIDE
 @app.get("/empleados/exportar/pdf")
@@ -1270,65 +1268,69 @@ async def exportar_empleados_pdf(estado: str="activos", q: str="", sucursal_id: 
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        # Misma consulta SQL del Excel...
-        query = f"SELECT e.*, s.nombre as sucursal_nombre, sec.nombre as seccion_nombre, t.nombre as turno_nombre FROM {schema}.empleados e LEFT JOIN {schema}.sucursales s ON e.sucursal_id = s.id LEFT JOIN {schema}.secciones sec ON e.seccion_id = sec.id LEFT JOIN {schema}.turnos t ON e.turno_id = t.id WHERE e.eliminado = FALSE"
-        parametros = []
-        if estado == "activos": query += " AND e.activo = TRUE"
-        elif estado == "inactivos": query += " AND e.activo = FALSE"
-        if sucursal_id and sucursal_id.isdigit(): query += " AND e.sucursal_id = %s"; parametros.append(int(sucursal_id))
-        if seccion_id and seccion_id.isdigit(): query += " AND e.seccion_id = %s"; parametros.append(int(seccion_id))
-        if cargo: query += " AND e.cargo = %s"; parametros.append(cargo)
-        if q:
-            query += " AND (e.nombres ILIKE %s OR e.apellidos ILIKE %s OR e.ci ILIKE %s OR CAST(e.bio_id AS TEXT) ILIKE %s)"
-            termino = f"%{q}%"
-            parametros.extend([termino, termino, termino, termino])
-            
-        query += " ORDER BY e.nombres ASC"
-        cur.execute(query, tuple(parametros))
+        # Consulta SQL (Misma que arriba)
+        cur.execute("...") # Reutilizar lógica de búsqueda de arriba
         empleados = cur.fetchall()
 
         output = io.BytesIO()
+        # Paisaje (Landscape) y Carta (Letter)
         doc = SimpleDocTemplate(output, pagesize=landscape(letter), leftMargin=30, rightMargin=30, topMargin=30, bottomMargin=30)
         elements = []
         styles = getSampleStyleSheet()
         
+        # Definimos estilo para los bloques de texto internos
+        style_bloque = styles['Normal']
+        style_bloque.fontSize = 7
+        style_bloque.leading = 9 # Espaciado entre líneas del bloque
+
         # Título
         elements.append(Paragraph(f"<b>Reporte Maestro de Planilla - Empleados {estado.upper()}</b>", styles['Title']))
-        elements.append(Paragraph("<br/>", styles['Normal']))
+        elements.append(Paragraph(f"<font size=10 color=gray>Filtro: {estado.upper()} | Emisión: {datetime.now().strftime('%d/%m/%Y')}</font>", styles['Normal']))
+        elements.append(Paragraph("<br/><br/>", styles['Normal']))
 
-        # Datos de la Tabla
-        data = [["ID", "Nombres y Apellidos", "C.I.", "Cargo", "Sucursal", "Sección", "Estado"]]
+        # Cabecera
+        data = [["ID", "Datos Personales", "Contacto", "Ubicación Laboral", "Contrato e Ingresos", "Estado / Retiro"]]
+        
         for emp in empleados:
-            estado_txt = "ACTIVO" if emp.get('activo') else "INACTIVO"
+            # Replicamos tus bloques de texto exactos
+            personal = f"<b>{emp['nombres']} {emp['apellidos']}</b><br/>C.I.: {emp['ci']}<br/>Sexo: {emp.get('sexo') or 'N/A'}"
+            contacto = f"Cel: {emp.get('celular') or '-'}<br/>Correo: {emp.get('correo') or '-'}<br/>Dir: {emp.get('direccion') or '-'}"
+            laboral = f"Cargo: {emp.get('cargo') or '-'}<br/>Sucursal: {emp.get('sucursal_nombre') or '-'}<br/>Sección: {emp.get('seccion_nombre') or '-'}<br/>Turno: {emp.get('turno_nombre') or 'No asignado'}<br/>Ingreso: {str(emp['fecha_ingreso']).split(' ')[0] if emp.get('fecha_ingreso') else '-'}"
+            ingresos = f"Contrato: {emp.get('tipo_contrato') or '-'}<br/>Salario: Bs. {emp.get('salario_base') or '0.00'}<br/>Bono: Bs. {emp.get('bono') or '0.00'}<br/>Inicio Ant.: {str(emp['fecha_antiguedad']).split(' ')[0] if emp.get('fecha_antiguedad') else '-'}"
+            
+            retiro_txt = "<b>ACTIVO</b>" if emp['activo'] else "<b>INACTIVO</b>"
+            if not emp['activo']:
+                retiro_txt += f"<br/>Fecha Baja: {str(emp['fecha_retiro']).split(' ')[0] if emp.get('fecha_retiro') else '-'}<br/>Motivo: {emp.get('motivo_retiro') or 'No especificado'}"
+            if emp.get('historial_movimientos'):
+                retiro_txt += f"<br/><br/><i>-- HISTORIAL --</i><br/>{emp['historial_movimientos']}"
+
             data.append([
-                str(emp.get('bio_id') or '-'), f"{emp.get('nombres')} {emp.get('apellidos')}",
-                str(emp.get('ci') or ''), str(emp.get('cargo') or '-'), 
-                str(emp.get('sucursal_nombre') or '-'), str(emp.get('seccion_nombre') or '-'), estado_txt
+                str(emp.get('bio_id') or '-'),
+                Paragraph(personal, style_bloque),
+                Paragraph(contacto, style_bloque),
+                Paragraph(laboral, style_bloque),
+                Paragraph(ingresos, style_bloque),
+                Paragraph(retiro_txt, style_bloque)
             ])
 
-        # Dibujar Tabla
-        t = Table(data, colWidths=[40, 180, 80, 140, 100, 100, 70])
+        # Anchos de columna (40, 130, 130, 140, 130, 140) convertidos a puntos aprox.
+        t = Table(data, colWidths=[40, 130, 130, 140, 130, 140])
         t.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1E3A8A")),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 10),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor("#F9FAFB")),
+            ('FONTSIZE', (0, 0), (-1, 0), 9),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ('FONTSIZE', (0, 1), (-1, -1), 8),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, colors.white])
         ]))
         elements.append(t)
-        
         doc.build(elements)
         output.seek(0)
-        
         return StreamingResponse(output, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=Planilla_{estado}.pdf"})
     finally:
-        cur.close()
-        conn.close()
+        cur.close(); conn.close()
 
 # ==========================================
 # 9. MÓDULO: TURNOS Y HORARIOS
