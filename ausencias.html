@@ -292,7 +292,7 @@
 
     <!-- ⚙️ PASO 2: LÓGICA DE LA PÁGINA -->
     <script>
-        const API_URL = "https://asistencia-api.up.railway.app";
+const API_URL = "https://asistencia-api.up.railway.app";
         const token_api = localStorage.getItem('token');
         
         let empleadosGlobal = [];
@@ -300,12 +300,11 @@
         let tipoRegistroActual = 'vacacion';
         let calendarioInstancia = null;
         let historialGlobal = [];
+        let filtroEstadoAusencia = 'todos'; // ⚡ FIX: La variable que faltaba estaba aquí
         
-
         // ==========================================
         // UI: CONTROL DE PANELES Y ESTILOS
         // ==========================================
-        
         function abrirPanelCaso1() {
             empleadoSeleccionadoId = null;
             document.getElementById('drawerTitle').textContent = "Nueva Ausencia";
@@ -321,16 +320,9 @@
             mostrarPanel();
         }
 
-        // Nueva función para capturar la selección del Datalist
-        function seleccionarDesdeBuscador(valor) {
-            const emp = empleadosGlobal.find(e => `${e.ci} - ${e.nombres} ${e.apellidos}` === valor);
-            if(emp) cargarKardexEmpleado(emp.id);
-        }
-
         function abrirPanelCaso2(idEmpleado) {
-            // Caso 2: Clic directo en la tabla
-            document.getElementById('cajaBuscadorEmpleado').classList.add('hidden'); // Ocultamos buscador
-            cargarKardexEmpleado(idEmpleado); // Carga directa
+            document.getElementById('cajaBuscadorEmpleado').classList.add('hidden');
+            cargarKardexEmpleado(idEmpleado);
             mostrarPanel();
         }
 
@@ -345,25 +337,17 @@
         }
 
         function limpiarFormulario() {
-            // 1. Limpiamos el calendario profesional (Flatpickr)
-            if (calendarioInstancia) {
-                calendarioInstancia.clear();
-            }
-            // 2. Limpiamos los NUEVOS IDs de fecha y hora separados
+            if (calendarioInstancia) calendarioInstancia.clear();
             document.getElementById('fecha_inicio_permiso').value = '';
             document.getElementById('hora_inicio_permiso').value = '';
             document.getElementById('fecha_fin_permiso').value = '';
             document.getElementById('hora_fin_permiso').value = '';
-            
             document.getElementById('motivo_ausencia').value = '';
             
-            // 3. Devolvemos el selector a "Vacación" por defecto
             cambiarTipoRegistro('vacacion');
-            
-            // 4. Reiniciamos los checkboxes por defecto
             document.getElementById('permiso_por_dias').checked = false;
             document.getElementById('requiere_reposicion').checked = false;
-            toggleHorasPermiso(); // Asegura que los campos correctos estén visibles
+            toggleHorasPermiso();
         }
 
         function cambiarTipoRegistro(tipo) {
@@ -383,36 +367,32 @@
             }
         }
 
-        function filtrarBuscadorFlotante(texto) {
-            const dropdown = document.getElementById('dropdown_empleados');
-            dropdown.innerHTML = '';
-            if(!texto) { dropdown.classList.add('hidden'); return; }
-            
-            const filtrados = empleadosGlobal.filter(e => `${e.ci} ${e.nombres} ${e.apellidos}`.toLowerCase().includes(texto.toLowerCase()));
-            
-            if(filtrados.length === 0) {
-                dropdown.innerHTML = '<li class="p-3 text-gray-500 italic">No se encontraron resultados</li>';
-            } else {
-                filtrados.forEach(emp => {
-                    dropdown.innerHTML += `<li onclick="seleccionarEmpleado('${emp.id}', '${emp.nombres} ${emp.apellidos}')" class="p-3 hover:bg-blue-50 cursor-pointer text-gray-700 font-medium transition-colors"><i class="fas fa-user-circle text-gray-400 mr-2"></i>${emp.ci} - ${emp.nombres} ${emp.apellidos}</li>`;
-                });
-            }
-            dropdown.classList.remove('hidden');
-        }
-
         function seleccionarEmpleado(id, nombre) {
             document.getElementById('buscador_empleado').value = nombre;
             document.getElementById('dropdown_empleados').classList.add('hidden');
             cargarKardexEmpleado(id);
         }
 
+        function toggleHorasPermiso() {
+            const esPorDias = document.getElementById('permiso_por_dias').checked;
+            const zonaRelojes = document.getElementById('zona_relojes');
+            if(esPorDias) {
+                zonaRelojes.classList.add('hidden');
+                document.getElementById('fecha_inicio_permiso').value = '';
+                document.getElementById('hora_inicio_permiso').value = '';
+                document.getElementById('fecha_fin_permiso').value = '';
+                document.getElementById('hora_fin_permiso').value = '';
+            } else {
+                zonaRelojes.classList.remove('hidden');
+            }
+        }
+
         // ==========================================
-        // CORE: CARGA DE DATOS (SERVER-SIDE MÁGICO)
+        // ⚡ CORE: CARGA DE DATOS Y CONEXIÓN API
         // ==========================================
 
         async function actualizarContadoresFiltros() {
             try {
-                // 1. Traemos Sucursales y Secciones
                 const [resSuc, resSec] = await Promise.all([
                     fetch(`${API_URL}/sucursales`, { headers: { 'Authorization': `Bearer ${token_api}` } }),
                     fetch(`${API_URL}/secciones`, { headers: { 'Authorization': `Bearer ${token_api}` } })
@@ -428,7 +408,6 @@
                 selSec.innerHTML = '<option value="">Todas las secciones</option>';
                 secciones.forEach(s => selSec.innerHTML += `<option value="${s.id}">${s.nombre}</option>`);
 
-                // 2. Traemos las estadísticas y cargos directamente del servidor
                 const resStats = await fetch(`${API_URL}/ausencias/stats`, { headers: { 'Authorization': `Bearer ${token_api}` } });
                 const stats = await resStats.json();
                 
@@ -437,15 +416,13 @@
                 document.getElementById('count_permisos').textContent = stats.permisos;
                 document.getElementById('count_trabajando').textContent = stats.trabajando;
 
-                // Llenamos los cargos
                 const selCargo = document.getElementById('filtro_cargo');
                 selCargo.innerHTML = '<option value="">Todos los cargos</option>';
                 stats.cargos.forEach(c => selCargo.innerHTML += `<option value="${c}">${c}</option>`);
 
-            } catch(e) { console.error("Error inicializando catálogos y contadores:", e); }
+            } catch(e) { console.error("Error inicializando catálogos:", e); }
         }
 
-        // ⚡ LA ANTIGUA `cargarEmpleados` Y `renderizarTablaPrincipal` AHORA SON UNA SOLA
         async function renderizarTablaPrincipal() {
             const tbody = document.getElementById('cuerpoTablaAusencias');
             tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-gray-500"><i class="fas fa-circle-notch fa-spin text-xl mr-2"></i>Sincronizando con el servidor...</td></tr>';
@@ -461,7 +438,7 @@
 
             try {
                 const res = await fetch(`${API_URL}/ausencias/directorio?${params.toString()}`, { headers: { 'Authorization': `Bearer ${token_api}` } });
-                empleadosGlobal = await res.json(); // Actualizamos la memoria local
+                empleadosGlobal = await res.json(); 
                 
                 tbody.innerHTML = '';
                 if(empleadosGlobal.length === 0) {
@@ -469,7 +446,6 @@
                     return;
                 }
 
-                // Dibujamos directamente
                 empleadosGlobal.forEach(emp => {
                     const iniciales = (emp.nombres.charAt(0) + emp.apellidos.charAt(0)).toUpperCase();
                     
@@ -496,7 +472,6 @@
             }
         }
 
-        // ⚡ MODIFICAMOS EL DISPARADOR DEL KARDEX
         async function cargarKardexEmpleado(idStr) {
             if(!idStr) return;
             const id = parseInt(idStr);
@@ -504,9 +479,9 @@
             if (empleadoSeleccionadoId !== id) limpiarFormulario();
             empleadoSeleccionadoId = id;
             
-            // Lo buscamos en la memoria recién descargada
             const emp = empleadosGlobal.find(e => e.id === id);
-            
+            if(!emp) return;
+
             document.getElementById('drawerTitle').textContent = `Ausencias: ${emp.nombres}`;
             
             const btnVacacion = document.getElementById('btnTabVacacion');
@@ -525,7 +500,6 @@
             document.getElementById('tabla_historial_empleado').innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-500 text-xs"><i class="fas fa-spinner fa-spin mr-2"></i>Cargando historial...</td></tr>';
             
             try {
-                // ⚡ YA NO calculamos Kardex en el Frontend. Se lo pedimos directo a Python.
                 const res = await fetch(`${API_URL}/empleados/${id}/kardex_vacaciones`, { headers: { 'Authorization': `Bearer ${token_api}` } });
                 const kardex = await res.json();
 
@@ -534,10 +508,6 @@
                     document.getElementById('kardex_disponibles').textContent = disponiblesTexto;
                     document.getElementById('kardex_tasa').innerHTML = `<i class="fas fa-chart-line mr-1"></i> Tasa: ${kardex.tasa_actual}`;
                     document.getElementById('kardex_antiguedad').innerHTML = `<i class="fas fa-calendar-alt mr-1"></i> Antigüedad: ${kardex.antiguedad}`;
-                    
-                    // Actualiza la celda principal
-                    const celdaPrincipal = document.getElementById(`celda_kardex_${id}`);
-                    if (celdaPrincipal) celdaPrincipal.textContent = disponiblesTexto;
                 } else {
                     document.getElementById('kardex_disponibles').textContent = "0.00";
                     document.getElementById('kardex_antiguedad').textContent = "Requiere fecha antigüedad";
@@ -547,16 +517,12 @@
             } catch (error) { document.getElementById('kardex_disponibles').innerHTML = '<i class="fas fa-exclamation-triangle text-red-500 text-3xl"></i>'; }
         }
 
-        // ⚡ LA DESCARGA EN SEGUNDO PLANO FUE EXTIRPADA (Ya no hay N+1 queries)
-
-        // ⚡ DEBOUNCE INTELIGENTE Y BÚSQUEDA FLOTANTE
         let temporizadorBusqueda;
         function busquedaOptimizada(valorTexto) {
             clearTimeout(temporizadorBusqueda);
             temporizadorBusqueda = setTimeout(() => {
                 renderizarTablaPrincipal();
                 
-                // Si el cajón "Nuevo" está abierto, filtramos la cajita pequeña (API directa)
                 const cajita = document.getElementById('cajaBuscadorEmpleado');
                 if(cajita && !cajita.classList.contains('hidden') && valorTexto) {
                     filtrarBuscadorFlotanteServer(valorTexto);
@@ -571,7 +537,6 @@
             dropdown.innerHTML = '<li class="p-3 text-gray-500 italic"><i class="fas fa-spinner fa-spin mr-2"></i>Buscando...</li>';
             dropdown.classList.remove('hidden');
             try {
-                // Hacemos una consulta rápida al servidor solo para los 5 mejores resultados
                 const res = await fetch(`${API_URL}/ausencias/directorio?q=${texto}&limite=5`, { headers: { 'Authorization': `Bearer ${token_api}` } });
                 const opciones = await res.json();
                 
@@ -580,28 +545,15 @@
                 else {
                     opciones.forEach(emp => {
                         dropdown.innerHTML += `<li onclick="seleccionarEmpleado('${emp.id}', '${emp.nombres} ${emp.apellidos}')" class="p-3 hover:bg-blue-50 cursor-pointer text-gray-700 font-medium transition-colors"><i class="fas fa-user-circle text-gray-400 mr-2"></i>${emp.ci} - ${emp.nombres} ${emp.apellidos}</li>`;
-                        // Lo agregamos a la memoria global si no existía para que pueda cargar su Kardex al hacer clic
                         if(!empleadosGlobal.find(e => e.id === emp.id)) empleadosGlobal.push(emp);
                     });
                 }
             } catch(e) { dropdown.innerHTML = '<li class="p-3 text-red-500">Error al buscar</li>'; }
         }
 
-
-        function toggleHorasPermiso() {
-            const esPorDias = document.getElementById('permiso_por_dias').checked;
-            const zonaRelojes = document.getElementById('zona_relojes');
-            if(esPorDias) {
-                zonaRelojes.classList.add('hidden');
-                // ⚡ CORRECCIÓN: Limpiamos los nuevos campos de la vista rediseñada
-                document.getElementById('fecha_inicio_permiso').value = '';
-                document.getElementById('hora_inicio_permiso').value = '';
-                document.getElementById('fecha_fin_permiso').value = '';
-                document.getElementById('hora_fin_permiso').value = '';
-            } else {
-                zonaRelojes.classList.remove('hidden');
-            }
-        }
+        // ==========================================
+        // ⚡ REGISTRO DE AUSENCIAS
+        // ==========================================
 
         async function guardarAusencia() {
             if (!empleadoSeleccionadoId) {
@@ -655,8 +607,6 @@
                 payload.hora_inicio_permiso = h_ini;
                 payload.fecha_fin_permiso = f_fin;
                 payload.hora_fin_permiso = h_fin;
-                
-                // ⚡ FIX: Inyectamos la instrucción de reposición que faltaba para permisos por horas
                 payload.requiere_reposicion = requiere_reposicion; 
             }
 
@@ -674,16 +624,15 @@
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.detail || "Error en el servidor");
 
-                // ⚡ NOTIFICACIÓN FLOTANTE DE ÉXITO
                 mostrarExito(data.mensaje);
                 
                 limpiarFormulario();
                 cerrarPanel();
                 cargarKardexEmpleado(empleadoSeleccionadoId); 
-                cargarTodosLosKardexEnFondo();
+                actualizarContadoresFiltros();
+                renderizarTablaPrincipal();
                 
             } catch (error) {
-                // ⚡ VENTANA DE ERROR CORPORATIVA
                 mostrarError(error.message, "Error al registrar");
             } finally {
                 btn.disabled = false;
@@ -691,11 +640,10 @@
             }
         }
 
+        // ==========================================
+        // ⚡ HISTORIAL Y EDICIÓN
+        // ==========================================
 
-
-
-
-        // ⚡ CARGAR Y DIBUJAR EL HISTÓRICO CON LOS COMENTARIOS
         async function cargarHistorialAusencias(idEmpleado) {
             const tbody = document.getElementById('tabla_historial_empleado');
             tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-500 text-xs"><i class="fas fa-spinner fa-spin mr-2"></i>Cargando historial...</td></tr>';
@@ -708,7 +656,6 @@
                 if (!res.ok) throw new Error("Error al cargar historial");
                 const historial = await res.json();
                 
-                historialGlobal = historial; // ⚡ GUARDAMOS EN MEMORIA PARA EL PDF
                 tbody.innerHTML = '';
                 
                 if (historial.length === 0) {
@@ -716,7 +663,7 @@
                     return;
                 }
                 
-                historial.forEach((reg, index) => { 
+                historial.forEach(reg => { 
                     let fechasStr = `${reg.fecha_inicio}`;
                     if(reg.fecha_inicio !== reg.fecha_fin) fechasStr += ` al ${reg.fecha_fin}`;
                     
@@ -724,14 +671,11 @@
                         '<span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold"><i class="fas fa-plane mr-1"></i>Vacación</span>' : 
                         '<span class="bg-orange-100 text-orange-700 px-2 py-1 rounded text-xs font-bold"><i class="fas fa-clock mr-1"></i>Permiso</span>';
                     
-                    // ⚡ LÓGICA DE AUDITORÍA: Mostrar Deuda en Horas Exactas
                     let etiquetaDeuda = '';
                     if (reg.tipo === 'permiso' && reg.requiere_reposicion) {
-                        // Extraemos la matemática pura del Backend
                         etiquetaDeuda = `<div class="mt-1"><span class="bg-red-50 text-red-600 px-2 py-0.5 rounded text-[10px] font-bold border border-red-200 shadow-sm"><i class="fas fa-exclamation-circle mr-1"></i>Debe reponer ${reg.horas_totales} hrs</span></div>`;
                     }
                     
-                    // ⚡ BLINDAJE CONTRA NULL: Diferenciar Día Completo vs Horas
                     let descuentoStr = '';
                     if (reg.tipo === 'vacacion') {
                         descuentoStr = `<span class="font-bold text-gray-800">${reg.dias_descontados} días</span> ${etiquetaDeuda}`;
@@ -771,14 +715,55 @@
             }
         }
 
+        async function anularAusencia(ausenciaId) {
+            const seguro = await pedirConfirmacion(
+                "El saldo descontado será devuelto automáticamente al empleado. Esta acción quedará registrada.", 
+                "¿Anular este registro?", 
+                "Sí, anular"
+            );
+            if (!seguro) return;
+
+            try {
+                const res = await fetch(`${API_URL}/ausencias/${ausenciaId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token_api}` }
+                });
+                
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || "Error al anular el registro");
+                
+                mostrarExito(data.mensaje);
+                cargarKardexEmpleado(empleadoSeleccionadoId);
+                actualizarContadoresFiltros();
+                renderizarTablaPrincipal();
+            } catch (error) { mostrarError(error.message, "Error al anular"); }
+        }
+
+        async function editarMotivoAusencia(ausenciaId, motivoActual) {
+            const nuevoMotivo = await pedirTexto("Editar motivo / observaciones:", motivoActual, "Actualizar Observaciones");
+            if (nuevoMotivo === undefined || nuevoMotivo.trim() === motivoActual) return;
+
+            try {
+                const res = await fetch(`${API_URL}/ausencias/${ausenciaId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token_api}` },
+                    body: JSON.stringify({ motivo: nuevoMotivo.trim() })
+                });
+                
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || "Error al actualizar");
+                
+                mostrarExito("Observaciones actualizadas");
+                cargarHistorialAusencias(empleadoSeleccionadoId);
+            } catch (error) { mostrarError(error.message, "Error de actualización"); }
+        }
+
         // ==========================================
-        // UI: MODAL DE SALDO INICIAL
+        // ⚡ MODAL DE SALDO INICIAL Y REPORTES
         // ==========================================
+
         function abrirModalSaldoInicial() {
-            if (!empleadoSeleccionadoId) {
-                mostrarError("Seleccione un empleado primero.", "Atención");
-                return;
-            }
+            if (!empleadoSeleccionadoId) return;
             document.getElementById('input_admin_pwd').value = '';
             document.getElementById('input_saldo_inicial').value = '0.00';
             document.getElementById('modalSaldoInicial').classList.remove('hidden');
@@ -805,10 +790,7 @@
                 const res = await fetch(`${API_URL}/empleados/${empleadoSeleccionadoId}/saldo_inicial`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token_api}` },
-                    body: JSON.stringify({
-                        saldo_inicial: parseFloat(nuevoSaldo),
-                        admin_password: password
-                    })
+                    body: JSON.stringify({ saldo_inicial: parseFloat(nuevoSaldo), admin_password: password })
                 });
 
                 const data = await res.json();
@@ -816,10 +798,8 @@
 
                 mostrarExito(data.mensaje);
                 cerrarModalSaldoInicial();
-                
                 await cargarKardexEmpleado(empleadoSeleccionadoId);
-                cargarTodosLosKardexEnFondo();
-                
+                renderizarTablaPrincipal();
             } catch (error) {
                 mostrarError(error.message, "Acceso Denegado");
             } finally {
@@ -827,110 +807,9 @@
                 btn.innerHTML = '<i class="fas fa-save mr-2"></i> Confirmar Ajuste';
             }
         }
-        
-        // ⚡ TRABAJADOR EN SEGUNDO PLANO PARA LA TABLA PRINCIPAL
-        // ⚡ TRABAJADOR EN SEGUNDO PLANO OPTIMIZADO (Anti-Saturación)
-        async function cargarTodosLosKardexEnFondo() {
-            const tamanoLote = 5; // Consultamos de 5 en 5 para no ahogar al servidor Python
-            
-            for (let i = 0; i < empleadosGlobal.length; i += tamanoLote) {
-                const lote = empleadosGlobal.slice(i, i + tamanoLote);
-                
-                // Ejecutamos el lote actual en paralelo
-                await Promise.all(lote.map(async (emp) => {
-                    // ⚡ CACHÉ: Solo hacemos la petición si NO lo tenemos ya en la RAM
-                    if (emp.dias_disponibles_memoria === undefined) {
-                        try {
-                            const res = await fetch(`${API_URL}/empleados/${emp.id}/kardex_vacaciones`, { headers: { 'Authorization': `Bearer ${token_api}` } });
-                            if(res.ok) {
-                                const kardex = await res.json();
-                                emp.dias_disponibles_memoria = kardex.dias_disponibles !== undefined ? kardex.dias_disponibles.toFixed(2) : "0.00";
-                                
-                                // Actualizamos la celda de la tabla visualmente
-                                const celda = document.getElementById(`celda_kardex_${emp.id}`);
-                                if (celda) {
-                                    // Agregamos una pequeña animación de "fade in" al cargar
-                                    celda.style.opacity = 0;
-                                    celda.textContent = emp.dias_disponibles_memoria;
-                                    setTimeout(() => celda.style.opacity = 1, 100);
-                                    celda.style.transition = "opacity 0.3s ease";
-                                }
-                            }
-                        } catch (e) {
-                            console.error(`Error calculando kardex en fondo para ID ${emp.id}`);
-                        }
-                    }
-                }));
-                // Pausa microscópica entre lotes para que el navegador respire (fluidez de UI)
-                await new Promise(r => setTimeout(r, 50)); 
-            }
-        }
-
-        // ==========================================
-        // AUDITORÍA: EDICIÓN Y ANULACIÓN (SOFT DELETE)
-        // ==========================================
-
-        async function anularAusencia(ausenciaId) {
-            // ⚡ VENTANA DE CONFIRMACIÓN MODERNA
-            const seguro = await pedirConfirmacion(
-                "El saldo descontado será devuelto automáticamente al empleado. Esta acción quedará registrada.", 
-                "¿Anular este registro?", 
-                "Sí, anular"
-            );
-            
-            if (!seguro) return;
-
-            try {
-                const res = await fetch(`${API_URL}/ausencias/${ausenciaId}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${token_api}` }
-                });
-                
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.detail || "Error al anular el registro");
-                
-                mostrarExito(data.mensaje);
-                cargarKardexEmpleado(empleadoSeleccionadoId);
-                
-            } catch (error) {
-                mostrarError(error.message, "Error al anular");
-            }
-        }
-
-        async function editarMotivoAusencia(ausenciaId, motivoActual) {
-            // ⚡ VENTANA DE ENTRADA DE TEXTO MODERNA
-            const nuevoMotivo = await pedirTexto("Editar motivo / observaciones:", motivoActual, "Actualizar Observaciones");
-            
-            if (nuevoMotivo === undefined || nuevoMotivo.trim() === motivoActual) return;
-
-            try {
-                const res = await fetch(`${API_URL}/ausencias/${ausenciaId}`, {
-                    method: 'PUT',
-                    headers: { 
-                        'Content-Type': 'application/json', 
-                        'Authorization': `Bearer ${token_api}` 
-                    },
-                    body: JSON.stringify({ motivo: nuevoMotivo.trim() })
-                });
-                
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.detail || "Error al actualizar las observaciones");
-                
-                mostrarExito("Observaciones actualizadas correctamente");
-                cargarHistorialAusencias(empleadoSeleccionadoId);
-                
-            } catch (error) {
-                mostrarError(error.message, "Error de actualización");
-            }
-        }
-
-        // ==========================================
-        // EXPORTACIÓN A PDF (BOLETA Y REPORTE)
-        // ==========================================
 
         function generarBoletaPDF(idAusencia) {
             Swal.fire({ title: 'Generando Boleta...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-            
             fetch(`${API_URL}/ausencias/${idAusencia}/boleta/pdf`, { headers: { 'Authorization': `Bearer ${token_api}` } })
             .then(res => res.blob())
             .then(blob => {
@@ -946,7 +825,6 @@
         function generarReporteHistorialPDF() {
             if(!empleadoSeleccionadoId) return;
             Swal.fire({ title: 'Generando Kardex...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-            
             fetch(`${API_URL}/empleados/${empleadoSeleccionadoId}/historial_ausencias/pdf`, { headers: { 'Authorization': `Bearer ${token_api}` } })
             .then(res => res.blob())
             .then(blob => {
@@ -960,11 +838,19 @@
         }
 
         // ==========================================
-        // ARRANQUE DEL SISTEMA Y LIBRERÍAS
+        // ⚡ BOTONES DE FILTROS Y ARRANQUE
         // ==========================================
 
+        function cambiarFiltro(tipo, botonPresionado) {
+            filtroEstadoAusencia = tipo;
+            document.querySelectorAll('.filtro-btn').forEach(btn => {
+                btn.className = "filtro-btn px-4 py-2 bg-white text-gray-600 font-medium rounded-lg text-sm border border-gray-200 hover:bg-gray-50 transition-colors";
+            });
+            botonPresionado.className = "filtro-btn px-4 py-2 bg-blue-50 text-blue-700 font-semibold rounded-lg text-sm border border-blue-200 transition-colors";
+            renderizarTablaPrincipal();
+        }
+
         async function inicializarModulo() {
-            // 1. Instanciar el Calendario Enterprise (Flatpickr)
             calendarioInstancia = flatpickr("#rango_fechas", {
                 mode: "range",
                 dateFormat: "Y-m-d",
@@ -983,27 +869,20 @@
                 }
             });
 
-            // 2. Cargamos los catálogos y estadísticas de fondo
             await actualizarContadoresFiltros();
-            
-            // 3. ⚡ Disparamos el motor de renderizado (Reemplaza al viejo cargarEmpleados)
             await renderizarTablaPrincipal();
         }
 
-        // ⚡ UX FLUIDA: Cerrar menú flotante al hacer clic afuera
         document.addEventListener('click', function(event) {
             const cajaBuscador = document.getElementById('cajaBuscadorEmpleado');
             const dropdown = document.getElementById('dropdown_empleados');
-            
-            // Si el menú existe, está visible, y el clic NO fue dentro de la caja del buscador
             if (cajaBuscador && dropdown && !dropdown.classList.contains('hidden') && !cajaBuscador.contains(event.target)) {
                 dropdown.classList.add('hidden');
             }
         });
 
         inicializarModulo();
-        renderizarMenu('ausencias'); // Pinta el sidebar lateral
-
+        renderizarMenu('ausencias');
     </script>
 </body>
 </html>
