@@ -38,6 +38,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
 from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.pagesizes import A5, portrait
 
 # ==============================================================================
 # 2. CONFIGURACIÓN INICIAL DE LA APLICACIÓN
@@ -1491,6 +1492,104 @@ async def eliminar_turno(turno_id: int, usuario = Depends(verificar_token)):
 # 10. MÓDULO: VACACIONES Y PERMISOS
 # ==============================================================================
 
+# ⚡ NUEVO: Estadísticas Generales de Ausencias (Milisegundos)
+# ⚡ NUEVO: Estadísticas Generales y Cargos (Milisegundos)
+@app.get("/ausencias/stats")
+async def obtener_ausencias_stats(usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    conn = conectar_bd(schema)
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        # 1. Contadores
+        cur.execute(f"""
+            SELECT 
+                COUNT(e.id) as todos,
+                COUNT(a.id) FILTER (WHERE a.tipo = 'vacacion') as vacaciones,
+                COUNT(a.id) FILTER (WHERE a.tipo = 'permiso') as permisos
+            FROM {schema}.empleados e
+            LEFT JOIN {schema}.ausencias a ON a.empleado_id = e.id AND a.estado = 'aprobado' AND a.eliminado = FALSE AND CURRENT_DATE BETWEEN a.fecha_inicio AND a.fecha_fin
+            WHERE e.eliminado = FALSE AND e.activo = TRUE
+        """)
+        res = cur.fetchone()
+        
+        # 2. Cargos Únicos
+        cur.execute(f"SELECT DISTINCT cargo FROM {schema}.empleados WHERE eliminado = FALSE AND activo = TRUE AND cargo IS NOT NULL AND cargo != '' ORDER BY cargo")
+        cargos = [row['cargo'] for row in cur.fetchall()]
+
+        todos = res['todos'] or 0
+        vacaciones = res['vacaciones'] or 0
+        permisos = res['permisos'] or 0
+        trabajando = todos - vacaciones - permisos
+        
+        return {
+            "todos": todos, "vacaciones": vacaciones, "permisos": permisos, "trabajando": trabajando,
+            "cargos": cargos # ⚡ Ahora el backend entrega la lista limpia
+        }
+    finally:
+        cur.close()
+        conn.close()
+
+# ⚡ NUEVO: Buscador de Empleados con Cálculo Kardex "On-The-Fly"
+@app.get("/ausencias/directorio")
+async def buscar_directorio_ausencias(
+    estado: str = "todos", q: str = "", sucursal_id: str = "", seccion_id: str = "", cargo: str = "", limite: int = 100, usuario = Depends(verificar_token)
+):
+    schema = usuario["schema_name"]
+    conn = conectar_bd(schema)
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        # 1. Traemos la lista con la pre-suma de vacaciones (Todo en 1 sola consulta)
+        query = f"""
+            SELECT e.id, e.bio_id, e.nombres, e.apellidos, e.ci, e.cargo, e.tipo_contrato,
+                   s.nombre as sucursal_nombre, sec.nombre as seccion_nombre,
+                   e.fecha_antiguedad, e.saldo_vacaciones_inicial,
+                   (SELECT tipo FROM {schema}.ausencias a WHERE a.empleado_id = e.id AND a.estado = 'aprobado' AND a.eliminado = FALSE AND CURRENT_DATE BETWEEN a.fecha_inicio AND a.fecha_fin LIMIT 1) as estado_ausencia,
+                   COALESCE((SELECT SUM(dias_descontados) FROM {schema}.ausencias a WHERE a.empleado_id = e.id AND a.tipo = 'vacacion' AND a.estado = 'aprobado' AND a.eliminado = FALSE), 0) as dias_tomados
+            FROM {schema}.empleados e
+            LEFT JOIN {schema}.sucursales s ON e.sucursal_id = s.id
+            LEFT JOIN {schema}.secciones sec ON e.seccion_id = sec.id
+            WHERE e.eliminado = FALSE AND e.activo = TRUE
+        """
+        parametros = []
+        
+        if estado == "vacaciones": query += f" AND (SELECT tipo FROM {schema}.ausencias a WHERE a.empleado_id = e.id AND a.estado = 'aprobado' AND a.eliminado = FALSE AND CURRENT_DATE BETWEEN a.fecha_inicio AND a.fecha_fin LIMIT 1) = 'vacacion'"
+        elif estado == "permisos": query += f" AND (SELECT tipo FROM {schema}.ausencias a WHERE a.empleado_id = e.id AND a.estado = 'aprobado' AND a.eliminado = FALSE AND CURRENT_DATE BETWEEN a.fecha_inicio AND a.fecha_fin LIMIT 1) = 'permiso'"
+        elif estado == "trabajando": query += f" AND (SELECT tipo FROM {schema}.ausencias a WHERE a.empleado_id = e.id AND a.estado = 'aprobado' AND a.eliminado = FALSE AND CURRENT_DATE BETWEEN a.fecha_inicio AND a.fecha_fin LIMIT 1) IS NULL"
+        
+        if sucursal_id and sucursal_id.isdigit(): query += " AND e.sucursal_id = %s"; parametros.append(int(sucursal_id))
+        if seccion_id and seccion_id.isdigit(): query += " AND e.seccion_id = %s"; parametros.append(int(seccion_id))
+        if cargo: query += " AND e.cargo = %s"; parametros.append(cargo)
+        if q:
+            query += " AND (e.nombres ILIKE %s OR e.apellidos ILIKE %s OR e.ci ILIKE %s OR CAST(e.bio_id AS TEXT) ILIKE %s)"
+            termino = f"%{q}%"
+            parametros.extend([termino, termino, termino, termino])
+            
+        query += " ORDER BY e.nombres ASC LIMIT %s"
+        parametros.append(limite)
+        cur.execute(query, tuple(parametros))
+        empleados = cur.fetchall()
+
+        # 2. Motor Python en Ram: Calculamos los días disponibles para cada uno sin saturar la DB
+        hoy = date.today()
+        for emp in empleados:
+            emp["dias_disponibles_calculado"] = "0.00"
+            if emp["fecha_antiguedad"]:
+                dif = relativedelta(hoy, emp["fecha_antiguedad"])
+                anios, meses = dif.years, dif.months
+                dpa = 15 if anios < 5 else (20 if anios < 10 else 30)
+                acumulado = float(emp["saldo_vacaciones_inicial"] or 0) + (anios * dpa) + ((dpa / 12) * meses)
+                disp = round(acumulado - float(emp["dias_tomados"]), 2)
+                emp["dias_disponibles_calculado"] = f"{disp:.2f}"
+            else:
+                emp["dias_disponibles_calculado"] = "Sin Fecha"
+
+            if emp["fecha_antiguedad"]: emp["fecha_antiguedad"] = str(emp["fecha_antiguedad"])
+            
+        return empleados
+    finally:
+        cur.close()
+        conn.close()
+
 # ------------------------------------------------------------------------------
 # 1. KARDEX (Calcula los días disponibles matemáticamente)
 # ------------------------------------------------------------------------------
@@ -1849,6 +1948,138 @@ async def editar_ausencia(ausencia_id: int, data: dict, usuario = Depends(verifi
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=422, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+# ⚡ NUEVO: FABRICANTE DE BOLETA DE PERMISO/VACACIÓN (Server-Side PDF)
+@app.get("/ausencias/{ausencia_id}/boleta/pdf")
+async def descargar_boleta_pdf(ausencia_id: int, usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    conn = conectar_bd(schema)
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute(f"""
+            SELECT a.*, e.nombres, e.apellidos, e.ci, e.bio_id, e.cargo
+            FROM {schema}.ausencias a
+            JOIN {schema}.empleados e ON a.empleado_id = e.id
+            WHERE a.id = %s
+        """, (ausencia_id,))
+        reg = cur.fetchone()
+        if not reg: raise HTTPException(status_code=404, detail="Registro no encontrado")
+
+        output = io.BytesIO()
+        doc = SimpleDocTemplate(output, pagesize=portrait(A5), leftMargin=40, rightMargin=40, topMargin=40, bottomMargin=40)
+        elements = []
+        styles = getSampleStyleSheet()
+
+        # 1. Cabecera (Azul)
+        elements.append(Paragraph(f"<font color='#1e3a8a' size='14'><b>BOLETA DE AUTORIZACIÓN</b></font>", styles['Title']))
+        elements.append(Paragraph("<br/>", styles['Normal']))
+
+        # 2. Datos Empleado
+        elements.append(Paragraph(f"<b>Empleado:</b> {reg['nombres']} {reg['apellidos']}", styles['Normal']))
+        elements.append(Paragraph(f"<b>C.I.:</b> {reg['ci']} &nbsp;&nbsp;&nbsp; <b>ID Reloj:</b> {reg.get('bio_id') or 'N/A'}", styles['Normal']))
+        elements.append(Paragraph(f"<b>Cargo:</b> {reg.get('cargo') or 'No especificado'}", styles['Normal']))
+        elements.append(Paragraph("<br/><hr/><br/>", styles['Normal']))
+
+        # 3. Detalle Solicitud
+        elements.append(Paragraph(f"<b>Detalle de la Solicitud:</b>", styles['Normal']))
+        elements.append(Paragraph(f"<b>Tipo:</b> {reg['tipo'].upper()}", styles['Normal']))
+        elements.append(Paragraph(f"<b>Fechas:</b> {reg['fecha_inicio']} al {reg['fecha_fin']}", styles['Normal']))
+
+        if reg['tipo'] == 'permiso':
+            if reg.get('hora_inicio'):
+                elements.append(Paragraph(f"<b>Horario:</b> {str(reg['hora_inicio'])[:5]} a {str(reg['hora_fin'])[:5]}", styles['Normal']))
+            else:
+                elements.append(Paragraph(f"<b>Horario:</b> Jornada Completa", styles['Normal']))
+            
+            txt_horas = f"<b>Total Horas:</b> {reg['horas_totales']} hrs"
+            if reg.get('requiere_reposicion'):
+                txt_horas += " &nbsp;&nbsp;&nbsp; <font color='red'><b>* DEBE REPONER HORAS *</b></font>"
+            elements.append(Paragraph(txt_horas, styles['Normal']))
+        else:
+            elements.append(Paragraph(f"<b>Total Días Descontados:</b> {reg['dias_descontados']}", styles['Normal']))
+
+        # 4. Observaciones
+        elements.append(Paragraph("<br/><b>Observaciones:</b>", styles['Normal']))
+        obs = reg.get('motivo') or "Sin observaciones registradas."
+        elements.append(Paragraph(f"<i>{obs}</i>", styles['Italic']))
+
+        # 5. Firmas
+        elements.append(Paragraph("<br/><br/><br/><br/>", styles['Normal']))
+        firmas_data = [[Paragraph("_________________________<br/>Firma del Empleado", styles['Normal']),
+                        Paragraph("_________________________<br/>Autorizado por (RRHH)", styles['Normal'])]]
+        t = Table(firmas_data, colWidths=[150, 150])
+        elements.append(t)
+        
+        doc.build(elements)
+        output.seek(0)
+        return StreamingResponse(output, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=Boleta_{reg['ci']}.pdf"})
+    finally:
+        cur.close()
+        conn.close()
+
+# ⚡ NUEVO: FABRICANTE DE KARDEX DE HISTORIAL (Server-Side PDF)
+@app.get("/empleados/{empleado_id}/historial_ausencias/pdf")
+async def descargar_historial_ausencias_pdf(empleado_id: int, usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    conn = conectar_bd(schema)
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute(f"SELECT * FROM {schema}.empleados WHERE id = %s", (empleado_id,))
+        emp = cur.fetchone()
+        
+        cur.execute(f"""
+            SELECT * FROM {schema}.ausencias 
+            WHERE empleado_id = %s AND eliminado = FALSE 
+            ORDER BY fecha_inicio DESC
+        """, (empleado_id,))
+        historial = cur.fetchall()
+
+        output = io.BytesIO()
+        doc = SimpleDocTemplate(output, pagesize=letter, leftMargin=30, rightMargin=30, topMargin=30, bottomMargin=30)
+        elements = []
+        styles = getSampleStyleSheet()
+
+        elements.append(Paragraph(f"<b>REPORTE KARDEX DE AUSENCIAS</b>", styles['Title']))
+        elements.append(Paragraph(f"<b>Empleado:</b> {emp['nombres']} {emp['apellidos']} ({emp['ci']})", styles['Normal']))
+        elements.append(Paragraph(f"<b>Cargo:</b> {emp.get('cargo') or 'N/A'} <br/><br/>", styles['Normal']))
+
+        if not historial:
+            elements.append(Paragraph("El empleado no tiene registros de ausencias.", styles['Normal']))
+        else:
+            data = [["TIPO", "FECHA / HORARIO", "DESCUENTO", "ESTADO", "OBSERVACIONES"]]
+            for reg in historial:
+                tiempo = f"{reg['dias_descontados']} Días" if reg['tipo'] == 'vacacion' else f"{reg['horas_totales']} Hrs"
+                fechas = f"{reg['fecha_inicio']}"
+                if reg['fecha_inicio'] != reg['fecha_fin']: fechas += f" al {reg['fecha_fin']}"
+                
+                if reg['tipo'] == 'permiso':
+                    if reg.get('hora_inicio'): fechas += f"\n({str(reg['hora_inicio'])[:5]} a {str(reg['hora_fin'])[:5]})"
+                    else: fechas += "\n(Día Completo)"
+
+                estado_txt = reg['estado'].upper()
+                if reg['tipo'] == 'permiso' and reg.get('requiere_reposicion'): estado_txt += "\n(REPONER HORAS)"
+
+                data.append([
+                    reg['tipo'].upper(), fechas, tiempo, estado_txt, reg.get('motivo') or 'Ninguna'
+                ])
+
+            t = Table(data, colWidths=[60, 150, 70, 90, 150])
+            t.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1E3A8A")),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE')
+            ]))
+            elements.append(t)
+
+        doc.build(elements)
+        output.seek(0)
+        return StreamingResponse(output, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=Kardex_{emp['ci']}.pdf"})
     finally:
         cur.close()
         conn.close()
