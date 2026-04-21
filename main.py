@@ -1475,83 +1475,80 @@ def calcular_minutos_almuerzo(inicio: str, fin: str) -> int:
 # ==========================================
 @app.get("/turnos/calculadora")
 async def calculadora_turnos(ingreso: str = "", salida: str = "", alm_in: str = "", alm_out: str = "", usuario = Depends(verificar_token)):
+    """Calculadora centralizada para mantener el Frontend Tonto"""
     min_almuerzo = 0
     total_str = "0.00 hrs/día"
-
     try:
-        # 1. Calculamos Almuerzo
         if alm_in and alm_out:
-            in_h, in_m = map(int, alm_in.split(':'))
-            out_h, out_m = map(int, alm_out.split(':'))
-            m_in = (in_h * 60) + in_m
-            m_out = (out_h * 60) + out_m
-            if m_out < m_in: m_out += 24 * 60
-            min_almuerzo = m_out - m_in
+            h1, m1 = map(int, alm_in.split(':'))
+            h2, m2 = map(int, alm_out.split(':'))
+            m_total = ((h2 * 60) + m2) - ((h1 * 60) + m1)
+            if m_total < 0: m_total += 1440
+            min_almuerzo = m_total
 
-        # 2. Calculamos Total del Turno
         if ingreso and salida:
-            in_h, in_m = map(int, ingreso.split(':'))
-            out_h, out_m = map(int, salida.split(':'))
-            m_in = (in_h * 60) + in_m
-            m_out = (out_h * 60) + out_m
+            h1, m1 = map(int, ingreso.split(':'))
+            h2, m2 = map(int, salida.split(':'))
+            m_total = ((h2 * 60) + m2) - ((h1 * 60) + m1)
+            if m_total < 0: m_total += 1440
             
-            if m_out < m_in: m_out += 24 * 60 # Cruce de medianoche
-            
-            min_neto = (m_out - m_in) - min_almuerzo
-            if min_neto < 0: min_neto = 0
-            
-            # Formateamos a decimales (Ej. 8.50 hrs)
-            total_str = f"{(min_neto / 60):.2f} hrs/día"
-    except:
-        pass # Si mandan horas incompletas, devuelve 0 de forma segura
-
+            min_netos = m_total - min_almuerzo
+            total_str = f"{(max(0, min_netos) / 60):.2f} hrs/día"
+    except: pass
     return {"almuerzo_min": min_almuerzo, "total_str": total_str}
 
 @app.post("/turnos")
 async def crear_turno(data: dict, usuario = Depends(verificar_token)):
     schema = usuario["schema_name"]
-    # ⚡ Inteligencia: El servidor calcula los minutos basándose en las horas enviadas
-    almuerzo_min = calcular_minutos_almuerzo(data.get("inicio_almuerzo"), data.get("fin_almuerzo"))
-    
     conn = conectar_bd(schema)
-    cur = conn.cursor() 
-
+    cur = conn.cursor()
     try:
-        # ⚡ CORRECCIÓN: Cambiamos 'tolerancia_ingreso' por 'tolerancia_min'
+        # ⚡ Mapeo exacto con la DB y el JSON del frontend
         cur.execute(f"""
             INSERT INTO {schema}.turnos 
-            (nombre, hora_ingreso, hora_salida, almuerzo, hora_inicio_almuerzo, hora_fin_almuerzo, almuerzo_min, tolerancia_min)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            (nombre, hora_ingreso, hora_salida, dias, almuerzo, hora_inicio_almuerzo, hora_fin_almuerzo, almuerzo_min, tolerancia_min)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             data['nombre'], 
             data['hora_ingreso'], 
             data['hora_salida'], 
+            psycopg2.extras.Json(data.get('dias', [])), # ⚡ Corrección del error 'dias' NOT NULL
             data.get('almuerzo', True),
             data.get('inicio_almuerzo'), 
             data.get('fin_almuerzo'), 
-            almuerzo_min, 
-            data.get('tolerancia_ingreso', 0) # Obtenemos el dato del frontend y lo guardamos en tolerancia_min
+            data.get('almuerzo_min', 0),
+            data.get('tolerancia_min', 0)
         ))
         conn.commit()
-        return {"mensaje": "Turno guardado con éxito."}
+        return {"mensaje": "Turno creado exitosamente"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error en DB: {str(e)}")
     finally:
-        cur.close()
-        conn.close()
+        cur.close(); conn.close()
 
 @app.put("/turnos/{turno_id}")
 async def actualizar_turno(turno_id: int, data: dict, usuario = Depends(verificar_token)):
     schema = usuario["schema_name"]
-    almuerzo_min = calcular_minutos_almuerzo(data.get("inicio_almuerzo"), data.get("fin_almuerzo"))
     
+    # ⚡ El Cerebro calcula antes de guardar
+    almuerzo_min = 0
+    if data.get('inicio_almuerzo') and data.get('fin_almuerzo'):
+        h1, m1 = map(int, data['inicio_almuerzo'].split(':'))
+        h2, m2 = map(int, data['fin_almuerzo'].split(':'))
+        almuerzo_min = ((h2 * 60) + m2) - ((h1 * 60) + m1)
+        if almuerzo_min < 0: almuerzo_min += 1440
+
     conn = conectar_bd(schema)
     cur = conn.cursor()
     try:
-        # ⚡ CORRECCIÓN EN EL UPDATE
+        # ⚡ UPDATE con todas las columnas sincronizadas
         cur.execute(f"""
             UPDATE {schema}.turnos 
             SET nombre = %s, 
                 hora_ingreso = %s, 
                 hora_salida = %s, 
+                dias = %s, 
                 almuerzo = %s, 
                 hora_inicio_almuerzo = %s, 
                 hora_fin_almuerzo = %s, 
@@ -1562,6 +1559,7 @@ async def actualizar_turno(turno_id: int, data: dict, usuario = Depends(verifica
             data['nombre'], 
             data['hora_ingreso'], 
             data['hora_salida'], 
+            psycopg2.extras.Json(data.get('dias', [])), # ⚡ Importante: Guardar los días
             data.get('almuerzo', True),
             data.get('inicio_almuerzo'), 
             data.get('fin_almuerzo'), 
@@ -1570,10 +1568,12 @@ async def actualizar_turno(turno_id: int, data: dict, usuario = Depends(verifica
             turno_id
         ))
         conn.commit()
-        return {"mensaje": "Turno actualizado."}
+        return {"mensaje": "Turno actualizado correctamente."}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al actualizar: {str(e)}")
     finally:
-        cur.close()
-        conn.close()
+        cur.close(); conn.close()
 
 @app.delete("/turnos/{turno_id}")
 async def eliminar_turno(turno_id: int, usuario = Depends(verificar_token)):

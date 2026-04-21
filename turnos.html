@@ -281,52 +281,42 @@
             } catch (e) { console.error(e); }
         }
 
-        // ==========================================================
-        // ⚡ FRONTEND TONTO: Delegamos el cálculo al servidor
-        // ==========================================================
-        
-        let temporizadorCalculo;
+        // ==========================================
+        // ⚡ ESTRATEGIA: FRONTEND TONTO
+        // ==========================================
+        let timerCalculo;
 
         async function preguntarAlCerebro() {
-            // 1. Recogemos los textos puros
-            const ingreso = document.getElementById('t_ingreso').value;
-            const salida = document.getElementById('t_salida').value;
-            const alm_in = document.getElementById('t_inicio_almuerzo').value;
-            const alm_out = document.getElementById('t_fin_almuerzo').value;
+            const ing = document.getElementById('t_ingreso').value;
+            const sal = document.getElementById('t_salida').value;
+            const a_in = document.getElementById('t_almuerzo').checked ? document.getElementById('t_inicio_almuerzo').value : '';
+            const a_out = document.getElementById('t_almuerzo').checked ? document.getElementById('t_fin_almuerzo').value : '';
 
-            // UI Optimista de carga
-            const inputTotal = document.getElementById('t_horas_total');
-            if(inputTotal) inputTotal.value = "--:--";
+            // UI Optimista
+            document.getElementById('horas_calculadas').innerText = "Calculando...";
 
             try {
-                // 2. Le pasamos el trabajo al Backend
-                const params = new URLSearchParams({ ingreso, salida, alm_in, alm_out });
+                const params = new URLSearchParams({ ingreso: ing, salida: sal, alm_in: a_in, alm_out: a_out });
                 const res = await fetch(`${API_URL}/turnos/calculadora?${params.toString()}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
+                const resultado = await res.json();
                 
-                const data = await res.json();
-                
-                // 3. Pintamos la respuesta autorizada del servidor
-                document.getElementById('t_almuerzo_min').value = data.almuerzo_min;
-                if(inputTotal) inputTotal.value = data.total_str;
-                
-            } catch (error) {
-                console.error("Fallo de conexión con la calculadora del servidor.");
+                // El servidor nos da las respuestas, nosotros solo las pintamos
+                document.getElementById('t_almuerzo_min').value = resultado.almuerzo_min;
+                document.getElementById('horas_calculadas').innerText = resultado.total_str;
+            } catch (e) {
+                document.getElementById('horas_calculadas').innerText = "0.00 hrs/día";
             }
         }
 
-        // ⚡ DEBOUNCE (Optimizador de red): 
-        // Evita mandar 10 peticiones por segundo mientras el usuario tipea.
-        // Solo envía la petición 300 milisegundos después de que termine de escribir.
+        // Debounce para no saturar Railway mientras escriben
         function dispararCalculo() {
-            clearTimeout(temporizadorCalculo);
-            temporizadorCalculo = setTimeout(preguntarAlCerebro, 300);
+            clearTimeout(timerCalculo);
+            timerCalculo = setTimeout(preguntarAlCerebro, 300);
         }
 
-        // ⚡ SECUESTRAMOS LAS FUNCIONES VIEJAS:
-        // Así no tienes que modificar tu HTML, si tus inputs llamaban a estas funciones,
-        // ahora simplemente disparan la consulta al servidor.
+        // Mapeamos las funciones viejas a la nueva lógica
         function calcularAlmuerzoMin() { dispararCalculo(); }
         function calcularHoras() { dispararCalculo(); }
 
