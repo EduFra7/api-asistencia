@@ -1274,7 +1274,8 @@ async def exportar_empleados_excel(estado: str="activos", q: str="", sucursal_id
         # 3. Ajuste de anchos respetando tu diseño original
         anchos = [10, 20, 20, 15, 12, 15, 25, 20, 15, 15, 15, 18, 15, 12, 10, 10, 15, 18, 30, 50]
         for i, ancho in enumerate(anchos, 1):
-            col_letter = get_column_letter(i)
+            # ⚡ FIX: Llamamos a la ruta completa para evitar errores de importación
+            col_letter = openpyxl.utils.get_column_letter(i) 
             ws.column_dimensions[col_letter].width = ancho
 
         output = io.BytesIO()
