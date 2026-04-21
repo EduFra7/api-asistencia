@@ -1470,6 +1470,43 @@ def calcular_minutos_almuerzo(inicio: str, fin: str) -> int:
     except:
         return 0
 
+# ⚡ CALCULADORA DE TURNOS (Smart Backend)
+@app.get("/turnos/calculadora")
+async def calculadora_turnos(ingreso: str = "", salida: str = "", alm_in: str = "", alm_out: str = ""):
+    # 1. Calcular minutos de almuerzo
+    min_almuerzo = 0
+    if alm_in and alm_out:
+        try:
+            in_h, in_m = map(int, alm_in.split(':'))
+            out_h, out_m = map(int, alm_out.split(':'))
+            m_in = (in_h * 60) + in_m
+            m_out = (out_h * 60) + out_m
+            
+            if m_out < m_in: m_out += 24 * 60 # Cruce de medianoche
+            min_almuerzo = m_out - m_in
+        except: pass
+
+    # 2. Calcular horas totales del turno
+    total_str = "00:00"
+    if ingreso and salida:
+        try:
+            in_h, in_m = map(int, ingreso.split(':'))
+            out_h, out_m = map(int, salida.split(':'))
+            m_in = (in_h * 60) + in_m
+            m_out = (out_h * 60) + out_m
+            
+            if m_out < m_in: m_out += 24 * 60 # Turno nocturno
+            
+            min_neto = (m_out - m_in) - min_almuerzo
+            if min_neto < 0: min_neto = 0
+            
+            h = min_neto // 60
+            m = min_neto % 60
+            total_str = f"{h:02d}:{m:02d}"
+        except: pass
+
+    return {"almuerzo_min": min_almuerzo, "total_str": total_str}
+
 @app.post("/turnos")
 async def crear_turno(data: dict, usuario = Depends(verificar_token)):
     schema = usuario["schema_name"]
@@ -1477,7 +1514,7 @@ async def crear_turno(data: dict, usuario = Depends(verificar_token)):
     almuerzo_min = calcular_minutos_almuerzo(data.get("inicio_almuerzo"), data.get("fin_almuerzo"))
     
     conn = conectar_bd(schema)
-    cur = conn.cursor()
+    cur = conn.cursor() 
     try:
         cur.execute(f"""
             INSERT INTO {schema}.turnos (nombre, hora_ingreso, hora_salida, almuerzo, inicio_almuerzo, fin_almuerzo, almuerzo_min, tolerancia_ingreso)

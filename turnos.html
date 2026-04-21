@@ -281,6 +281,55 @@
             } catch (e) { console.error(e); }
         }
 
+        // ==========================================================
+        // ⚡ FRONTEND TONTO: Delegamos el cálculo al servidor
+        // ==========================================================
+        
+        let temporizadorCalculo;
+
+        async function preguntarAlCerebro() {
+            // 1. Recogemos los textos puros
+            const ingreso = document.getElementById('t_ingreso').value;
+            const salida = document.getElementById('t_salida').value;
+            const alm_in = document.getElementById('t_inicio_almuerzo').value;
+            const alm_out = document.getElementById('t_fin_almuerzo').value;
+
+            // UI Optimista de carga
+            const inputTotal = document.getElementById('t_horas_total');
+            if(inputTotal) inputTotal.value = "--:--";
+
+            try {
+                // 2. Le pasamos el trabajo al Backend
+                const params = new URLSearchParams({ ingreso, salida, alm_in, alm_out });
+                const res = await fetch(`${API_URL}/turnos/calculadora?${params.toString()}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                const data = await res.json();
+                
+                // 3. Pintamos la respuesta autorizada del servidor
+                document.getElementById('t_almuerzo_min').value = data.almuerzo_min;
+                if(inputTotal) inputTotal.value = data.total_str;
+                
+            } catch (error) {
+                console.error("Fallo de conexión con la calculadora del servidor.");
+            }
+        }
+
+        // ⚡ DEBOUNCE (Optimizador de red): 
+        // Evita mandar 10 peticiones por segundo mientras el usuario tipea.
+        // Solo envía la petición 300 milisegundos después de que termine de escribir.
+        function dispararCalculo() {
+            clearTimeout(temporizadorCalculo);
+            temporizadorCalculo = setTimeout(preguntarAlCerebro, 300);
+        }
+
+        // ⚡ SECUESTRAMOS LAS FUNCIONES VIEJAS:
+        // Así no tienes que modificar tu HTML, si tus inputs llamaban a estas funciones,
+        // ahora simplemente disparan la consulta al servidor.
+        function calcularAlmuerzoMin() { dispararCalculo(); }
+        function calcularHoras() { dispararCalculo(); }
+
         function bloquearCampos(estado) {
             const campos = document.querySelectorAll('#formTurno input, #formTurno select, #formTurno textarea');
             
