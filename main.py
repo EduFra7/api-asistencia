@@ -1517,20 +1517,20 @@ async def crear_turno(data: dict, usuario = Depends(verificar_token)):
     cur = conn.cursor() 
 
     try:
-        # ⚡ CORRECCIÓN: Nombres exactos de las columnas en PostgreSQL
+        # ⚡ CORRECCIÓN: Cambiamos 'tolerancia_ingreso' por 'tolerancia_min'
         cur.execute(f"""
             INSERT INTO {schema}.turnos 
-            (nombre, hora_ingreso, hora_salida, almuerzo, hora_inicio_almuerzo, hora_fin_almuerzo, almuerzo_min, tolerancia_ingreso)
+            (nombre, hora_ingreso, hora_salida, almuerzo, hora_inicio_almuerzo, hora_fin_almuerzo, almuerzo_min, tolerancia_min)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         """, (
             data['nombre'], 
             data['hora_ingreso'], 
             data['hora_salida'], 
             data.get('almuerzo', True),
-            data.get('inicio_almuerzo'), # Mantenemos esto igual porque así lo manda el Frontend
-            data.get('fin_almuerzo'),    # Mantenemos esto igual
+            data.get('inicio_almuerzo'), 
+            data.get('fin_almuerzo'), 
             almuerzo_min, 
-            data.get('tolerancia_ingreso', 0)
+            data.get('tolerancia_ingreso', 0) # Obtenemos el dato del frontend y lo guardamos en tolerancia_min
         ))
         conn.commit()
         return {"mensaje": "Turno guardado con éxito."}
@@ -1556,7 +1556,7 @@ async def actualizar_turno(turno_id: int, data: dict, usuario = Depends(verifica
                 hora_inicio_almuerzo = %s, 
                 hora_fin_almuerzo = %s, 
                 almuerzo_min = %s, 
-                tolerancia_ingreso = %s
+                tolerancia_min = %s
             WHERE id = %s
         """, (
             data['nombre'], 
