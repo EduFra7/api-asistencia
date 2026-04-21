@@ -1008,7 +1008,20 @@ async def registrar_empleado(request: Request, usuario = Depends(verificar_token
     cur = conn.cursor()
     try:
         ci = data.get("ci")
-        bio_id = data.get("bio_id") or None
+        bio_id = data.get("bio_id")
+
+        if not bio_id_asignado:
+            # Buscamos el ID más alto actual y le sumamos 1
+            cur.execute(f"SELECT MAX(bio_id) as max_id FROM {schema}.empleados")
+            resultado = cur.fetchone()
+            max_id = resultado['max_id'] if resultado and resultado['max_id'] is not None else 0
+            bio_id_asignado = max_id + 1
+            
+        # Validamos que el ID no exista ya (sea manual o autogenerado)
+        cur.execute(f"SELECT id FROM {schema}.empleados WHERE bio_id = %s", (bio_id_asignado,))
+        if cur.fetchone():
+            raise HTTPException(status_code=400, detail=f"El ID de lector {bio_id_asignado} ya está en uso por otro empleado.")
+        
         turno_id_raw = data.get("turno_id")
         turno_id_final = int(turno_id_raw) if turno_id_raw else None
         
