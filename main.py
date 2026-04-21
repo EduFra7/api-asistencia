@@ -565,28 +565,16 @@ def procesar_asistencia_dia(schema: str, empleado_id: int, fecha: date):
         conn.close()
 
 
-
 # ==============================================================================
 # 5. RUTAS PARA COMUNICACIÓN CON HARDWARE (ZKTeco ADMS)
 # ==============================================================================
 
-# ── INICIALIZACIÓN DEL LECTOR ZKTECO ──
-# Cuando un lector ZK se conecta a internet, busca esta ruta constantemente (GET).
 @app.get("/iclock/cdata")
 async def iclock_init(request: Request):
-    sn = request.query_params.get("SN", "") # Extrae el Número de Serie del lector
-    print(f"✅ Lector conectado SN={sn}")
-    
-    # El lector espera instrucciones en texto plano, no en JSON.
-    return PlainTextResponse(
-        f"GET OPTION FROM: {sn}\n"
-        "ATTLOGStamp=None\nOPERLOGStamp=9999\n"
-        "Realtime=1\nEncrypt=None\n"
-    )
+    sn = request.query_params.get("SN", "")
+    print(f"✅ Lector intentando conectar: SN={sn}")
+    return PlainTextResponse(f"GET OPTION FROM: {sn}\nATTLOGStamp=None\nOPERLOGStamp=9999\nRealtime=1\nEncrypt=None\n")
 
-# ── RECEPCIÓN DE MARCAJES DEL LECTOR ──
-# Cuando alguien pone su huella, el lector envía los datos a esta ruta (POST).
-# ── RECEPCIÓN DE MARCAJES DEL LECTOR (VERSIÓN OPTIMIZADA) ──
 @app.post("/iclock/cdata")
 async def iclock_data(request: Request):
     table = request.query_params.get("table", "")
@@ -595,51 +583,56 @@ async def iclock_data(request: Request):
     texto = body.decode("utf-8", errors="ignore")
     
     if table == "ATTLOG":
-        for linea in texto.strip().splitlines():
-            partes = linea.strip().split("\t")
-            if len(partes) >= 2:
-                bio_id = partes[0]
-                fecha_hora_str = partes[1] # Ej: "2026-04-13 08:05:00"
-                fecha_dt = datetime.strptime(fecha_hora_str, "%Y-%m-%d %H:%M:%S").date()
+        # ⚡ 1. ENRUTADOR GLOBAL: Descubrir a qué empresa pertenece este reloj
+        conn_maestra = conectar_bd("public")
+        cur_m = conn_maestra.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        
+        try:
+            # Buscamos en el registro global de dispositivos
+            cur_m.execute("SELECT schema_name FROM public.dispositivos WHERE numero_serie = %s AND activo = TRUE", (sn,))
+            disp = cur_m.fetchone()
+            
+            if not disp:
+                print(f"⚠️ ADVERTENCIA: Marcaje recibido de un reloj desconocido (SN: {sn}).")
+                return PlainTextResponse("OK") # Devolvemos OK para que el reloj no se trabe intentando reenviar
                 
-                try:
-                    # 1. Identificar a qué empresa pertenece este SN (Serial Number)
-                    # ⚡ NOTA: Por ahora buscamos en 'public' para saber el esquema
-                    conn_maestra = conectar_bd("public")
-                    cur_m = conn_maestra.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            schema_destino = disp["schema_name"]
+            
+            # 2. Procesamos las huellas hacia el esquema correcto
+            for linea in texto.strip().splitlines():
+                partes = linea.strip().split("\t")
+                if len(partes) >= 2:
+                    bio_id = partes[0]
+                    fecha_hora_str = partes[1] 
+                    fecha_dt = datetime.strptime(fecha_hora_str, "%Y-%m-%d %H:%M:%S").date()
                     
-                    # Buscamos qué empresa tiene este SN asignado (necesitarás esta columna en empresas)
-                    # O por ahora, buscamos en todos los esquemas (esto es temporal para tu fase de pruebas)
-                    schema_destino = "empresa_bitech" # ⚡ Reemplaza por tu esquema de prueba
-                    
-                    # 2. Guardamos el Marcaje Bruto (Caja Negra)
-                    cur_m.execute("""
-                        INSERT INTO eventos_brutos (device_no, item, verify_mode, action, fecha_hora, raw_data)
-                        VALUES (%s, %s, %s, %s, %s, %s)
-                    """, (sn, bio_id, partes[3] if len(partes)>3 else "1",
-                          partes[2] if len(partes)>2 else "0",
-                          fecha_hora_str, psycopg2.extras.Json({"raw": linea})))
-                    conn_maestra.commit()
-                    cur_m.close()
-                    conn_maestra.close()
-
-                    # 3. 🚀 DISPARADOR: Buscamos al empleado y recalculamos
+                    # A) Guardamos en la Caja Negra de la empresa
                     conn_e = conectar_bd(schema_destino)
                     cur_e = conn_e.cursor()
+                    cur_e.execute(f"""
+                        INSERT INTO {schema_destino}.eventos_brutos (device_no, item, verify_mode, action, fecha_hora, raw_data)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                    """, (sn, bio_id, partes[3] if len(partes)>3 else "1", partes[2] if len(partes)>2 else "0", fecha_hora_str, psycopg2.extras.Json({"raw": linea})))
+                    conn_e.commit()
+
+                    # B) Disparamos el Cerebro Matemático
                     cur_e.execute(f"SELECT id FROM {schema_destino}.empleados WHERE bio_id = %s", (bio_id,))
                     res_emp = cur_e.fetchone()
-                    
                     if res_emp:
-                        # ¡Llamamos al Cerebro Central!
                         procesar_asistencia_dia(schema_destino, res_emp[0], fecha_dt)
-                    
+                        
                     cur_e.close()
                     conn_e.close()
+                    print(f"🚀 Marcaje procesado en [{schema_destino}] para BioID: {bio_id}")
 
-                except Exception as e:
-                    print(f"❌ Error en ADMS: {e}")
-                    
+        except Exception as e:
+            print(f"❌ Error interno ADMS: {e}")
+        finally:
+            cur_m.close()
+            conn_maestra.close()
+            
     return PlainTextResponse("OK")
+
 
 # ==============================================================================
 # 6. RUTA PARA ELIMINAR UNA EMPRESA (SOLO SUPERADMIN) ──
@@ -2938,6 +2931,76 @@ async def simular_evento_hardware(data: dict, usuario = Depends(verificar_token)
     finally:
         cur.close()
         conn.close()
+
+
+# ==============================================================================
+# 16. MÓDULO: GESTIÓN DE LECTORES BIOMÉTRICOS
+# ==============================================================================
+
+@app.get("/lectores")
+async def obtener_lectores(usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    conn = conectar_bd("public") # Todo se guarda en la maestra
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        # Si la tabla no existe, la creamos silenciosamente (Auto-Setup)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS public.dispositivos (
+                id SERIAL PRIMARY KEY,
+                numero_serie VARCHAR(100) UNIQUE NOT NULL,
+                nombre VARCHAR(100) NOT NULL,
+                schema_name VARCHAR(100) NOT NULL,
+                activo BOOLEAN DEFAULT TRUE,
+                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+
+        cur.execute("SELECT id, numero_serie, nombre, activo FROM public.dispositivos WHERE schema_name = %s ORDER BY id ASC", (schema,))
+        return cur.fetchall()
+    finally:
+        cur.close()
+        conn.close()
+
+@app.post("/lectores")
+async def registrar_lector(data: dict, usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    sn = data.get("numero_serie", "").strip()
+    nombre = data.get("nombre", "").strip()
+    
+    if not sn or not nombre:
+        raise HTTPException(status_code=400, detail="El Número de Serie (SN) y el Nombre son obligatorios.")
+
+    conn = conectar_bd("public")
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            INSERT INTO public.dispositivos (numero_serie, nombre, schema_name)
+            VALUES (%s, %s, %s)
+        """, (sn, nombre, schema))
+        conn.commit()
+        return {"mensaje": "Lector registrado correctamente. Listo para recibir marcajes."}
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        raise HTTPException(status_code=409, detail="Ese Número de Serie ya está registrado en el sistema global.")
+    finally:
+        cur.close()
+        conn.close()
+
+@app.delete("/lectores/{lector_id}")
+async def eliminar_lector(lector_id: int, usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    conn = conectar_bd("public")
+    cur = conn.cursor()
+    try:
+        # Solo permite borrarlo si pertenece a su empresa
+        cur.execute("DELETE FROM public.dispositivos WHERE id = %s AND schema_name = %s", (lector_id, schema))
+        conn.commit()
+        return {"mensaje": "Lector eliminado y desvinculado."}
+    finally:
+        cur.close()
+        conn.close()
+
 
 # ── RUTA DE ESTADO (Para saber si la API está viva) ──
 @app.get("/")

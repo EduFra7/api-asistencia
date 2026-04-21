@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lectores Biométricos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body class="bg-gray-50 font-sans flex h-screen overflow-hidden text-gray-800">
+
+    <aside id="menu-lateral" class="w-64 bg-slate-900 text-white flex flex-col h-full shadow-xl z-20"></aside>
+
+    <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
+        <header class="bg-white shadow-sm border-b border-gray-200 p-4 flex justify-between items-center z-10">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-800">Lectores Biométricos</h1>
+                <p class="text-sm text-gray-500">Administración de equipos ZKTeco (ADMS)</p>
+            </div>
+            <button onclick="abrirModalNuevo()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors">
+                <i class="fas fa-plus mr-2"></i> Añadir Lector
+            </button>
+        </header>
+
+        <div class="flex-1 overflow-y-auto p-6">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-gray-50 text-gray-600 text-xs uppercase tracking-wider border-b border-gray-200">
+                            <th class="p-4 font-semibold">N° Serie (SN)</th>
+                            <th class="p-4 font-semibold">Nombre / Ubicación</th>
+                            <th class="p-4 font-semibold">Estado</th>
+                            <th class="p-4 font-semibold text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaLectores" class="text-sm divide-y divide-gray-100">
+                        <tr><td colspan="4" class="p-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <script src="menu.js"></script>
+    <script>
+        const API_URL = "https://asistencia-api.up.railway.app";
+        const token_api = localStorage.getItem('token');
+
+        async function cargarLectores() {
+            const tbody = document.getElementById('tablaLectores');
+            try {
+                const res = await fetch(`${API_URL}/lectores`, { headers: { 'Authorization': `Bearer ${token_api}` } });
+                const lectores = await res.json();
+                
+                tbody.innerHTML = '';
+                if(lectores.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-gray-500">No hay lectores registrados. Añade el Número de Serie de tu ZKTeco.</td></tr>';
+                    return;
+                }
+
+                lectores.forEach(l => {
+                    const badge = l.activo ? '<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-[10px] font-bold">ACTIVO</span>' : '<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-[10px] font-bold">INACTIVO</span>';
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-gray-50">
+                            <td class="p-4 font-mono font-bold text-gray-600">${l.numero_serie}</td>
+                            <td class="p-4 font-medium text-gray-800">${l.nombre}</td>
+                            <td class="p-4">${badge}</td>
+                            <td class="p-4 text-center">
+                                <button onclick="eliminarLector(${l.id})" class="text-red-500 hover:text-red-700"><i class="fas fa-trash-alt"></i></button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            } catch(e) { tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-red-500">Error de red</td></tr>'; }
+        }
+
+        async function abrirModalNuevo() {
+            const { value: formValues } = await Swal.fire({
+                title: 'Registrar Lector ADMS',
+                html: `
+                    <input id="swal-sn" class="swal2-input" placeholder="Número de Serie (SN) Ej: CDWE21436...">
+                    <input id="swal-nom" class="swal2-input" placeholder="Ubicación Ej: Puerta Principal">
+                    <p class="text-xs text-gray-500 mt-2">El SN se encuentra en la etiqueta trasera del equipo ZKTeco.</p>
+                `,
+                focusConfirm: false, showCancelButton: true, confirmButtonText: 'Registrar',
+                preConfirm: () => {
+                    return { numero_serie: document.getElementById('swal-sn').value, nombre: document.getElementById('swal-nom').value }
+                }
+            });
+
+            if (formValues) {
+                Swal.fire({title: 'Guardando...', didOpen: () => Swal.showLoading()});
+                try {
+                    const res = await fetch(`${API_URL}/lectores`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token_api}` },
+                        body: JSON.stringify(formValues)
+                    });
+                    const data = await res.json();
+                    if(!res.ok) throw new Error(data.detail);
+                    mostrarExito(data.mensaje);
+                    cargarLectores();
+                } catch(e) { mostrarError(e.message); }
+            }
+        }
+
+        async function eliminarLector(id) {
+            if(await pedirConfirmacion("¿Desvincular este lector del sistema?", "Eliminar Equipo")) {
+                try {
+                    const res = await fetch(`${API_URL}/lectores/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token_api}` }});
+                    if(res.ok) { mostrarExito("Lector eliminado"); cargarLectores(); }
+                } catch(e) { mostrarError("Error al eliminar"); }
+            }
+        }
+
+        renderizarMenu('lectores');
+        cargarLectores();
+    </script>
+</body>
+</html>

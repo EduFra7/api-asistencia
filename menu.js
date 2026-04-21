@@ -228,14 +228,14 @@ function renderizarMenu(pantallaActiva) {
                 </a>
 
                 <!-- ── SECCIÓN: AJUSTES ── -->
-                <div class="text-[10px] md:text-xs font-bold uppercase tracking-wider mb-2 mt-6 px-3 ${pantallaActiva === 'ajustes' ? 'text-yellow-500' : 'text-slate-500'}">Ajustes (Admin)</div>
+                <div class="text-[10px] md:text-xs font-bold uppercase tracking-wider mb-2 mt-6 px-3 ${(pantallaActiva === 'ajustes' || pantallaActiva === 'simulador' || pantallaActiva === 'lectores')? 'text-yellow-500' : 'text-slate-500'}">Ajustes (Admin)</div>
                 <a href="ajustes.html" class="${pantallaActiva === 'ajustes' ? claseActiva : claseInactiva}">
                     <i class="fas fa-cogs w-5 mr-2 text-center"></i> Configuraciones
                 </a>
                 <a href="simulador.html" class="${pantallaActiva === 'simulador' ? claseActiva : claseInactiva}">
                     <i class="fas fa-satellite-dish w-5 mr-2 text-center"></i> Simulador ADMS
                 </a>
-                <a href="#" class="${claseInactiva}">
+                <a href="lectores.html" class="${pantallaActiva === 'lectores' ? claseActiva : claseInactiva}">
                     <i class="fas fa-fingerprint w-5 mr-2 text-center"></i> Lectores Biométricos
                 </a>
                 
