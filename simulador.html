@@ -124,22 +124,25 @@
         }
 
         async function inyectarEvento() {
-            const bio_id = document.getElementById('s_bio_id').value;
+            // Nota: Verifica que los IDs coincidan con tu HTML (s_bio_id o sim_bio_id)
+            const bio_id = document.getElementById('s_bio_id') ? document.getElementById('s_bio_id').value : document.getElementById('sim_bio_id').value;
+            const device_no = document.getElementById('s_device') ? document.getElementById('s_device').value : document.getElementById('sim_device_no').value;
             const fecha = document.getElementById('s_fecha').value;
             const hora = document.getElementById('s_hora').value;
 
-            if(!bio_id || !fecha || !hora) {
-                mostrarError("Bio ID, Fecha y Hora son obligatorios.", "Syntax Error");
+            if(!bio_id || !device_no || !fecha || !hora) {
+                mostrarError("Lector, Empleado, Fecha y Hora son obligatorios.", "Syntax Error");
                 return;
             }
 
+            // ⚡ FRONTEND TONTO: Une la fecha y hora agregando los segundos (:00)
+            const fechaHoraString = `${fecha} ${hora}:00`;
+
+            // El paquete (payload) limpio y directo que pide el nuevo backend
             const payload = {
-                device_no: document.getElementById('s_device').value,
-                bio_id: parseInt(bio_id),
-                fecha: fecha,
-                hora: hora,
-                verify_mode: document.getElementById('s_verify').value,
-                action: document.getElementById('s_action').value
+                device_no: device_no,
+                bio_id: bio_id.toString(),
+                fecha_hora: fechaHoraString
             };
 
             const btn = document.getElementById('btnInyectar');
@@ -163,7 +166,7 @@
                 }
                 
                 logTerminal(`> ACK RECIBIDO: ${data.mensaje}`, "success");
-                mostrarExito("Evento inyectado en la BD");
+                mostrarExito("Evento inyectado en la BD. Procesando en segundo plano...");
                 
             } catch (error) {
                 mostrarError(error.message, "Fallo de Transmisión");

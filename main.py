@@ -920,63 +920,80 @@ async def obtener_empleados_stats(usuario = Depends(verificar_token)):
 # ⚡ ENDPOINT ACTUALIZADO: Buscador avanzado (Dumb Frontend)
 @app.get("/empleados")
 async def obtener_empleados(
-    estado: str = "activos", 
-    q: str = "", 
-    sucursal_id: str = "", 
-    seccion_id: str = "", 
-    cargo: str = "", # ⚡ NUEVO FILTRO
-    limite: int = 100,
+    estado: str = 'activos', 
+    q: str = '', 
+    sucursal_id: str = '', 
+    seccion_id: str = '', 
+    cargo: str = '',
+    limite: int = 500,    # Límite alto por defecto para permitir exportar a Excel
+    offset: int = 0,
     usuario = Depends(verificar_token)
 ):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
+        # 1. Armamos las condiciones dinámicamente según lo que pida el Frontend Tonto
+        condiciones = ["e.eliminado = FALSE"]
+        parametros = []
+        
+        if estado == 'activos': condiciones.append("e.activo = TRUE")
+        elif estado == 'inactivos': condiciones.append("e.activo = FALSE")
+            
+        if q:
+            condiciones.append("(e.nombres ILIKE %s OR e.apellidos ILIKE %s OR e.ci ILIKE %s OR e.bio_id::text = %s)")
+            param_q = f"%{q}%"
+            parametros.extend([param_q, param_q, param_q, q])
+            
+        if sucursal_id:
+            condiciones.append("e.sucursal_id = %s")
+            parametros.append(int(sucursal_id))
+            
+        if seccion_id:
+            condiciones.append("e.seccion_id = %s")
+            parametros.append(int(seccion_id))
+            
+        if cargo:
+            condiciones.append("e.cargo = %s")
+            parametros.append(cargo)
+            
+        where_clause = " AND ".join(condiciones)
+        
         query = f"""
             SELECT e.*, 
-                   s.nombre as sucursal_nombre, s.ciudad as sucursal_ciudad,
+                   s.nombre as sucursal_nombre,
+                   s.ciudad as sucursal_ciudad,
                    sec.nombre as seccion_nombre,
-                   t.nombre as turno_nombre, t.hora_ingreso as turno_ingreso, t.hora_salida as turno_salida,
-                   (SELECT tipo FROM {schema}.ausencias a WHERE a.empleado_id = e.id AND a.estado = 'aprobado' AND a.eliminado = FALSE AND CURRENT_DATE BETWEEN a.fecha_inicio AND a.fecha_fin LIMIT 1) as estado_ausencia
+                   t.nombre as turno_nombre,
+                   t.hora_ingreso as turno_ingreso,
+                   t.hora_salida as turno_salida,
+                   t.almuerzo as turno_almuerzo,
+                   t.almuerzo_min as turno_almuerzo_min,
+                   (SELECT tipo 
+                    FROM {schema}.ausencias a 
+                    WHERE a.empleado_id = e.id 
+                      AND a.estado = 'aprobado' 
+                      AND a.eliminado = FALSE 
+                      AND CURRENT_DATE BETWEEN a.fecha_inicio AND a.fecha_fin 
+                    LIMIT 1) as estado_ausencia
             FROM {schema}.empleados e
             LEFT JOIN {schema}.sucursales s ON e.sucursal_id = s.id
             LEFT JOIN {schema}.secciones sec ON e.seccion_id = sec.id
             LEFT JOIN {schema}.turnos t ON e.turno_id = t.id
-            WHERE e.eliminado = FALSE
+            WHERE {where_clause}
+            ORDER BY e.activo DESC, e.nombres ASC, e.apellidos ASC
+            LIMIT %s OFFSET %s
         """
-        parametros = []
-
-        if estado == "activos": query += " AND e.activo = TRUE"
-        elif estado == "inactivos": query += " AND e.activo = FALSE"
-            
-        if sucursal_id and sucursal_id.isdigit():
-            query += " AND e.sucursal_id = %s"
-            parametros.append(int(sucursal_id))
-            
-        if seccion_id and seccion_id.isdigit():
-            query += " AND e.seccion_id = %s"
-            parametros.append(int(seccion_id))
-            
-        if cargo:
-            query += " AND e.cargo = %s"
-            parametros.append(cargo)
-
-        if q:
-            # ⚡ BUSCADOR MEJORADO: Ahora también busca por ID del reloj biométrico
-            query += " AND (e.nombres ILIKE %s OR e.apellidos ILIKE %s OR e.ci ILIKE %s OR CAST(e.bio_id AS TEXT) ILIKE %s)"
-            termino = f"%{q}%"
-            parametros.extend([termino, termino, termino, termino])
-
-        query += " ORDER BY e.nombres ASC LIMIT %s"
-        parametros.append(limite)
-
-        cur.execute(query, tuple(parametros))
+        parametros.extend([limite, offset])
+        
+        cur.execute(query, parametros)
         empleados = cur.fetchall()
         
+        # 2. Formateo seguro para evitar que el JSON explote
         for emp in empleados:
-            for c in ["fecha_ingreso", "fecha_antiguedad", "fecha_retiro", "turno_ingreso", "turno_salida"]:
-                if emp.get(c): emp[c] = str(emp[c])
-            
+            for key in ["fecha_ingreso", "fecha_antiguedad", "fecha_retiro", "turno_ingreso", "turno_salida", "creado_en", "actualizado_en"]:
+                if emp.get(key): emp[key] = str(emp[key])
+                
         return empleados
     finally:
         cur.close()
@@ -1402,33 +1419,36 @@ async def obtener_turnos(usuario = Depends(verificar_token)):
         cur.close()
         conn.close()
 
+def calcular_minutos_almuerzo(inicio: str, fin: str) -> int:
+    """Función auxiliar para calcular la duración del almuerzo en minutos"""
+    if not inicio or not fin:
+        return 0
+    try:
+        t_ini = datetime.strptime(inicio, "%H:%M")
+        t_fin = datetime.strptime(fin, "%H:%M")
+        # Si el fin es menor al inicio, asumimos cruce de medianoche
+        if t_fin < t_ini:
+            t_fin += timedelta(days=1)
+        return int((t_fin - t_ini).total_seconds() / 60)
+    except:
+        return 0
+
 @app.post("/turnos")
 async def crear_turno(data: dict, usuario = Depends(verificar_token)):
     schema = usuario["schema_name"]
+    # ⚡ Inteligencia: El servidor calcula los minutos basándose en las horas enviadas
+    almuerzo_min = calcular_minutos_almuerzo(data.get("inicio_almuerzo"), data.get("fin_almuerzo"))
+    
     conn = conectar_bd(schema)
     cur = conn.cursor()
     try:
         cur.execute(f"""
-            INSERT INTO {schema}.turnos 
-            (nombre, hora_ingreso, hora_salida, dias, almuerzo, hora_inicio_almuerzo, hora_fin_almuerzo, almuerzo_min, 
-             tolerancia, tolerancia_min, tolerancia_mensual_min, descuento, horas_extras, medio_tiempo_fines) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (
-            data.get("nombre"), data.get("hora_ingreso"), data.get("hora_salida"),
-            json.dumps(data.get("dias")),
-            data.get("almuerzo", False), 
-            data.get("hora_inicio_almuerzo"), data.get("hora_fin_almuerzo"), # ⚡ NUEVAS
-            data.get("almuerzo_min", 0),
-            data.get("tolerancia", False), data.get("tolerancia_min", 0),
-            data.get("tolerancia_mensual_min", 0),
-            data.get("descuento", True), data.get("horas_extras", False),
-            data.get("medio_tiempo_fines", False)
-        ))
+            INSERT INTO {schema}.turnos (nombre, hora_ingreso, hora_salida, almuerzo, inicio_almuerzo, fin_almuerzo, almuerzo_min, tolerancia_ingreso)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """, (data['nombre'], data['hora_ingreso'], data['hora_salida'], data.get('almuerzo', True), 
+              data.get('inicio_almuerzo'), data.get('fin_almuerzo'), almuerzo_min, data.get('tolerancia_ingreso', 0)))
         conn.commit()
-        return {"mensaje": "Turno creado exitosamente"}
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=422, detail=str(e))
+        return {"mensaje": "Turno guardado con éxito."}
     finally:
         cur.close()
         conn.close()
@@ -1436,33 +1456,21 @@ async def crear_turno(data: dict, usuario = Depends(verificar_token)):
 @app.put("/turnos/{turno_id}")
 async def actualizar_turno(turno_id: int, data: dict, usuario = Depends(verificar_token)):
     schema = usuario["schema_name"]
+    almuerzo_min = calcular_minutos_almuerzo(data.get("inicio_almuerzo"), data.get("fin_almuerzo"))
+    
     conn = conectar_bd(schema)
     cur = conn.cursor()
     try:
         cur.execute(f"""
             UPDATE {schema}.turnos SET 
-                nombre=%s, hora_ingreso=%s, hora_salida=%s, dias=%s, 
-                almuerzo=%s, hora_inicio_almuerzo=%s, hora_fin_almuerzo=%s, almuerzo_min=%s, 
-                tolerancia=%s, tolerancia_min=%s, tolerancia_mensual_min=%s, 
-                descuento=%s, horas_extras=%s, medio_tiempo_fines=%s
+                nombre=%s, hora_ingreso=%s, hora_salida=%s, almuerzo=%s, 
+                inicio_almuerzo=%s, fin_almuerzo=%s, almuerzo_min=%s, tolerancia_ingreso=%s
             WHERE id=%s
-        """, (
-            data.get("nombre"), data.get("hora_ingreso"), data.get("hora_salida"),
-            json.dumps(data.get("dias")),
-            data.get("almuerzo", False), 
-            data.get("hora_inicio_almuerzo"), data.get("hora_fin_almuerzo"),
-            data.get("almuerzo_min", 0),
-            data.get("tolerancia", False), data.get("tolerancia_min", 0),
-            data.get("tolerancia_mensual_min", 0), # ⚡ NUEVO
-            data.get("descuento", True), data.get("horas_extras", False),
-            data.get("medio_tiempo_fines", False), # ⚡ NUEVO
-            turno_id
-        ))
+        """, (data['nombre'], data['hora_ingreso'], data['hora_salida'], data['almuerzo'],
+              data.get('inicio_almuerzo'), data.get('fin_almuerzo'), almuerzo_min, 
+              data.get('tolerancia_ingreso', 0), turno_id))
         conn.commit()
-        return {"mensaje": "Turno actualizado exitosamente"}
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=422, detail=str(e))
+        return {"mensaje": "Turno actualizado."}
     finally:
         cur.close()
         conn.close()
@@ -2524,13 +2532,24 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
 # 13. MÓDULO: FERIADOS
 # ==============================================================================
 @app.get("/feriados")
-async def obtener_feriados(usuario = Depends(verificar_token)):
+async def obtener_feriados(anio: int = None, usuario = Depends(verificar_token)):
     schema = usuario.get("schema_name")
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        # ⚡ CORRECCIÓN: Agregamos 'id' y 'tipo' a la consulta para que el frontend no muestre UNDEFINED
-        cur.execute(f"SELECT id, fecha, descripcion, tipo, recurrente FROM {schema}.feriados WHERE eliminado = FALSE")
+        if anio:
+            # ⚡ INTELIGENCIA: El motor SQL filtra por año y ordena por mes/día en milisegundos
+            query = f"""
+                SELECT id, fecha, descripcion, tipo, recurrente 
+                FROM {schema}.feriados 
+                WHERE eliminado = FALSE 
+                AND (recurrente = TRUE OR EXTRACT(YEAR FROM fecha) = %s)
+                ORDER BY EXTRACT(MONTH FROM fecha) ASC, EXTRACT(DAY FROM fecha) ASC
+            """
+            cur.execute(query, (anio,))
+        else:
+            cur.execute(f"SELECT id, fecha, descripcion, tipo, recurrente FROM {schema}.feriados WHERE eliminado = FALSE ORDER BY fecha ASC")
+            
         feriados_db = cur.fetchall()
         
         # Blindaje de formato de fechas para JSON
@@ -2894,29 +2913,33 @@ async def eliminar_asistencia_dia(empleado_id: int, fecha: str, request: Request
 # ==============================================================================
 
 # ── SIMULADOR DE HARDWARE (VERSIÓN EVENT-DRIVEN) ──
-from datetime import timedelta # Asegúrate de tener esto arriba en tus importaciones
-
 @app.post("/simulador/evento")
-async def simular_evento_hardware(data: dict, usuario = Depends(verificar_token)):
-    schema = usuario["schema_name"]
-    conn = conectar_bd(schema)
+async def simulador_evento(data: dict, background_tasks: BackgroundTasks, usuario = Depends(verificar_token)):
+    # 1. El Frontend Tonto solo manda 3 textos
+    device_no = data.get("device_no")
+    bio_id = data.get("bio_id")
+    fecha_hora_str = data.get("fecha_hora") # "2023-10-25 08:30:00"
+
+    if not device_no or not bio_id or not fecha_hora_str:
+        raise HTTPException(status_code=400, detail="Faltan datos para simular el evento.")
+
+    conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    
     try:
-        device_no = data.get("device_no", "SIMULADOR-01")
-        bio_id = data.get("bio_id")
-        fecha = data.get("fecha") # "2026-04-13"
-        hora = data.get("hora")
-        fecha_hora_str = f"{fecha} {hora}:00" 
-        fecha_dt = datetime.strptime(fecha, "%Y-%m-%d").date()
+        cur.execute("SELECT schema_name FROM public.dispositivos WHERE numero_serie = %s", (device_no,))
+        disp = cur.fetchone()
+        if not disp:
+            raise HTTPException(status_code=404, detail="El lector simulado no existe.")
+            
+        schema = disp["schema_name"]
         
-        # 1. Validar que el empleado exista
-        cur.execute(f"SELECT id, nombres FROM {schema}.empleados WHERE bio_id = %s AND eliminado = FALSE", (bio_id,))
+        # Validamos al empleado en su schema
+        cur.execute(f"SELECT id, nombres FROM {schema}.empleados WHERE bio_id = %s", (bio_id,))
         emp = cur.fetchone()
         if not emp:
-            raise HTTPException(status_code=404, detail="Empleado no encontrado.")
+            raise HTTPException(status_code=404, detail="Ese Bio ID no pertenece a ningún empleado.")
 
-        # 2. Guardar Marcaje Bruto (Igual que lo haría el reloj real)
+        # 2. Guardar Marcaje Bruto (Caja negra)
         raw_string = f"{bio_id}\t{fecha_hora_str}\t0\t1\tSIMULADO"
         cur.execute(f"""
             INSERT INTO {schema}.eventos_brutos (device_no, item, action, fecha_hora, raw_data)
@@ -2924,18 +2947,15 @@ async def simular_evento_hardware(data: dict, usuario = Depends(verificar_token)
         """, (device_no, bio_id, "0", fecha_hora_str, psycopg2.extras.Json({"raw": raw_string})))
         conn.commit()
 
-        # 🚀 3. EL GRAN DISPARADOR: Llamamos a la inteligencia centralizada
-        # A) Calculamos el día actual de la huella
-        exito_hoy = procesar_asistencia_dia(schema, emp['id'], fecha_dt)
-        
-        # B) MAGIA NOCTURNA: Forzamos el día de AYER
+        # 🚀 3. EL GRAN DISPARADOR EN SEGUNDO PLANO (Velocidad de la luz)
+        fecha_dt = datetime.strptime(fecha_hora_str, "%Y-%m-%d %H:%M:%S").date()
         ayer_dt = fecha_dt - timedelta(days=1)
-        procesar_asistencia_dia(schema, emp['id'], ayer_dt)
 
-        if exito_hoy:
-            return {"mensaje": f"Evento procesado. La asistencia de {emp['nombres']} se ha actualizado automáticamente."}
-        else:
-            raise HTTPException(status_code=500, detail="El cerebro de cálculo falló. Revisa los logs.")
+        background_tasks.add_task(procesar_asistencia_dia, schema, emp['id'], fecha_dt)
+        background_tasks.add_task(procesar_asistencia_dia, schema, emp['id'], ayer_dt)
+
+        # Respondemos de inmediato al frontend
+        return {"mensaje": f"Marcaje inyectado para {emp['nombres']}. El servidor calculará la asistencia en segundo plano."}
 
     except HTTPException:
         conn.rollback()

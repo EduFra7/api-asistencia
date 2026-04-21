@@ -127,31 +127,22 @@
             loader.classList.remove('hidden');
 
             try {
-                const res = await fetch(`${API_URL}/feriados`, { headers: { 'Authorization': `Bearer ${token_api}` } });
+                // ⚡ EL FRONTEND TONTO SOLO PIDE EL AÑO AL SERVIDOR
+                const res = await fetch(`${API_URL}/feriados?anio=${anioSeleccionado}`, { 
+                    headers: { 'Authorization': `Bearer ${token_api}` } 
+                });
                 feriadosGlobales = await res.json();
                 
-                // Filtramos: Mostramos los del año seleccionado + los recurrentes (fijos)
-                const filtrados = feriadosGlobales.filter(f => {
-                    if (f.recurrente) return true; // Siempre mostrar Navidad, Año Nuevo, etc.
-                    return String(f.fecha).startsWith(anioSeleccionado);
-                });
-
-                // Ordenamos por mes y día
-                filtrados.sort((a, b) => {
-                    const mesDiaA = String(a.fecha).substring(5);
-                    const mesDiaB = String(b.fecha).substring(5);
-                    return mesDiaA.localeCompare(mesDiaB);
-                });
-
                 loader.classList.add('hidden');
 
-                if (filtrados.length === 0) {
+                if (feriadosGlobales.length === 0) {
                     tbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-gray-500 italic">No hay feriados registrados para este año. Pulsa "Sincronizar IA".</td></tr>`;
                     return;
                 }
 
-                filtrados.forEach(f => {
-                    const mesDia = String(f.fecha).substring(5); // Ej: "01-01"
+                // ⚡ YA NO HAY JAVASCRIPT FILTRANDO NI ORDENANDO. SOLO PINTAMOS.
+                feriadosGlobales.forEach(f => {
+                    const mesDia = String(f.fecha).substring(5); 
                     const fechaMostrar = f.recurrente ? `Cada año (${mesDia})` : f.fecha;
                     
                     const badgeAlcance = f.tipo === 'nacional' 
@@ -166,8 +157,9 @@
                         ? `<button disabled class="text-gray-300 cursor-not-allowed" title="Los feriados fijos no se pueden borrar"><i class="fas fa-trash"></i></button>`
                         : `<button onclick="eliminarFeriado(${f.id})" class="text-red-500 hover:text-red-700 transition-colors p-2"><i class="fas fa-trash"></i></button>`;
 
+                    // ⚡ FIX: Agregamos el ID a la fila para que la animación de borrado funcione
                     tbody.innerHTML += `
-                        <tr class="hover:bg-gray-50 transition-colors group">
+                        <tr id="feriado-${f.id}" class="hover:bg-gray-50 transition-colors group">
                             <td class="p-3 md:p-4 font-bold text-gray-700 whitespace-nowrap">${fechaMostrar}</td>
                             <td class="p-3 md:p-4 font-medium text-gray-800">${f.descripcion}</td>
                             <td class="p-3 md:p-4">${badgeAlcance}</td>
@@ -262,21 +254,32 @@
         }
 
         async function eliminarFeriado(id) {
-            const confirmar = await pedirConfirmacion("¿Estás seguro de eliminar este feriado? Esto podría afectar la asistencia ya calculada.");
-            if (confirmar) {
-                try {
-                    const res = await fetch(`${API_URL}/feriados/${id}`, {
-                        method: 'DELETE',
-                        headers: { 'Authorization': `Bearer ${token_api}` }
-                    });
-                    if(res.ok) {
-                        mostrarExito("Feriado eliminado");
-                        cargarTablaFeriados();
-                    } else {
-                        const data = await res.json();
-                        mostrarError(data.detail);
-                    }
-                } catch(e) { mostrarError("Error de conexión"); }
+            const confirmar = await pedirConfirmacion("¿Eliminar este feriado?");
+            if (!confirmar) return;
+
+            // ⚡ Optimización: Eliminación optimista
+            const fila = document.getElementById(`feriado-${id}`);
+            if(fila) fila.style.opacity = '0.5'; 
+
+            try {
+                // ⚡ FIX: Reemplazamos los "..." por los headers reales de autorización
+                const res = await fetch(`${API_URL}/feriados/${id}`, { 
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token_api}` }
+                });
+                
+                if(res.ok) {
+                    if(fila) fila.remove(); // ⚡ Borrado fluido sin recargar
+                    mostrarExito("Feriado eliminado");
+                } else {
+                    // Si el backend rechaza, devolvemos el color a la fila
+                    if(fila) fila.style.opacity = '1'; 
+                    const data = await res.json();
+                    mostrarError(data.detail || "No se pudo eliminar");
+                }
+            } catch(e) { 
+                if(fila) fila.style.opacity = '1'; 
+                mostrarError("Error de conexión con el servidor");
             }
         }
 

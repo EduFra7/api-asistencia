@@ -674,55 +674,106 @@
         }
 
         // ⚡ EL BUSCADOR Y EL RENDERIZADOR AHORA SON UNO SOLO (Debounce Server-Side)
+        // ⚡ VARIABLES PARA PAGINACIÓN (SCROLL INFINITO)
+        let offsetPlanilla = 0;
+        const limitePlanilla = 40; // Pedimos de 40 en 40
+        let cargandoPlanilla = false;
+        let hayMasPlanilla = true;
         let temporizadorBusquedaPlanilla;
+
+        // ⚡ DETECTOR DE SCROLL (Pide más datos al llegar al final)
+        function configurarScrollPlanilla() {
+            // Detectamos el contenedor principal que tiene el scroll (el div que envuelve toda la tabla)
+            const contenedorPrincipal = document.querySelector('.flex-1.overflow-y-auto.p-6.flex.flex-col');
+            
+            if(contenedorPrincipal) {
+                contenedorPrincipal.addEventListener('scroll', () => {
+                    // Si llegamos casi al final de la página y no está cargando...
+                    if (contenedorPrincipal.scrollTop + contenedorPrincipal.clientHeight >= contenedorPrincipal.scrollHeight - 100) {
+                        if (!cargandoPlanilla && hayMasPlanilla) {
+                            offsetPlanilla += limitePlanilla;
+                            ejecutarBusquedaPlanilla(true); // true = Añadir abajo sin borrar lo anterior
+                        }
+                    }
+                });
+            }
+        }
+
+        // ⚡ EL BUSCADOR (Reinicia los contadores cuando el usuario escribe algo)
         function busquedaOptimizadaPlanilla() {
             clearTimeout(temporizadorBusquedaPlanilla);
+            offsetPlanilla = 0;
+            hayMasPlanilla = true;
             
             const tbody = document.getElementById('cuerpoTabla');
             tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-gray-500"><i class="fas fa-circle-notch fa-spin text-2xl mb-2"></i><p>Sincronizando con el servidor...</p></td></tr>';
 
-            temporizadorBusquedaPlanilla = setTimeout(async () => {
-                const params = new URLSearchParams({
-                    estado: filtroActual,
-                    q: document.getElementById('filtro_busqueda').value.toLowerCase(),
-                    sucursal_id: document.getElementById('filtro_sucursal').value,
-                    seccion_id: document.getElementById('filtro_seccion').value,
-                    cargo: document.getElementById('filtro_cargo').value,
-                    limite: 100 // Para visualización en pantalla
-                });
+            temporizadorBusquedaPlanilla = setTimeout(() => ejecutarBusquedaPlanilla(false), 300);
+        }
 
-                try {
-                    const res = await fetch(`${API_URL}/empleados?${params.toString()}`, { headers: { 'Authorization': `Bearer ${token_api}` } });
-                    listaEmpleadosGlobal = await res.json();
-                    
+        // ⚡ EL RECOLECTOR DE DATOS (El frontend solo pide y pinta)
+        async function ejecutarBusquedaPlanilla(esAppend) {
+            cargandoPlanilla = true;
+            const tbody = document.getElementById('cuerpoTabla');
+            
+            if(esAppend) {
+                tbody.innerHTML += '<tr id="fila-cargando"><td colspan="7" class="p-4 text-center text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Cargando más personal...</td></tr>';
+            }
+
+            const params = new URLSearchParams({
+                estado: filtroActual,
+                q: document.getElementById('filtro_busqueda').value.toLowerCase(),
+                sucursal_id: document.getElementById('filtro_sucursal').value,
+                seccion_id: document.getElementById('filtro_seccion').value,
+                cargo: document.getElementById('filtro_cargo').value,
+                limite: limitePlanilla,
+                offset: offsetPlanilla
+            });
+
+            try {
+                const res = await fetch(`${API_URL}/empleados?${params.toString()}`, { headers: { 'Authorization': `Bearer ${token_api}` } });
+                const nuevosEmpleados = await res.json();
+                
+                if(esAppend) {
+                    const filaCargando = document.getElementById('fila-cargando');
+                    if(filaCargando) filaCargando.remove();
+                } else {
+                    listaEmpleadosGlobal = [];
                     tbody.innerHTML = '';
-                    if(listaEmpleadosGlobal.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-gray-500"><i class="fas fa-search text-2xl mb-2 text-gray-300"></i><p>No se encontró personal</p></td></tr>';
-                        return;
-                    }
-
-                    // ⚡ El Frontend YA NO FILTRA, solo pinta lo que dice el servidor
-                    listaEmpleadosGlobal.forEach(emp => {
-                        const iniciales = (emp.nombres.charAt(0) + emp.apellidos.charAt(0)).toUpperCase();
-                        const badgeEstado = emp.activo 
-                            ? '<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-[10px] font-bold shadow-sm border border-green-200 uppercase">Activo</span>'
-                            : '<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-[10px] font-bold shadow-sm border border-red-200 uppercase">Inactivo</span>';
-
-                        tbody.innerHTML += `
-                            <tr onclick="abrirPanelEdicion(${emp.id})" class="hover:bg-blue-50 transition-colors cursor-pointer group border-b border-gray-100">
-                                <td class="p-4 font-mono text-gray-500 text-xs">${emp.bio_id || '-'}</td>
-                                <td class="p-4"><div class="flex items-center"><div class="h-8 w-8 rounded-full bg-slate-800 text-white shadow-inner flex items-center justify-center font-bold text-xs mr-3">${iniciales}</div><p class="font-bold text-gray-800 group-hover:text-blue-600 transition-colors">${emp.nombres} ${emp.apellidos}</p></div></td>
-                                <td class="p-4 text-gray-600 text-sm">${emp.ci}</td>
-                                <td class="p-4 text-gray-600 text-sm font-medium">${emp.sucursal_nombre || '-'}</td>
-                                <td class="p-4 text-gray-600 text-sm">${emp.seccion_nombre || '-'}</td>
-                                <td class="p-4 text-gray-600 text-sm">${emp.cargo || '-'}</td>
-                                <td class="p-4">${badgeEstado}</td>
-                            </tr>`;
-                    });
-                } catch (error) {
-                    tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-red-500 font-bold">Error de conexión con el servidor</td></tr>'; 
                 }
-            }, 300);
+
+                // Si el servidor nos mandó menos del límite, significa que ya no hay más en la Base de Datos
+                if (nuevosEmpleados.length < limitePlanilla) hayMasPlanilla = false;
+
+                if(nuevosEmpleados.length === 0 && !esAppend) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-gray-500"><i class="fas fa-search text-2xl mb-2 text-gray-300"></i><p>No se encontró personal</p></td></tr>';
+                    cargandoPlanilla = false;
+                    return;
+                }
+
+                nuevosEmpleados.forEach(emp => {
+                    listaEmpleadosGlobal.push(emp);
+                    const iniciales = (emp.nombres.charAt(0) + emp.apellidos.charAt(0)).toUpperCase();
+                    const badgeEstado = emp.activo 
+                        ? '<span class="bg-green-100 text-green-700 px-2 py-1 rounded text-[10px] font-bold shadow-sm border border-green-200 uppercase">Activo</span>'
+                        : '<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-[10px] font-bold shadow-sm border border-red-200 uppercase">Inactivo</span>';
+
+                    tbody.innerHTML += `
+                        <tr onclick="abrirPanelEdicion(${emp.id})" class="hover:bg-blue-50 transition-colors cursor-pointer group border-b border-gray-100">
+                            <td class="p-4 font-mono text-gray-500 text-xs">${emp.bio_id || '-'}</td>
+                            <td class="p-4"><div class="flex items-center"><div class="h-8 w-8 rounded-full bg-slate-800 text-white shadow-inner flex items-center justify-center font-bold text-xs mr-3">${iniciales}</div><p class="font-bold text-gray-800 group-hover:text-blue-600 transition-colors">${emp.nombres} ${emp.apellidos}</p></div></td>
+                            <td class="p-4 text-gray-600 text-sm">${emp.ci}</td>
+                            <td class="p-4 text-gray-600 text-sm font-medium">${emp.sucursal_nombre || '-'}</td>
+                            <td class="p-4 text-gray-600 text-sm">${emp.seccion_nombre || '-'}</td>
+                            <td class="p-4 text-gray-600 text-sm">${emp.cargo || '-'}</td>
+                            <td class="p-4">${badgeEstado}</td>
+                        </tr>`;
+                });
+            } catch (error) {
+                if(!esAppend) tbody.innerHTML = '<tr><td colspan="7" class="p-8 text-center text-red-500 font-bold">Error de conexión con el servidor</td></tr>'; 
+            } finally {
+                cargandoPlanilla = false;
+            }
         }
 
         // ⚡ CARGAR LOS TURNOS PARA EL DESPLEGABLE
@@ -1022,7 +1073,8 @@
                 cargarCatalogos(),
                 cargarTurnosParaSelect()
             ]);
-            busquedaOptimizadaPlanilla(); // ✅ El nuevo buscador hace el trabajo inicial
+            configurarScrollPlanilla(); // ⚡ Iniciamos el vigilante del scroll
+            busquedaOptimizadaPlanilla(); 
         }
         
         arrancarPantallaPlanilla();

@@ -328,6 +328,7 @@
         async function arrancarPantalla() {
             renderizarMenu('asistencia');
             configurarBotonesFiltro();
+            configurarScrollDirectorio(); // ⚡ Iniciamos el vigilante del scroll
             
             // Solo descargamos catálogos (sucursales, secciones, turnos, feriados)
             await cargarCatalogos();
@@ -375,46 +376,97 @@
         }
 
         let timeoutBusqueda = null;
+        
+        // ⚡ Variables de Control de Paginación
+        let paginaActualOffset = 0;
+        const limitePorPagina = 20;
+        let cargandoDirectorio = false;
+        let hayMasEmpleados = true;
+
+        // ⚡ Detector de Scroll (Magia de UX)
+        function configurarScrollDirectorio() {
+            const contenedor = document.getElementById('listaEmpleados');
+            contenedor.addEventListener('scroll', () => {
+                // Si llegamos casi al final de la lista y no estamos cargando...
+                if (contenedor.scrollTop + contenedor.clientHeight >= contenedor.scrollHeight - 30) {
+                    if (!cargandoDirectorio && hayMasEmpleados) {
+                        paginaActualOffset += limitePorPagina;
+                        ejecutarBusquedaDirectorio(true); // true = añadir a la lista existente
+                    }
+                }
+            });
+        }
+
         function filtrarDirectorio() {
-            clearTimeout(timeoutBusqueda);
+            // Cuando el usuario escribe o cambia un filtro, reiniciamos desde cero
+            paginaActualOffset = 0;
+            hayMasEmpleados = true;
+            listaEmpleadosGlobal = [];
+            
             const contenedor = document.getElementById('listaEmpleados');
             contenedor.innerHTML = `<div class="animate-pulse p-4"><div class="flex items-center mb-4"><div class="w-10 h-10 rounded-full bg-gray-200 mr-3"></div><div class="h-3 bg-gray-200 rounded w-3/4"></div></div><div class="flex items-center"><div class="w-10 h-10 rounded-full bg-gray-200 mr-3"></div><div class="h-3 bg-gray-200 rounded w-1/2"></div></div></div>`;
 
-            timeoutBusqueda = setTimeout(async () => {
-                const buscador = document.getElementById('busqueda').value;
-                const sucursal = document.getElementById('filtro_sucursal').value;
-                const seccion = document.getElementById('filtro_seccion').value;
+            clearTimeout(timeoutBusqueda);
+            timeoutBusqueda = setTimeout(() => ejecutarBusquedaDirectorio(false), 300);
+        }
+
+        async function ejecutarBusquedaDirectorio(esAppend) {
+            cargandoDirectorio = true;
+            const buscador = document.getElementById('busqueda').value;
+            const sucursal = document.getElementById('filtro_sucursal').value;
+            const seccion = document.getElementById('filtro_seccion').value;
+            const contenedor = document.getElementById('listaEmpleados');
+            
+            if(esAppend) {
+                contenedor.innerHTML += `<div id="load-more" class="p-4 text-center text-gray-500 text-xs font-bold"><i class="fas fa-spinner fa-spin mr-1"></i> Cargando más...</div>`;
+            }
+
+            try {
+                // ⚡ El Frontend solo se preocupa de enviar las variables
+                const params = new URLSearchParams({ 
+                    estado: filtroEstadoActual, q: buscador, sucursal_id: sucursal, seccion_id: seccion,
+                    limite: limitePorPagina, offset: paginaActualOffset
+                });
                 
-                try {
-                    const params = new URLSearchParams({ estado: filtroEstadoActual, q: buscador, sucursal_id: sucursal, seccion_id: seccion });
-                    const res = await fetch(`${API_URL}/empleados?${params.toString()}`, { headers: { 'Authorization': `Bearer ${token_api}` } });
-                    listaEmpleadosGlobal = await res.json(); 
+                const res = await fetch(`${API_URL}/empleados?${params.toString()}`, { headers: { 'Authorization': `Bearer ${token_api}` } });
+                const nuevos = await res.json();
+                
+                if(esAppend) {
+                    const lm = document.getElementById('load-more');
+                    if(lm) lm.remove();
+                } else {
+                    contenedor.innerHTML = ''; // Limpiamos si es una búsqueda nueva
+                }
+
+                // Si el servidor mandó menos de 20, ya llegamos al final del abismo
+                if (nuevos.length < limitePorPagina) hayMasEmpleados = false;
+                
+                if (nuevos.length === 0 && !esAppend) {
+                    contenedor.innerHTML = '<div class="p-8 text-center text-gray-500"><i class="fas fa-search text-3xl mb-3 text-gray-300"></i><p class="text-sm font-medium">No se encontraron empleados</p></div>';
+                    cargandoDirectorio = false;
+                    return;
+                }
+
+                nuevos.forEach(emp => {
+                    listaEmpleadosGlobal.push(emp);
+                    const iniciales = (emp.nombres.charAt(0) + emp.apellidos.charAt(0)).toUpperCase();
+                    const img = emp.foto_perfil ? `<img src="${emp.foto_perfil}" class="w-full h-full object-cover">` : `<div class="w-full h-full flex items-center justify-center bg-slate-800 text-white font-bold text-xs">${iniciales}</div>`;
+                    const colorEstado = emp.activo ? 'bg-green-500' : 'bg-red-500';
+                    const badgeInactivo = !emp.activo ? `<span class="ml-2 px-1.5 py-0.5 text-[9px] bg-red-100 text-red-600 rounded font-bold">INACTIVO</span>` : '';
                     
-                    contenedor.innerHTML = '';
-                    if (listaEmpleadosGlobal.length === 0) {
-                        contenedor.innerHTML = '<div class="p-8 text-center text-gray-500"><i class="fas fa-search text-2xl mb-2 text-gray-300"></i><p class="text-xs">No hay resultados</p></div>';
-                        return;
-                    }
+                    const claseSeleccionado = (empleadoSeleccionadoId === emp.id) ? 'bg-blue-50 border-blue-600' : 'border-transparent';
 
-                    listaEmpleadosGlobal.forEach(emp => {
-                        const iniciales = (emp.nombres.charAt(0) + emp.apellidos.charAt(0)).toUpperCase();
-                        const img = emp.foto_perfil ? `<img src="${emp.foto_perfil}" class="w-full h-full object-cover">` : `<div class="w-full h-full flex items-center justify-center bg-slate-800 text-white font-bold text-xs">${iniciales}</div>`;
-                        const colorEstado = emp.activo ? 'bg-green-500' : 'bg-red-500';
-                        const badgeInactivo = !emp.activo ? `<span class="ml-2 px-1.5 py-0.5 text-[9px] bg-red-100 text-red-600 rounded font-bold">INACTIVO</span>` : '';
-                        
-                        contenedor.innerHTML += `
-                            <div onclick="seleccionarEmpleado(${emp.id})" id="item-emp-${emp.id}" class="p-3 border-b border-gray-100 hover:bg-blue-50 cursor-pointer flex items-center transition-colors border-l-4 border-transparent emp-item">
-                                <div class="relative w-10 h-10 mr-3 shrink-0"><div class="w-full h-full rounded-full bg-gray-200 overflow-hidden border border-gray-300">${img}</div><span class="absolute bottom-0 right-0 w-3 h-3 border-2 border-white rounded-full ${colorEstado}"></span></div>
-                                <div class="truncate flex-1"><div class="flex items-center"><p class="text-sm font-bold text-gray-800 truncate">${emp.nombres} ${emp.apellidos}</p>${badgeInactivo}</div><p class="text-xs text-gray-500"><span class="font-bold text-blue-600">ID: ${emp.bio_id || '-'}</span> | CI: ${emp.ci}</p></div>
-                            </div>`;
-                    });
-
-                    if (empleadoSeleccionadoId) {
-                        const actual = document.getElementById(`item-emp-${empleadoSeleccionadoId}`);
-                        if(actual) actual.classList.add('bg-blue-50', 'border-blue-600');
-                    }
-                } catch (e) { contenedor.innerHTML = '<div class="p-8 text-center text-red-500"><p class="text-xs font-bold">Error de conexión</p></div>'; }
-            }, 300);
+                    contenedor.innerHTML += `
+                        <div onclick="seleccionarEmpleado(${emp.id})" id="item-emp-${emp.id}" class="p-3 border-b border-gray-100 hover:bg-blue-50 cursor-pointer flex items-center transition-colors border-l-4 ${claseSeleccionado} emp-item">
+                            <div class="relative w-10 h-10 mr-3 shrink-0"><div class="w-full h-full rounded-full bg-gray-200 overflow-hidden border border-gray-300">${img}</div><span class="absolute bottom-0 right-0 w-3 h-3 border-2 border-white rounded-full ${colorEstado}"></span></div>
+                            <div class="truncate flex-1"><div class="flex items-center"><p class="text-sm font-bold text-gray-800 truncate">${emp.nombres} ${emp.apellidos}</p>${badgeInactivo}</div><p class="text-xs text-gray-500"><span class="font-bold text-blue-600">ID: ${emp.bio_id || '-'}</span> | CI: ${emp.ci}</p></div>
+                        </div>`;
+                });
+            } catch (e) { 
+                if(!esAppend) contenedor.innerHTML = '<div class="p-8 text-center text-red-500"><p class="text-sm font-bold">Error de conexión con el servidor</p></div>'; 
+            } finally {
+                cargandoDirectorio = false;
+            }
         }
 
         async function seleccionarEmpleado(id) {

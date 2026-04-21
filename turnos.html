@@ -205,13 +205,12 @@
         const diasEstructura = ['L', 'M', 'X', 'J', 'V', 'S', 'D']; // Usamos X para Miércoles
         let diasSeleccionados = { L: true, M: true, X: true, J: true, V: true, S: false, D: false };
 
-        // 1. GENERAR BOTONES DE DÍAS (Con UX inteligente para Lectura/Edición)
+        // 1. GENERAR BOTONES DE DÍAS
         function renderizarDias() {
             const cont = document.getElementById('contenedorDias');
             cont.innerHTML = '';
             let tieneFinDeSemana = false;
 
-            // Detectamos si el formulario general está bloqueado
             const modoLectura = document.getElementById('t_nombre').disabled;
 
             diasEstructura.forEach(d => {
@@ -220,15 +219,12 @@
 
                 const btn = document.createElement('button');
                 
-                // Construcción dinámica de clases de Tailwind
                 let clasesBase = 'w-10 h-10 rounded-full font-bold text-sm transition-all shadow-sm flex items-center justify-center ';
                 
                 if (modoLectura) {
-                    // ESTILO MODO LECTURA: Opacidad al 60% y cursor bloqueado
                     clasesBase += 'cursor-not-allowed opacity-60 ';
                     clasesBase += activo ? 'bg-blue-600 text-white border border-blue-700' : 'bg-gray-100 text-gray-400 border border-gray-200';
                 } else {
-                    // ESTILO MODO EDICIÓN/NUEVO: Interactivos con hover
                     clasesBase += activo ? 'bg-blue-600 text-white border border-blue-700 hover:bg-blue-700' : 'bg-gray-100 text-gray-400 border border-gray-200 hover:bg-gray-200';
                 }
 
@@ -238,47 +234,22 @@
                 cont.appendChild(btn);
             });
 
-            // Lógica visual: Mostrar opción de medio tiempo solo si S o D están activos
             document.getElementById('caja_fines_semana').classList.toggle('hidden', !tieneFinDeSemana);
         }
 
         function toggleDia(dia) {
-            if(document.getElementById('t_nombre').disabled) return; // Si está en modo lectura, no hacer nada
+            if(document.getElementById('t_nombre').disabled) return; 
             diasSeleccionados[dia] = !diasSeleccionados[dia];
             renderizarDias();
         }
 
-        // 2. CALCULAR HORAS (CON CRUCE DE MEDIANOCHE)
-        function calcularHoras() {
-            const ing = document.getElementById('t_ingreso').value;
-            const sal = document.getElementById('t_salida').value;
-            const almMins = document.getElementById('t_almuerzo').checked ? parseInt(document.getElementById('t_almuerzo_min').value || 0) : 0;
-            
-            if(!ing || !sal) return document.getElementById('horas_calculadas').innerText = "0.00 hrs/día";
-
-            let [inH, inM] = ing.split(':').map(Number);
-            let [outH, outM] = sal.split(':').map(Number);
-            
-            let minTotalIngreso = (inH * 60) + inM;
-            let minTotalSalida = (outH * 60) + outM;
-
-            // Lógica de cruce de medianoche (Turno nocturno)
-            if(minTotalSalida < minTotalIngreso) {
-                minTotalSalida += (24 * 60);
-            }
-
-            let minsTrabajados = (minTotalSalida - minTotalIngreso) - almMins;
-            let horasFinales = Math.max(0, minsTrabajados / 60).toFixed(2);
-            document.getElementById('horas_calculadas').innerText = `${horasFinales} hrs/día`;
-        }
-
-        // 3. UI DINÁMICA
+        // 2. UI DINÁMICA (Solo muestra/oculta campos, no calcula nada)
         function toggleInputs() {
             document.getElementById('caja_almuerzo').classList.toggle('hidden', !document.getElementById('t_almuerzo').checked);
             document.getElementById('caja_tolerancia').classList.toggle('hidden', !document.getElementById('t_tolerancia').checked);
         }
 
-        // 4. CRUD Y PANELES
+        // 3. CRUD Y PANELES
         async function cargarTurnos() {
             try {
                 const res = await fetch(`${API_URL}/turnos`, { headers: { 'Authorization': `Bearer ${token}` } });
@@ -289,10 +260,9 @@
                 if(listaTurnos.length === 0) return tbody.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-gray-500">No hay turnos creados</td></tr>';
                 
                 listaTurnos.forEach(t => {
-                    // Usamos la estructura ordenada L-M-X-J-V-S-D como molde principal
                     let diasStr = diasEstructura
-                        .filter(d => t.dias[d] === true) // Verificamos si el día está activo en la BD
-                        .map(d => d === 'X' ? 'M' : d)   // Cambiamos visualmente la X por M
+                        .filter(d => t.dias[d] === true)
+                        .map(d => d === 'X' ? 'M' : d) 
                         .join(' - ');
                     
                     tbody.innerHTML += `
@@ -311,15 +281,12 @@
             } catch (e) { console.error(e); }
         }
 
-        // ⚡ OPTIMIZACIÓN: Bloqueo de UI Dinámico y Reparación del Bug Plural/Singular
         function bloquearCampos(estado) {
-            // Selecciona todos los inputs, selects y textareas dentro del formulario del panel
             const campos = document.querySelectorAll('#formTurno input, #formTurno select, #formTurno textarea');
             
             campos.forEach(campo => {
-                campo.disabled = estado; // ⚡ CORRECCIÓN: Singular, afecta a cada elemento iterado
+                campo.disabled = estado; 
                 
-                // Estilos visuales para inputs de texto, números y tiempo
                 if (campo.type !== 'checkbox' && campo.type !== 'radio') {
                     if (estado) {
                         campo.classList.add('bg-gray-100', 'text-gray-500', 'cursor-not-allowed');
@@ -329,8 +296,7 @@
                         campo.classList.add('bg-white');
                     }
                 } else {
-                    // ⚡ NUEVO: Estilo visual para los switches (interruptores Tailwind)
-                    const toggleUI = campo.nextElementSibling; // El div que hace de switch visual
+                    const toggleUI = campo.nextElementSibling;
                     if (toggleUI) {
                         if (estado) {
                             toggleUI.classList.add('opacity-50', 'cursor-not-allowed');
@@ -343,7 +309,6 @@
                 }
             });
 
-            // ⚡ Refrescamos los botones de los días para que apliquen su estilo de bloqueo
             renderizarDias();
         }
 
@@ -354,10 +319,11 @@
             document.getElementById('t_ingreso').value = '08:00';
             document.getElementById('t_salida').value = '16:00';
             document.getElementById('t_almuerzo').checked = false;
-            // ⚡ LIMPIAMOS LAS HORAS NUEVAS
+            
             document.getElementById('t_inicio_almuerzo').value = '';
             document.getElementById('t_fin_almuerzo').value = '';
-            document.getElementById('t_almuerzo_min').value = '';
+            // El campo oculto o visual t_almuerzo_min ya no necesita calcularse
+            
             document.getElementById('t_tolerancia').checked = false;
             document.getElementById('t_descuento').checked = true;
             document.getElementById('t_extras').checked = false;
@@ -367,7 +333,7 @@
             bloquearCampos(false);
             toggleInputs();
             renderizarDias();
-            calcularHoras();
+            // ⚡ BORRADO: calcularHoras(); que no existía
 
             document.getElementById('badgeModo').classList.add('hidden');
             document.getElementById('btnHabilitarEdicion').classList.add('hidden');
@@ -390,21 +356,20 @@
             document.getElementById('t_almuerzo').checked = t.almuerzo;
             document.getElementById('t_inicio_almuerzo').value = t.hora_inicio_almuerzo ? t.hora_inicio_almuerzo.substring(0,5) : '';
             document.getElementById('t_fin_almuerzo').value = t.hora_fin_almuerzo ? t.hora_fin_almuerzo.substring(0,5) : '';
-            document.getElementById('t_almuerzo_min').value = t.almuerzo_min;
+            
             document.getElementById('t_tolerancia').checked = t.tolerancia;
             document.getElementById('t_tolerancia_min').value = t.tolerancia_min || 0;
-            document.getElementById('t_tolerancia_mensual').value = t.tolerancia_mensual_min || 0; // ⚡ NUEVO
-            document.getElementById('t_medio_tiempo_fines').checked = t.medio_tiempo_fines || false; // ⚡ NUEVO
+            document.getElementById('t_tolerancia_mensual').value = t.tolerancia_mensual_min || 0; 
+            document.getElementById('t_medio_tiempo_fines').checked = t.medio_tiempo_fines || false; 
             document.getElementById('t_descuento').checked = t.descuento;
             document.getElementById('t_extras').checked = t.horas_extras;
-            
             
             diasSeleccionados = t.dias;
 
             bloquearCampos(true);
             toggleInputs();
             renderizarDias();
-            calcularHoras();
+            // ⚡ BORRADO: calcularHoras(); que no existía
 
             document.getElementById('badgeModo').classList.remove('hidden');
             document.getElementById('btnHabilitarEdicion').classList.remove('hidden');
@@ -428,20 +393,18 @@
             document.getElementById('overlayPanel').classList.add('hidden');
         }
 
-        // ⚡ MOTOR DE GUARDADO CON UX PREMIUM
+        // 4. MOTOR DE GUARDADO (100% Frontend Tonto)
         document.getElementById('btnGuardar').onclick = async () => {
             const btn = document.getElementById('btnGuardar');
             const nombreTurno = document.getElementById('t_nombre').value.trim();
             const hrIngreso = document.getElementById('t_ingreso').value;
             const hrSalida = document.getElementById('t_salida').value;
 
-            // Validación Visual Básica
             if (!nombreTurno || !hrIngreso || !hrSalida) {
                 mostrarError("El nombre del turno, la hora de ingreso y la hora de salida son obligatorios.", "Datos Incompletos");
                 return;
             }
 
-            // Verificamos si al menos seleccionó un día laboral
             if (!Object.values(diasSeleccionados).some(val => val === true)) {
                 mostrarError("Debes seleccionar al menos un día laboral para este turno.", "Faltan Días");
                 return;
@@ -450,6 +413,9 @@
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Guardando...';
 
+            // ⚡ INTELIGENCIA DELEGADA AL BACKEND: 
+            // El Frontend ya NO manda "almuerzo_min". Solo envía la hora de inicio y fin, 
+            // y el cerebro en Python hará la resta perfecta para evitar errores.
             const payload = {
                 nombre: nombreTurno,
                 hora_ingreso: hrIngreso,
@@ -458,7 +424,6 @@
                 almuerzo: document.getElementById('t_almuerzo').checked,
                 hora_inicio_almuerzo: document.getElementById('t_inicio_almuerzo').value || null,
                 hora_fin_almuerzo: document.getElementById('t_fin_almuerzo').value || null,
-                almuerzo_min: parseInt(document.getElementById('t_almuerzo_min').value || 0),
                 tolerancia: document.getElementById('t_tolerancia').checked,
                 tolerancia_min: parseInt(document.getElementById('t_tolerancia_min').value || 0),
                 tolerancia_mensual_min: parseInt(document.getElementById('t_tolerancia_mensual').value || 0),
@@ -492,7 +457,7 @@
             }
         };
 
-        // ⚡ MOTOR DE ELIMINACIÓN CON CONFIRMACIÓN SEGURA
+        // 5. MOTOR DE ELIMINACIÓN
         async function eliminarTurno() {
             if (!itemEditandoId) return;
 
@@ -529,39 +494,8 @@
             }
         }
 
-        // ⚡ NUEVO: Función para calcular automáticamente los minutos del almuerzo
-        function calcularAlmuerzoMin() {
-            const inicio = document.getElementById('t_inicio_almuerzo').value;
-            const fin = document.getElementById('t_fin_almuerzo').value;
-            
-            // Si falta alguna de las dos horas, dejamos los minutos en 0
-            if(!inicio || !fin) {
-                document.getElementById('t_almuerzo_min').value = 0;
-                calcularHoras(); // Recalculamos el total del día
-                return;
-            }
-
-            let [inH, inM] = inicio.split(':').map(Number);
-            let [outH, outM] = fin.split(':').map(Number);
-            
-            let minInicio = (inH * 60) + inM;
-            let minFin = (outH * 60) + outM;
-            
-            // Cruce de medianoche (por si almuerzan de 23:30 a 00:30 en turno nocturno)
-            if(minFin < minInicio) {
-                minFin += (24 * 60);
-            }
-            
-            let totalMins = minFin - minInicio;
-            document.getElementById('t_almuerzo_min').value = totalMins;
-            
-            // ⚡ Disparamos el recálculo del panel negro (Total de horas del turno)
-            calcularHoras();
-        }
-
         renderizarDias();
         cargarTurnos();
-
         renderizarMenu('turnos');
     </script>
 </body>

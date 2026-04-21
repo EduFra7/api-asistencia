@@ -215,44 +215,62 @@
         const inputsFormularios = document.querySelectorAll('#formSucursal input, #formSucursal textarea, #formSucursal select, #formSeccion input, #formSeccion textarea');
         
         // 1. CARGA Y DIBUJADO DE TABLAS
+        // ⚡ OPTIMIZACIÓN 1: CARGAR SUCURSALES CON ID ÚNICO
         async function cargarSucursales() {
-            const tbody = document.getElementById('tablaSucursales');
             try {
                 const res = await fetch(`${API_URL}/sucursales`, { headers: { 'Authorization': `Bearer ${token}` } });
-                listaSucursalesGlobal = await res.json();
-                tbody.innerHTML = '';
-                listaSucursalesGlobal.forEach((suc, index) => {
-                    const codigo = `SUC-0${index + 1}`;
-                    tbody.innerHTML += `
-                        <tr onclick="abrirPanelLectura('sucursal', ${suc.id}, '${codigo}')" class="cursor-pointer hover:bg-blue-50 transition-colors group">
-                            <td class="p-4 font-mono text-gray-500 font-semibold">${codigo}</td>
-                            <td class="p-4">
-                                <p class="font-bold text-gray-800 group-hover:text-blue-600">${suc.nombre}</p>
-                                <p class="text-xs text-gray-500"><i class="fas fa-map-marker-alt text-red-400 mr-1"></i> ${suc.ciudad || 'Nacional'} | ${suc.direccion || 'Sin dirección'}</p>
-                            </td>
-                            <td class="p-4 text-gray-600">${suc.telefono || 'Sin registro'}</td>
-                            <td class="p-4 text-right"><i class="fas fa-chevron-right text-gray-300"></i></td>
-                        </tr>`;
+                const sucursales = await res.json();
+                const cont = document.getElementById('listaSucursales');
+                cont.innerHTML = '';
+                
+                sucursales.forEach(s => {
+                    // AGREGAMOS id="sucursal-${s.id}" para poder borrarlo después
+                    cont.innerHTML += `
+                        <div id="sucursal-${s.id}" onclick="abrirEdicion('sucursal', ${s.id})" 
+                            class="p-4 bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md hover:border-blue-200 cursor-pointer transition-all group">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-10 h-10 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                        <i class="fas fa-building"></i>
+                                    </div>
+                                    <div>
+                                        <p class="font-bold text-gray-800">${s.nombre}</p>
+                                        <p class="text-xs text-gray-500"><i class="fas fa-map-marker-alt mr-1"></i>${s.ciudad || 'S/C'}</p>
+                                    </div>
+                                </div>
+                                <i class="fas fa-chevron-right text-gray-300 group-hover:text-blue-400"></i>
+                            </div>
+                        </div>`;
                 });
             } catch (e) { console.error(e); }
         }
 
+        // ⚡ OPTIMIZACIÓN 2: CARGAR SECCIONES CON ID ÚNICO
         async function cargarSecciones() {
-            const tbody = document.getElementById('tablaSecciones');
             try {
                 const res = await fetch(`${API_URL}/secciones`, { headers: { 'Authorization': `Bearer ${token}` } });
-                listaSeccionesGlobal = await res.json();
-                tbody.innerHTML = '';
-                listaSeccionesGlobal.forEach(sec => {
-                    tbody.innerHTML += `
-                        <tr onclick="abrirPanelLectura('seccion', ${sec.id}, 'SEC')" class="cursor-pointer hover:bg-blue-50 transition-colors group">
-                            <td class="p-4">
-                                <p class="font-bold text-gray-800 group-hover:text-blue-600">${sec.nombre}</p>
-                                <p class="text-xs text-gray-500">${sec.descripcion || 'Sin descripción'}</p>
-                            </td>
-                            <td class="p-4"><span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-semibold border border-green-200">Activo</span></td>
-                            <td class="p-4 text-right"><i class="fas fa-chevron-right text-gray-300"></i></td>
-                        </tr>`;
+                const secciones = await res.json();
+                const cont = document.getElementById('listaSecciones');
+                cont.innerHTML = '';
+                
+                secciones.forEach(s => {
+                    // AGREGAMOS id="seccion-${s.id}"
+                    cont.innerHTML += `
+                        <div id="seccion-${s.id}" onclick="abrirEdicion('seccion', ${s.id})" 
+                            class="p-4 bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md hover:border-indigo-200 cursor-pointer transition-all group">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                                        <i class="fas fa-layer-group"></i>
+                                    </div>
+                                    <div>
+                                        <p class="font-bold text-gray-800">${s.nombre}</p>
+                                        <p class="text-xs text-gray-500">Departamento Interno</p>
+                                    </div>
+                                </div>
+                                <i class="fas fa-chevron-right text-gray-300 group-hover:text-indigo-400"></i>
+                            </div>
+                        </div>`;
                 });
             } catch (e) { console.error(e); }
         }
@@ -412,11 +430,16 @@
                 "Sí, eliminar"
             );
             
-            if (!seguro) return; // Si el usuario hace clic en "Cancelar", detenemos el proceso
+            if (!seguro) return; 
             
             const btn = document.getElementById('btnEliminarContexto');
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Eliminando...';
+
+            // ⚡ 1. CAPTURAMOS EL ELEMENTO VISUAL (Frontend Tonto)
+            // Sabe que el ID será algo como "sucursal-5" o "seccion-3"
+            const idVisual = `${tipoContextoActual}-${itemEditandoId}`;
+            const elementoVisual = document.getElementById(idVisual);
 
             try {
                 const endpoint = tipoContextoActual === 'sucursal' ? '/sucursales' : '/secciones';
@@ -429,14 +452,19 @@
                 
                 if (!res.ok) throw new Error(data.detail || "No se pudo eliminar. Verifica que no haya empleados asignados a este registro.");
                 
-                // ⚡ NOTIFICACIÓN FLOTANTE DE ÉXITO
-                mostrarExito("Registro eliminado de la base de datos");
+                // ⚡ 2. ÉXITO: BORRADO FLUIDO (UI OPTIMISTA)
+                // En lugar de recargar la base de datos, desvanecemos el cuadrito en la pantalla
+                if (elementoVisual) {
+                    elementoVisual.style.transition = 'all 0.3s ease';
+                    elementoVisual.style.opacity = '0';
+                    elementoVisual.style.transform = 'scale(0.9)';
+                    setTimeout(() => elementoVisual.remove(), 300);
+                }
                 
-                tipoContextoActual === 'sucursal' ? cargarSucursales() : cargarSecciones();
+                mostrarExito("Registro eliminado de la base de datos");
                 cerrarPanel();
                 
             } catch (error) { 
-                // ⚡ VENTANA DE ERROR CORPORATIVA
                 mostrarError(error.message, "Error de Eliminación"); 
             } finally { 
                 btn.disabled = false; 

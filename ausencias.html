@@ -292,7 +292,7 @@
 
     <!-- ⚙️ PASO 2: LÓGICA DE LA PÁGINA -->
     <script>
-const API_URL = "https://asistencia-api.up.railway.app";
+        const API_URL = "https://asistencia-api.up.railway.app";
         const token_api = localStorage.getItem('token');
         
         let empleadosGlobal = [];
@@ -391,6 +391,116 @@ const API_URL = "https://asistencia-api.up.railway.app";
         // ⚡ CORE: CARGA DE DATOS Y CONEXIÓN API
         // ==========================================
 
+        // ⚡ NUEVAS VARIABLES PARA SCROLL INFINITO
+        let offsetDirectorio = 0;
+        const limiteDirectorio = 30; // Descargamos de 30 en 30 para no saturar
+        let cargandoDirectorio = false;
+        let hayMasDirectorio = true;
+
+        // ⚡ NUEVO: DETECTOR DE SCROLL
+        function configurarScrollDirectorio() {
+            const tbody = document.getElementById('cuerpoTablaAusencias');
+            const contenedor = tbody.closest('.overflow-y-auto') || tbody.parentElement;
+            
+            contenedor.addEventListener('scroll', () => {
+                if (contenedor.scrollTop + contenedor.clientHeight >= contenedor.scrollHeight - 50) {
+                    if (!cargandoDirectorio && hayMasDirectorio) {
+                        offsetDirectorio += limiteDirectorio;
+                        renderizarTablaPrincipal(true); // El 'true' significa que añada abajo
+                    }
+                }
+            });
+        }
+
+        // ⚡ BÚSQUEDA OPTIMIZADA (Reinicia los contadores)
+        let temporizadorBusqueda;
+        function busquedaOptimizada(valorTexto) {
+            clearTimeout(temporizadorBusqueda);
+            temporizadorBusqueda = setTimeout(() => {
+                // Reiniciamos el scroll al buscar
+                offsetDirectorio = 0;
+                hayMasDirectorio = true;
+                renderizarTablaPrincipal();
+                
+                const cajita = document.getElementById('cajaBuscadorEmpleado');
+                if(cajita && !cajita.classList.contains('hidden') && valorTexto) {
+                    filtrarBuscadorFlotanteServer(valorTexto);
+                } else {
+                    document.getElementById('dropdown_empleados').classList.add('hidden');
+                }
+            }, 300);
+        }
+
+        // ⚡ RENDERIZAR TABLA CON PAGINACIÓN
+        async function renderizarTablaPrincipal(esAppend = false) {
+            cargandoDirectorio = true;
+            const tbody = document.getElementById('cuerpoTablaAusencias');
+            
+            if (!esAppend) {
+                tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-gray-500"><i class="fas fa-circle-notch fa-spin text-xl mr-2"></i>Sincronizando con el servidor...</td></tr>';
+            } else {
+                tbody.innerHTML += '<tr id="fila-carga-dir"><td colspan="6" class="p-4 text-center text-gray-400"><i class="fas fa-spinner fa-spin mr-2"></i>Cargando más empleados...</td></tr>';
+            }
+            
+            const params = new URLSearchParams({
+                estado: filtroEstadoAusencia,
+                q: document.getElementById('filtro_busqueda').value.toLowerCase(),
+                sucursal_id: document.getElementById('filtro_sucursal').value,
+                seccion_id: document.getElementById('filtro_seccion').value,
+                cargo: document.getElementById('filtro_cargo').value,
+                limite: limiteDirectorio,
+                offset: offsetDirectorio
+            });
+
+            try {
+                const res = await fetch(`${API_URL}/ausencias/directorio?${params.toString()}`, { headers: { 'Authorization': `Bearer ${token_api}` } });
+                const nuevosEmpleados = await res.json(); 
+                
+                if (esAppend) {
+                    const filaCarga = document.getElementById('fila-carga-dir');
+                    if (filaCarga) filaCarga.remove();
+                } else {
+                    empleadosGlobal = [];
+                    tbody.innerHTML = '';
+                }
+
+                if (nuevosEmpleados.length < limiteDirectorio) hayMasDirectorio = false;
+
+                if(nuevosEmpleados.length === 0 && !esAppend) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-gray-500"><i class="fas fa-search mr-2"></i>No se encontraron resultados.</td></tr>';
+                    cargandoDirectorio = false;
+                    return;
+                }
+
+                nuevosEmpleados.forEach(emp => {
+                    empleadosGlobal.push(emp);
+                    const iniciales = (emp.nombres.charAt(0) + emp.apellidos.charAt(0)).toUpperCase();
+                    
+                    let badgeEstado = '';
+                    if (emp.estado_ausencia === 'vacacion') badgeEstado = '<span class="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-bold border border-blue-200"><i class="fas fa-plane mr-1"></i>De Vacación</span>';
+                    else if (emp.estado_ausencia === 'permiso') badgeEstado = '<span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-[10px] font-bold border border-orange-200"><i class="fas fa-user-clock mr-1"></i>Con Permiso</span>';
+                    else badgeEstado = '<span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-bold border border-green-200"><i class="fas fa-briefcase mr-1"></i>Trabajando</span>';
+
+                    let kardexUI = emp.dias_disponibles_calculado;
+                    if (kardexUI === 'Sin Fecha') kardexUI = '<span class="text-xs text-gray-400 font-normal">Sin antigüedad</span>';
+
+                    tbody.innerHTML += `
+                        <tr onclick="abrirPanelCaso2(${emp.id})" class="hover:bg-blue-50 transition-colors cursor-pointer group border-b border-gray-100">
+                            <td class="p-4 font-mono text-gray-500 text-xs">${emp.bio_id || '-'}</td>
+                            <td class="p-4"><div class="flex items-center"><div class="h-8 w-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold mr-3">${iniciales}</div><div><p class="font-bold text-gray-800">${emp.nombres} ${emp.apellidos}</p><p class="text-xs text-gray-500">${emp.cargo || 'Sin cargo'}</p></div></div></td>
+                            <td class="p-4 text-gray-600 text-sm">${emp.ci}</td>
+                            <td class="p-4 text-gray-600 text-sm"><p class="font-medium">${emp.sucursal_nombre || '-'}</p><p class="text-xs text-gray-400">${emp.seccion_nombre || '-'}</p></td>
+                            <td id="celda_kardex_${emp.id}" class="p-4 text-center font-mono font-bold text-blue-700 text-lg">${kardexUI}</td>
+                            <td class="p-4">${badgeEstado}</td>
+                        </tr>`;
+                });
+            } catch (error) {
+                if(!esAppend) tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle mr-2"></i>Error de conexión</td></tr>';
+            } finally {
+                cargandoDirectorio = false;
+            }
+        }
+
         async function actualizarContadoresFiltros() {
             try {
                 const [resSuc, resSec] = await Promise.all([
@@ -421,55 +531,6 @@ const API_URL = "https://asistencia-api.up.railway.app";
                 stats.cargos.forEach(c => selCargo.innerHTML += `<option value="${c}">${c}</option>`);
 
             } catch(e) { console.error("Error inicializando catálogos:", e); }
-        }
-
-        async function renderizarTablaPrincipal() {
-            const tbody = document.getElementById('cuerpoTablaAusencias');
-            tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-gray-500"><i class="fas fa-circle-notch fa-spin text-xl mr-2"></i>Sincronizando con el servidor...</td></tr>';
-            
-            const params = new URLSearchParams({
-                estado: filtroEstadoAusencia,
-                q: document.getElementById('filtro_busqueda').value.toLowerCase(),
-                sucursal_id: document.getElementById('filtro_sucursal').value,
-                seccion_id: document.getElementById('filtro_seccion').value,
-                cargo: document.getElementById('filtro_cargo').value,
-                limite: 100
-            });
-
-            try {
-                const res = await fetch(`${API_URL}/ausencias/directorio?${params.toString()}`, { headers: { 'Authorization': `Bearer ${token_api}` } });
-                empleadosGlobal = await res.json(); 
-                
-                tbody.innerHTML = '';
-                if(empleadosGlobal.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-gray-500"><i class="fas fa-search mr-2"></i>No se encontraron resultados.</td></tr>';
-                    return;
-                }
-
-                empleadosGlobal.forEach(emp => {
-                    const iniciales = (emp.nombres.charAt(0) + emp.apellidos.charAt(0)).toUpperCase();
-                    
-                    let badgeEstado = '';
-                    if (emp.estado_ausencia === 'vacacion') badgeEstado = '<span class="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-bold border border-blue-200"><i class="fas fa-plane mr-1"></i>De Vacación</span>';
-                    else if (emp.estado_ausencia === 'permiso') badgeEstado = '<span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-[10px] font-bold border border-orange-200"><i class="fas fa-user-clock mr-1"></i>Con Permiso</span>';
-                    else badgeEstado = '<span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[10px] font-bold border border-green-200"><i class="fas fa-briefcase mr-1"></i>Trabajando</span>';
-
-                    let kardexUI = emp.dias_disponibles_calculado;
-                    if (kardexUI === 'Sin Fecha') kardexUI = '<span class="text-xs text-gray-400 font-normal">Sin antigüedad</span>';
-
-                    tbody.innerHTML += `
-                        <tr onclick="abrirPanelCaso2(${emp.id})" class="hover:bg-blue-50 transition-colors cursor-pointer group border-b border-gray-100">
-                            <td class="p-4 font-mono text-gray-500 text-xs">${emp.bio_id || '-'}</td>
-                            <td class="p-4"><div class="flex items-center"><div class="h-8 w-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold mr-3">${iniciales}</div><div><p class="font-bold text-gray-800">${emp.nombres} ${emp.apellidos}</p><p class="text-xs text-gray-500">${emp.cargo || 'Sin cargo'}</p></div></div></td>
-                            <td class="p-4 text-gray-600 text-sm">${emp.ci}</td>
-                            <td class="p-4 text-gray-600 text-sm"><p class="font-medium">${emp.sucursal_nombre || '-'}</p><p class="text-xs text-gray-400">${emp.seccion_nombre || '-'}</p></td>
-                            <td id="celda_kardex_${emp.id}" class="p-4 text-center font-mono font-bold text-blue-700 text-lg">${kardexUI}</td>
-                            <td class="p-4">${badgeEstado}</td>
-                        </tr>`;
-                });
-            } catch (error) {
-                tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-red-500"><i class="fas fa-exclamation-triangle mr-2"></i>Error de conexión</td></tr>';
-            }
         }
 
         async function cargarKardexEmpleado(idStr) {
@@ -515,21 +576,6 @@ const API_URL = "https://asistencia-api.up.railway.app";
 
                 await cargarHistorialAusencias(id);
             } catch (error) { document.getElementById('kardex_disponibles').innerHTML = '<i class="fas fa-exclamation-triangle text-red-500 text-3xl"></i>'; }
-        }
-
-        let temporizadorBusqueda;
-        function busquedaOptimizada(valorTexto) {
-            clearTimeout(temporizadorBusqueda);
-            temporizadorBusqueda = setTimeout(() => {
-                renderizarTablaPrincipal();
-                
-                const cajita = document.getElementById('cajaBuscadorEmpleado');
-                if(cajita && !cajita.classList.contains('hidden') && valorTexto) {
-                    filtrarBuscadorFlotanteServer(valorTexto);
-                } else {
-                    document.getElementById('dropdown_empleados').classList.add('hidden');
-                }
-            }, 300);
         }
 
         async function filtrarBuscadorFlotanteServer(texto) {
@@ -662,19 +708,12 @@ const API_URL = "https://asistencia-api.up.railway.app";
             tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-500 text-xs"><i class="fas fa-spinner fa-spin mr-2"></i>Cargando historial...</td></tr>';
             
             try {
-                const res = await fetch(`${API_URL}/empleados/${idEmpleado}/ausencias`, {
-                    headers: { 'Authorization': `Bearer ${token_api}` }
-                });
-                
+                const res = await fetch(`${API_URL}/empleados/${idEmpleado}/ausencias`, { headers: { 'Authorization': `Bearer ${token_api}` } });
                 if (!res.ok) throw new Error("Error al cargar historial");
                 const historial = await res.json();
                 
                 tbody.innerHTML = '';
-                
-                if (historial.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-500 text-xs">El empleado no tiene registros de ausencias.</td></tr>';
-                    return;
-                }
+                if (historial.length === 0) return tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-500 text-xs">El empleado no tiene registros de ausencias.</td></tr>';
                 
                 historial.forEach(reg => { 
                     let fechasStr = `${reg.fecha_inicio}`;
@@ -684,24 +723,18 @@ const API_URL = "https://asistencia-api.up.railway.app";
                         '<span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold"><i class="fas fa-plane mr-1"></i>Vacación</span>' : 
                         '<span class="bg-orange-100 text-orange-700 px-2 py-1 rounded text-xs font-bold"><i class="fas fa-clock mr-1"></i>Permiso</span>';
                     
-                    let etiquetaDeuda = '';
-                    if (reg.tipo === 'permiso' && reg.requiere_reposicion) {
-                        etiquetaDeuda = `<div class="mt-1"><span class="bg-red-50 text-red-600 px-2 py-0.5 rounded text-[10px] font-bold border border-red-200 shadow-sm"><i class="fas fa-exclamation-circle mr-1"></i>Debe reponer ${reg.horas_totales} hrs</span></div>`;
-                    }
+                    let etiquetaDeuda = (reg.tipo === 'permiso' && reg.requiere_reposicion) ? `<div class="mt-1"><span class="bg-red-50 text-red-600 px-2 py-0.5 rounded text-[10px] font-bold border border-red-200 shadow-sm"><i class="fas fa-exclamation-circle mr-1"></i>Debe reponer ${reg.horas_totales} hrs</span></div>` : '';
                     
                     let descuentoStr = '';
-                    if (reg.tipo === 'vacacion') {
-                        descuentoStr = `<span class="font-bold text-gray-800">${reg.dias_descontados} días</span> ${etiquetaDeuda}`;
-                    } else if (reg.tipo === 'permiso' && !reg.hora_inicio) {
-                        descuentoStr = `<span class="font-bold text-gray-800">${reg.dias_descontados} días</span> <span class="text-xs text-gray-500">(Jornada Completa)</span> ${etiquetaDeuda}`;
-                    } else {
-                        descuentoStr = `<span class="font-bold text-gray-800">${reg.horas_totales} hrs</span> <span class="text-xs text-gray-500">(${reg.hora_inicio.substring(0,5)} a ${reg.hora_fin.substring(0,5)})</span> ${etiquetaDeuda}`;
-                    }
+                    if (reg.tipo === 'vacacion') descuentoStr = `<span class="font-bold text-gray-800">${reg.dias_descontados} días</span> ${etiquetaDeuda}`;
+                    else if (reg.tipo === 'permiso' && !reg.hora_inicio) descuentoStr = `<span class="font-bold text-gray-800">${reg.dias_descontados} días</span> <span class="text-xs text-gray-500">(Jornada Completa)</span> ${etiquetaDeuda}`;
+                    else descuentoStr = `<span class="font-bold text-gray-800">${reg.horas_totales} hrs</span> <span class="text-xs text-gray-500">(${reg.hora_inicio.substring(0,5)} a ${reg.hora_fin.substring(0,5)})</span> ${etiquetaDeuda}`;
                     
-                    let motivoStr = reg.motivo ? `<p class="text-xs text-gray-500 italic mt-1 break-words leading-tight">"${reg.motivo}"</p>` : '';
+                    let motivoStr = reg.motivo ? `<p id="motivo-texto-${reg.id}" class="text-xs text-gray-500 italic mt-1 break-words leading-tight">"${reg.motivo}"</p>` : `<p id="motivo-texto-${reg.id}" class="text-xs text-gray-500 italic mt-1 break-words leading-tight"></p>`;
 
+                    // ⚡ Añadimos id="fila-historial-${reg.id}"
                     tbody.innerHTML += `
-                        <tr class="hover:bg-gray-50 transition-colors border-b border-gray-100">
+                        <tr id="fila-historial-${reg.id}" class="hover:bg-gray-50 transition-colors border-b border-gray-100">
                             <td class="p-3 text-xs text-gray-600 font-medium">${fechasStr}</td>
                             <td class="p-3">${tipoStr}</td>
                             <td class="p-3 text-sm">
@@ -712,7 +745,7 @@ const API_URL = "https://asistencia-api.up.railway.app";
                                 <button onclick="generarBoletaPDF(${reg.id})" class="text-blue-500 hover:text-blue-700 transition-colors transform hover:scale-110" title="Imprimir Boleta">
                                     <i class="fas fa-file-pdf"></i>
                                 </button>
-                                <button onclick="editarMotivoAusencia(${reg.id}, '${reg.motivo || ''}')" class="text-amber-500 hover:text-amber-700 transition-colors transform hover:scale-110" title="Editar Observaciones">
+                                <button onclick="editarMotivoAusencia(${reg.id})" class="text-amber-500 hover:text-amber-700 transition-colors transform hover:scale-110" title="Editar Observaciones">
                                     <i class="fas fa-edit"></i>
                                 </button>
                                 <button onclick="anularAusencia(${reg.id})" class="text-red-400 hover:text-red-600 transition-colors transform hover:scale-110" title="Anular Ausencia">
@@ -723,7 +756,6 @@ const API_URL = "https://asistencia-api.up.railway.app";
                     `;
                 });
             } catch (error) {
-                console.error(error);
                 tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-red-500 text-xs">Error de conexión al cargar historial.</td></tr>';
             }
         }
@@ -736,23 +768,39 @@ const API_URL = "https://asistencia-api.up.railway.app";
             );
             if (!seguro) return;
 
+            // ⚡ UI OPTIMISTA: Desvanecemos la fila inmediatamente
+            const fila = document.getElementById(`fila-historial-${ausenciaId}`);
+            if(fila) fila.style.opacity = '0.5';
+
             try {
-                const res = await fetch(`${API_URL}/ausencias/${ausenciaId}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${token_api}` }
-                });
-                
+                const res = await fetch(`${API_URL}/ausencias/${ausenciaId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token_api}` } });
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.detail || "Error al anular el registro");
                 
                 mostrarExito(data.mensaje);
+                
+                // ⚡ Borramos la fila del HTML sin recargar
+                if(fila) {
+                    fila.style.transition = 'all 0.3s ease';
+                    fila.style.transform = 'scale(0.9)';
+                    setTimeout(() => fila.remove(), 300);
+                }
+                
+                // ⚡ Solo recargamos los números del Kardex y contadores de arriba, NO la tabla gigante
                 cargarKardexEmpleado(empleadoSeleccionadoId);
                 actualizarContadoresFiltros();
-                renderizarTablaPrincipal();
-            } catch (error) { mostrarError(error.message, "Error al anular"); }
+                
+            } catch (error) { 
+                if(fila) fila.style.opacity = '1';
+                mostrarError(error.message, "Error al anular"); 
+            }
         }
 
-        async function editarMotivoAusencia(ausenciaId, motivoActual) {
+        async function editarMotivoAusencia(ausenciaId) {
+            // Obtenemos el texto actual directamente del HTML para no hacer peticiones
+            const elementoTexto = document.getElementById(`motivo-texto-${ausenciaId}`);
+            const motivoActual = elementoTexto ? elementoTexto.textContent.replace(/"/g, '') : '';
+
             const nuevoMotivo = await pedirTexto("Editar motivo / observaciones:", motivoActual, "Actualizar Observaciones");
             if (nuevoMotivo === undefined || nuevoMotivo.trim() === motivoActual) return;
 
@@ -767,7 +815,14 @@ const API_URL = "https://asistencia-api.up.railway.app";
                 if (!res.ok) throw new Error(data.detail || "Error al actualizar");
                 
                 mostrarExito("Observaciones actualizadas");
-                cargarHistorialAusencias(empleadoSeleccionadoId);
+                
+                // ⚡ UI OPTIMISTA: Cambiamos el texto en la pantalla directamente sin recargar
+                if(elementoTexto) {
+                    elementoTexto.textContent = `"${nuevoMotivo.trim()}"`;
+                    elementoTexto.classList.add('text-blue-500'); // Resaltamos que se editó
+                    setTimeout(() => elementoTexto.classList.remove('text-blue-500'), 1500);
+                }
+                
             } catch (error) { mostrarError(error.message, "Error de actualización"); }
         }
 
@@ -863,6 +918,8 @@ const API_URL = "https://asistencia-api.up.railway.app";
                 btn.className = "filtro-btn px-4 py-2 bg-white text-gray-600 font-medium rounded-lg text-sm border border-gray-200 hover:bg-gray-50 transition-colors";
             });
             botonPresionado.className = "filtro-btn px-4 py-2 bg-blue-50 text-blue-700 font-semibold rounded-lg text-sm border border-blue-200 transition-colors";
+            offsetDirectorio = 0; // ⚡ Reiniciamos
+            hayMasDirectorio = true; // ⚡ Reiniciamos
             renderizarTablaPrincipal();
         }
 
@@ -886,6 +943,9 @@ const API_URL = "https://asistencia-api.up.railway.app";
             });
 
             await actualizarContadoresFiltros();
+            configurarScrollDirectorio(); // ⚡ AQUÍ INICIAMOS EL VIGILANTE
+            offsetDirectorio = 0; 
+            hayMasDirectorio = true;
             await renderizarTablaPrincipal();
         }
 
