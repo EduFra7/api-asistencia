@@ -575,6 +575,14 @@ async def iclock_init(request: Request):
     print(f"✅ Lector intentando conectar: SN={sn}")
     return PlainTextResponse(f"GET OPTION FROM: {sn}\nATTLOGStamp=None\nOPERLOGStamp=9999\nRealtime=1\nEncrypt=None\n")
 
+# ── EL RELOJ PREGUNTA SI HAY ÓRDENES PENDIENTES ──
+@app.get("/iclock/getrequest")
+async def iclock_getrequest(request: Request):
+    sn = request.query_params.get("SN", "")
+    # Le respondemos "OK" con salto de línea para indicarle que NO hay comandos pendientes.
+    # Así el reloj se queda tranquilo y deja de hacer spam.
+    return PlainTextResponse("OK\n")
+
 # ── RECEPCIÓN DE MARCAJES DEL LECTOR (VERSIÓN ASÍNCRONA ULTRA-RÁPIDA) ──
 @app.post("/iclock/cdata")
 async def iclock_data(request: Request, background_tasks: BackgroundTasks):
