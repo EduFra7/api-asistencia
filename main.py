@@ -1014,20 +1014,19 @@ async def crear_empleado(request: Request, usuario = Depends(verificar_token)):
         
         # Si el campo está vacío o es None, autogeneramos
         if bio_id_recibido is None or str(bio_id_recibido).strip() == "":
-            cur.execute(f"SELECT MAX(bio_id) as max_id FROM {schema}.empleados")
+            cur.execute(f"SELECT MAX(bio_id) FROM {schema}.empleados")
             res_max = cur.fetchone()
-            # Si no hay empleados, empezamos en 1. Si hay, sumamos +1.
-            max_actual = res_max['max_id'] if res_max and res_max['max_id'] is not None else 0
+            
+            # ⚡ CORRECCIÓN CLAVE: Leemos la posición [0] de la tupla
+            max_actual = res_max[0] if res_max and res_max[0] is not None else 0
             bio_id_final = max_actual + 1
         else:
-            # Si el usuario anotó un ID, lo usamos (convertido a entero)
             bio_id_final = int(bio_id_recibido)
 
-        # Verificamos que no exista un duplicado de ese ID (sea manual o autogenerado)
+        # Verificamos que no exista un duplicado
         cur.execute(f"SELECT id FROM {schema}.empleados WHERE bio_id = %s", (bio_id_final,))
         if cur.fetchone():
             raise HTTPException(status_code=400, detail=f"El ID de lector {bio_id_final} ya está asignado a otro empleado.")
-
         turno_id_raw = data.get("turno_id")
         turno_id_final = int(turno_id_raw) if turno_id_raw else None
         
