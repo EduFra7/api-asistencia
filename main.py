@@ -3,7 +3,7 @@
 # ==============================================================================
 
 # -- Framework Web (FastAPI) --
-from fastapi import FastAPI, Request, HTTPException, Depends
+from fastapi import FastAPI, Request, HTTPException, Depends, BackgroundTasks
 from fastapi.responses import PlainTextResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
@@ -575,30 +575,33 @@ async def iclock_init(request: Request):
     print(f"✅ Lector intentando conectar: SN={sn}")
     return PlainTextResponse(f"GET OPTION FROM: {sn}\nATTLOGStamp=None\nOPERLOGStamp=9999\nRealtime=1\nEncrypt=None\n")
 
+# ── RECEPCIÓN DE MARCAJES DEL LECTOR (VERSIÓN ASÍNCRONA ULTRA-RÁPIDA) ──
 @app.post("/iclock/cdata")
-async def iclock_data(request: Request):
+async def iclock_data(request: Request, background_tasks: BackgroundTasks):
     table = request.query_params.get("table", "")
     sn = request.query_params.get("SN", "")
     body = await request.body()
     texto = body.decode("utf-8", errors="ignore")
     
     if table == "ATTLOG":
-        # ⚡ 1. ENRUTADOR GLOBAL: Descubrir a qué empresa pertenece este reloj
+        # 1. ENRUTADOR GLOBAL
         conn_maestra = conectar_bd("public")
         cur_m = conn_maestra.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         try:
-            # Buscamos en el registro global de dispositivos
             cur_m.execute("SELECT schema_name FROM public.dispositivos WHERE numero_serie = %s AND activo = TRUE", (sn,))
             disp = cur_m.fetchone()
             
             if not disp:
-                print(f"⚠️ ADVERTENCIA: Marcaje recibido de un reloj desconocido (SN: {sn}).")
-                return PlainTextResponse("OK") # Devolvemos OK para que el reloj no se trabe intentando reenviar
+                print(f"⚠️ Reloj desconocido (SN: {sn}).")
+                return PlainTextResponse("OK\n")
                 
             schema_destino = disp["schema_name"]
             
-            # 2. Procesamos las huellas hacia el esquema correcto
+            # 2. Procesamos las huellas
+            conn_e = conectar_bd(schema_destino)
+            cur_e = conn_e.cursor()
+
             for linea in texto.strip().splitlines():
                 partes = linea.strip().split("\t")
                 if len(partes) >= 2:
@@ -606,24 +609,27 @@ async def iclock_data(request: Request):
                     fecha_hora_str = partes[1] 
                     fecha_dt = datetime.strptime(fecha_hora_str, "%Y-%m-%d %H:%M:%S").date()
                     
-                    # A) Guardamos en la Caja Negra de la empresa
-                    conn_e = conectar_bd(schema_destino)
-                    cur_e = conn_e.cursor()
+                    # ⚡ ESCUDO ANTI-DUPLICADOS: Si la huella exacta ya está, la ignoramos
+                    cur_e.execute(f"SELECT id FROM {schema_destino}.eventos_brutos WHERE device_no = %s AND item = %s AND fecha_hora = %s", (sn, bio_id, fecha_hora_str))
+                    if cur_e.fetchone():
+                        continue 
+                        
+                    # A) Guardamos en la Caja Negra
                     cur_e.execute(f"""
                         INSERT INTO {schema_destino}.eventos_brutos (device_no, item, verify_mode, action, fecha_hora, raw_data)
                         VALUES (%s, %s, %s, %s, %s, %s)
                     """, (sn, bio_id, partes[3] if len(partes)>3 else "1", partes[2] if len(partes)>2 else "0", fecha_hora_str, psycopg2.extras.Json({"raw": linea})))
-                    conn_e.commit()
 
-                    # B) Disparamos el Cerebro Matemático
+                    # B) ⚡ ENCOLAMOS EL CÁLCULO EN SEGUNDO PLANO (El servidor ya no se congela)
                     cur_e.execute(f"SELECT id FROM {schema_destino}.empleados WHERE bio_id = %s", (bio_id,))
                     res_emp = cur_e.fetchone()
                     if res_emp:
-                        procesar_asistencia_dia(schema_destino, res_emp[0], fecha_dt)
-                        
-                    cur_e.close()
-                    conn_e.close()
-                    print(f"🚀 Marcaje procesado en [{schema_destino}] para BioID: {bio_id}")
+                        background_tasks.add_task(procesar_asistencia_dia, schema_destino, res_emp[0], fecha_dt)
+                        print(f"🚀 Marcaje encolado en [{schema_destino}] para BioID: {bio_id}")
+
+            conn_e.commit()
+            cur_e.close()
+            conn_e.close()
 
         except Exception as e:
             print(f"❌ Error interno ADMS: {e}")
@@ -631,7 +637,8 @@ async def iclock_data(request: Request):
             cur_m.close()
             conn_maestra.close()
             
-    return PlainTextResponse("OK")
+    # ⚡ FIX FINAL: El salto de línea \n es OBLIGATORIO para que el ZKTeco borre su memoria y deje de enviar
+    return PlainTextResponse("OK\n")
 
 
 # ==============================================================================
