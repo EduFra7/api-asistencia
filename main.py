@@ -1008,7 +1008,7 @@ async def registrar_empleado(request: Request, usuario = Depends(verificar_token
     cur = conn.cursor()
     try:
         ci = data.get("ci")
-        bio_id = data.get("bio_id")
+        bio_id_asignado = data.get("bio_id")
 
         if not bio_id_asignado:
             # Buscamos el ID más alto actual y le sumamos 1
