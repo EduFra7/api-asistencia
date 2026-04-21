@@ -1470,40 +1470,40 @@ def calcular_minutos_almuerzo(inicio: str, fin: str) -> int:
     except:
         return 0
 
-# ⚡ CALCULADORA DE TURNOS (Smart Backend)
+# ==========================================
+# CALCULADORA INTELIGENTE DE TURNOS
+# ==========================================
 @app.get("/turnos/calculadora")
-async def calculadora_turnos(ingreso: str = "", salida: str = "", alm_in: str = "", alm_out: str = ""):
-    # 1. Calcular minutos de almuerzo
+async def calculadora_turnos(ingreso: str = "", salida: str = "", alm_in: str = "", alm_out: str = "", usuario = Depends(verificar_token)):
     min_almuerzo = 0
-    if alm_in and alm_out:
-        try:
+    total_str = "0.00 hrs/día"
+
+    try:
+        # 1. Calculamos Almuerzo
+        if alm_in and alm_out:
             in_h, in_m = map(int, alm_in.split(':'))
             out_h, out_m = map(int, alm_out.split(':'))
             m_in = (in_h * 60) + in_m
             m_out = (out_h * 60) + out_m
-            
-            if m_out < m_in: m_out += 24 * 60 # Cruce de medianoche
+            if m_out < m_in: m_out += 24 * 60
             min_almuerzo = m_out - m_in
-        except: pass
 
-    # 2. Calcular horas totales del turno
-    total_str = "00:00"
-    if ingreso and salida:
-        try:
+        # 2. Calculamos Total del Turno
+        if ingreso and salida:
             in_h, in_m = map(int, ingreso.split(':'))
             out_h, out_m = map(int, salida.split(':'))
             m_in = (in_h * 60) + in_m
             m_out = (out_h * 60) + out_m
             
-            if m_out < m_in: m_out += 24 * 60 # Turno nocturno
+            if m_out < m_in: m_out += 24 * 60 # Cruce de medianoche
             
             min_neto = (m_out - m_in) - min_almuerzo
             if min_neto < 0: min_neto = 0
             
-            h = min_neto // 60
-            m = min_neto % 60
-            total_str = f"{h:02d}:{m:02d}"
-        except: pass
+            # Formateamos a decimales (Ej. 8.50 hrs)
+            total_str = f"{(min_neto / 60):.2f} hrs/día"
+    except:
+        pass # Si mandan horas incompletas, devuelve 0 de forma segura
 
     return {"almuerzo_min": min_almuerzo, "total_str": total_str}
 
@@ -1515,12 +1515,23 @@ async def crear_turno(data: dict, usuario = Depends(verificar_token)):
     
     conn = conectar_bd(schema)
     cur = conn.cursor() 
+
     try:
+        # ⚡ CORRECCIÓN: Nombres exactos de las columnas en PostgreSQL
         cur.execute(f"""
-            INSERT INTO {schema}.turnos (nombre, hora_ingreso, hora_salida, almuerzo, inicio_almuerzo, fin_almuerzo, almuerzo_min, tolerancia_ingreso)
+            INSERT INTO {schema}.turnos 
+            (nombre, hora_ingreso, hora_salida, almuerzo, hora_inicio_almuerzo, hora_fin_almuerzo, almuerzo_min, tolerancia_ingreso)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        """, (data['nombre'], data['hora_ingreso'], data['hora_salida'], data.get('almuerzo', True), 
-              data.get('inicio_almuerzo'), data.get('fin_almuerzo'), almuerzo_min, data.get('tolerancia_ingreso', 0)))
+        """, (
+            data['nombre'], 
+            data['hora_ingreso'], 
+            data['hora_salida'], 
+            data.get('almuerzo', True),
+            data.get('inicio_almuerzo'), # Mantenemos esto igual porque así lo manda el Frontend
+            data.get('fin_almuerzo'),    # Mantenemos esto igual
+            almuerzo_min, 
+            data.get('tolerancia_ingreso', 0)
+        ))
         conn.commit()
         return {"mensaje": "Turno guardado con éxito."}
     finally:
@@ -1535,14 +1546,29 @@ async def actualizar_turno(turno_id: int, data: dict, usuario = Depends(verifica
     conn = conectar_bd(schema)
     cur = conn.cursor()
     try:
+        # ⚡ CORRECCIÓN EN EL UPDATE
         cur.execute(f"""
-            UPDATE {schema}.turnos SET 
-                nombre=%s, hora_ingreso=%s, hora_salida=%s, almuerzo=%s, 
-                inicio_almuerzo=%s, fin_almuerzo=%s, almuerzo_min=%s, tolerancia_ingreso=%s
-            WHERE id=%s
-        """, (data['nombre'], data['hora_ingreso'], data['hora_salida'], data['almuerzo'],
-              data.get('inicio_almuerzo'), data.get('fin_almuerzo'), almuerzo_min, 
-              data.get('tolerancia_ingreso', 0), turno_id))
+            UPDATE {schema}.turnos 
+            SET nombre = %s, 
+                hora_ingreso = %s, 
+                hora_salida = %s, 
+                almuerzo = %s, 
+                hora_inicio_almuerzo = %s, 
+                hora_fin_almuerzo = %s, 
+                almuerzo_min = %s, 
+                tolerancia_ingreso = %s
+            WHERE id = %s
+        """, (
+            data['nombre'], 
+            data['hora_ingreso'], 
+            data['hora_salida'], 
+            data.get('almuerzo', True),
+            data.get('inicio_almuerzo'), 
+            data.get('fin_almuerzo'), 
+            almuerzo_min, 
+            data.get('tolerancia_ingreso', 0), 
+            turno_id
+        ))
         conn.commit()
         return {"mensaje": "Turno actualizado."}
     finally:

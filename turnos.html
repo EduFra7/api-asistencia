@@ -330,6 +330,15 @@
         function calcularAlmuerzoMin() { dispararCalculo(); }
         function calcularHoras() { dispararCalculo(); }
 
+        // ⚡ ACTIVADORES EN TIEMPO REAL (Disparan el cálculo al teclear)
+        document.addEventListener("DOMContentLoaded", () => {
+            document.getElementById('t_ingreso').addEventListener('input', dispararCalculo);
+            document.getElementById('t_salida').addEventListener('input', dispararCalculo);
+            document.getElementById('t_inicio_almuerzo').addEventListener('input', dispararCalculo);
+            document.getElementById('t_fin_almuerzo').addEventListener('input', dispararCalculo);
+            document.getElementById('t_almuerzo').addEventListener('change', dispararCalculo);
+        });
+
         function bloquearCampos(estado) {
             const campos = document.querySelectorAll('#formTurno input, #formTurno select, #formTurno textarea');
             
