@@ -939,36 +939,65 @@
         }
 
         // ==========================================
-        // 📊 MOTOR DE EXPORTACIÓN (PDF Y EXCEL)
+        // 📊 MOTOR DE EXPORTACIÓN (ESTILO AUSENCIAS)
         // ==========================================
 
-        function descargarExcel() {
-            if (!empleadoIdActual) {
-                mostrarError("Por favor, selecciona un empleado primero.");
-                return;
-            }
-            
-            // Sumamos 1 al mes porque en JavaScript los meses van del 0 al 11
-            const anio = fechaVisualizada.getFullYear();
-            const mes = fechaVisualizada.getMonth() + 1;
-            
-            // Abrimos el endpoint en una nueva pestaña. El navegador detectará que es un archivo y lo descargará.
-            const url = `${API_URL}/empleados/${empleadoIdActual}/reporte/excel/${anio}/${mes}?token=${token}`;
-            window.open(url, '_blank');
-        }
-
-        function descargarPDF() {
-            if (!empleadoIdActual) {
-                mostrarError("Por favor, selecciona un empleado primero.");
+        async function descargarReporte(tipo) {
+            if (!empleadoSeleccionadoId) {
+                Swal.fire('Atención', 'Por favor, selecciona un empleado primero.', 'warning');
                 return;
             }
 
             const anio = fechaVisualizada.getFullYear();
             const mes = fechaVisualizada.getMonth() + 1;
+            const url = `${API_URL}/empleados/${empleadoSeleccionadoId}/reporte/${tipo}/${anio}/${mes}`;
             
-            const url = `${API_URL}/empleados/${empleadoIdActual}/reporte/pdf/${anio}/${mes}?token=${token}`;
-            window.open(url, '_blank');
+            // 1. UI de espera (Igual que en ausencias.html)
+            Swal.fire({ 
+                title: `Generando Reporte ${tipo.toUpperCase()}...`, 
+                allowOutsideClick: false, 
+                didOpen: () => Swal.showLoading() 
+            });
+
+            try {
+                // 2. FETCH con token seguro
+                const res = await fetch(url, {
+                    headers: { 'Authorization': `Bearer ${token_api}` }
+                });
+
+                if (!res.ok) throw new Error("Error en el servidor");
+
+                const blob = await res.blob();
+                const urlBlob = window.URL.createObjectURL(blob);
+                
+                // 3. Diferenciamos el comportamiento según el tipo
+                if (tipo === 'pdf') {
+                    // ⚡ PARA PDF: Abrir en nueva pestaña para ver/imprimir
+                    window.open(urlBlob, '_blank');
+                } else {
+                    // ⚡ PARA EXCEL: Descarga automática directa
+                    const a = document.createElement('a');
+                    a.href = urlBlob;
+                    a.download = `Asistencia_${anio}_${mes}.xlsx`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                }
+
+                Swal.close();
+
+                // Limpiamos la memoria después de un tiempo prudencial
+                setTimeout(() => window.URL.revokeObjectURL(urlBlob), 60000);
+
+            } catch (error) {
+                console.error(error);
+                Swal.fire('Error', 'No se pudo generar el reporte solicitado.', 'error');
+            }
         }
+
+        // Mapeo de los botones
+        function descargarExcel() { descargarReporte('excel'); }
+        function descargarPDF() { descargarReporte('pdf'); }
 
 
             

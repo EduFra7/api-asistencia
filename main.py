@@ -36,10 +36,11 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, landscape
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.pagesizes import A5, portrait
 from reportlab.pdfgen import canvas
+from reportlab.lib import colors
 
 # ==============================================================================
 # 2. CONFIGURACIÓN INICIAL DE LA APLICACIÓN
@@ -3024,7 +3025,7 @@ async def eliminar_asistencia_dia(empleado_id: int, fecha: str, request: Request
         conn.close()
 
 # ==============================================================================
-# 📊 MOTOR DE REPORTES: EXCEL Y PDF
+# 📊 MOTOR DE REPORTES: EXCEL Y PDF (VERSIÓN CON DATOS REALES)
 # ==============================================================================
 
 @app.get("/empleados/{empleado_id}/reporte/excel/{anio}/{mes}")
@@ -3034,65 +3035,74 @@ async def descargar_reporte_excel(empleado_id: int, anio: int, mes: int, usuario
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     
     try:
-        # 1. Obtener datos básicos del empleado
+        # 1. Datos del empleado
         cur.execute(f"SELECT nombres, apellidos, documento, cargo FROM {schema}.empleados WHERE id = %s", (empleado_id,))
         emp = cur.fetchone()
-        if not emp:
-            raise HTTPException(status_code=404, detail="Empleado no encontrado")
 
-        # Aquí deberías obtener la lista de asistencias del mes usando tu lógica existente
-        # Para el ejemplo, simularemos la obtención de datos
-        # cur.execute(...) -> asistencias = cur.fetchall()
-        
-        # 2. Crear el libro de Excel en memoria
+        # 2. Extraer datos reales de asistencia del mes
+        cur.execute(f"""
+            SELECT fecha, entrada_real, salida_real, horas_trabajadas_netas, estado, minutos_atraso, observaciones
+            FROM {schema}.asistencia_diaria
+            WHERE empleado_id = %s AND EXTRACT(YEAR FROM fecha) = %s AND EXTRACT(MONTH FROM fecha) = %s
+            ORDER BY fecha ASC
+        """, (empleado_id, anio, mes))
+        asistencias = cur.fetchall()
+
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = f"Reporte {mes}-{anio}"
+        ws.title = f"{mes}-{anio}"
 
-        # 3. Estilos corporativos
+        # Estilos corporativos
         header_font = Font(bold=True, color="FFFFFF")
-        header_fill = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid") # Azul oscuro Tailwind
+        header_fill = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid")
         center_align = Alignment(horizontal="center", vertical="center")
 
-        # 4. Escribir Encabezado de Identidad
         ws.merge_cells('A1:G1')
-        ws['A1'] = f"REPORTE MENSUAL DE ASISTENCIA - {emp['nombres']} {emp['apellidos']}"
+        ws['A1'] = f"REPORTE DE ASISTENCIA - {emp['nombres']} {emp['apellidos']}"
         ws['A1'].font = Font(bold=True, size=14)
         ws['A1'].alignment = center_align
 
-        ws['A3'] = "Documento:"; ws['B3'] = emp['documento']
-        ws['A4'] = "Cargo:";     ws['B4'] = emp['cargo']
-        ws['A5'] = "Periodo:";   ws['B5'] = f"{mes}/{anio}"
+        ws['A3'] = "Periodo:"; ws['B3'] = f"{mes}/{anio}"
+        ws['A4'] = "Cargo:";   ws['B4'] = emp['cargo']
 
-        # 5. Cabeceras de la Tabla de Días
-        headers = ["Fecha", "Entrada", "Salida", "Horas Netas", "Estado", "Multa ($)", "Observaciones"]
+        # Cabeceras
+        headers = ["Fecha", "Entrada", "Salida", "Hrs Netas", "Estado", "Atraso (min)", "Observaciones"]
         for col_num, header in enumerate(headers, 1):
-            cell = ws.cell(row=7, column=col_num, value=header)
+            cell = ws.cell(row=6, column=col_num, value=header)
             cell.font = header_font
             cell.fill = header_fill
             cell.alignment = center_align
 
-        # 6. Llenar los datos (AQUÍ SE ITERA SOBRE TUS DATOS REALES DE LA BASE DE DATOS)
-        # Ejemplo simulado de una fila:
-        ws.append(["2023-10-01", "08:25", "18:30", "8.0", "Puntual", "0", ""])
-        
-        # Ajustar ancho de columnas
+        # ⚡ POBLAR CON DATOS REALES
+        fila_actual = 7
+        for a in asistencias:
+            # Formateamos las horas para evitar errores si están vacías (None)
+            ent = a['entrada_real'].strftime('%H:%M') if a['entrada_real'] else '--:--'
+            sal = a['salida_real'].strftime('%H:%M') if a['salida_real'] else '--:--'
+            
+            ws.cell(row=fila_actual, column=1, value=str(a['fecha'])).alignment = center_align
+            ws.cell(row=fila_actual, column=2, value=ent).alignment = center_align
+            ws.cell(row=fila_actual, column=3, value=sal).alignment = center_align
+            ws.cell(row=fila_actual, column=4, value=float(a['horas_trabajadas_netas'] or 0)).alignment = center_align
+            ws.cell(row=fila_actual, column=5, value=a['estado']).alignment = center_align
+            ws.cell(row=fila_actual, column=6, value=a['minutos_atraso'] or 0).alignment = center_align
+            ws.cell(row=fila_actual, column=7, value=a['observaciones'] or '')
+            
+            fila_actual += 1
+
         for col in ws.columns:
             ws.column_dimensions[col[0].column_letter].width = 15
+        ws.column_dimensions['G'].width = 35 # Columna de obs más ancha
 
-        # 7. Guardar en memoria RAM (BytesIO) y enviar
         stream = io.BytesIO()
         wb.save(stream)
         stream.seek(0)
         
-        nombre_archivo = f"Asistencia_{emp['nombres'].replace(' ', '_')}_{mes}_{anio}.xlsx"
-        
         return StreamingResponse(
             stream, 
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f"attachment; filename={nombre_archivo}"}
+            headers={"Content-Disposition": f"attachment; filename=Excel_Asistencia.xlsx"}
         )
-        
     finally:
         cur.close(); conn.close()
 
@@ -3104,40 +3114,61 @@ async def descargar_reporte_pdf(empleado_id: int, anio: int, mes: int, usuario =
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     
     try:
-        cur.execute(f"SELECT nombres, apellidos FROM {schema}.empleados WHERE id = %s", (empleado_id,))
+        cur.execute(f"SELECT nombres, apellidos, documento FROM {schema}.empleados WHERE id = %s", (empleado_id,))
         emp = cur.fetchone()
 
-        # Crear el PDF en memoria
+        cur.execute(f"""
+            SELECT fecha, entrada_real, salida_real, estado, observaciones
+            FROM {schema}.asistencia_diaria
+            WHERE empleado_id = %s AND EXTRACT(YEAR FROM fecha) = %s AND EXTRACT(MONTH FROM fecha) = %s
+            ORDER BY fecha ASC
+        """, (empleado_id, anio, mes))
+        asistencias = cur.fetchall()
+
         stream = io.BytesIO()
-        pdf = canvas.Canvas(stream, pagesize=letter)
-        pdf.setTitle(f"Reporte_{mes}_{anio}")
+        doc = SimpleDocTemplate(stream, pagesize=letter)
+        elementos = []
+        estilos = getSampleStyleSheet()
 
-        # Dibujar el encabezado
-        pdf.setFont("Helvetica-Bold", 16)
-        pdf.drawString(50, 750, "Reporte Mensual de Asistencia Corporativa")
+        # Título
+        elementos.append(Paragraph(f"<b>Reporte de Asistencia:</b> {emp['nombres']} {emp['apellidos']}", estilos['Title']))
+        elementos.append(Paragraph(f"<b>Periodo:</b> {mes}/{anio} | <b>Doc:</b> {emp['documento']}", estilos['Normal']))
+        elementos.append(Spacer(1, 20))
+
+        # ⚡ CREAR LA TABLA DE DATOS
+        datos_tabla = [["Fecha", "Entrada", "Salida", "Estado", "Observaciones"]] # Fila 1 (Cabecera)
         
-        pdf.setFont("Helvetica", 12)
-        pdf.drawString(50, 720, f"Empleado: {emp['nombres']} {emp['apellidos']}")
-        pdf.drawString(50, 700, f"Periodo: {mes}/{anio}")
+        for a in asistencias:
+            ent = a['entrada_real'].strftime('%H:%M') if a['entrada_real'] else '--:--'
+            sal = a['salida_real'].strftime('%H:%M') if a['salida_real'] else '--:--'
+            obs = a['observaciones'] if a['observaciones'] else ''
+            # Cortar obs muy largas para que no rompan el PDF
+            if len(obs) > 40: obs = obs[:37] + "..." 
+            
+            datos_tabla.append([str(a['fecha']), ent, sal, a['estado'], obs])
 
-        # Dibujar línea separadora
-        pdf.line(50, 690, 550, 690)
+        # Dar formato corporativo a la tabla
+        tabla = Table(datos_tabla, colWidths=[80, 60, 60, 80, 200])
+        estilo_tabla = TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1E3A8A")),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor("#F9FAFB")),
+            ('GRID', (0, 0), (-1, -1), 1, colors.lightgrey),
+        ])
+        tabla.setStyle(estilo_tabla)
+        elementos.append(tabla)
 
-        # Aquí iría el bucle para dibujar los días (usando pdf.drawString ajustando coordenadas 'y')
-        pdf.setFont("Helvetica-Oblique", 10)
-        pdf.drawString(50, 670, "Documento generado automáticamente por C.A Lector.")
-
-        # Finalizar el PDF
-        pdf.showPage()
-        pdf.save()
+        # Construir el PDF
+        doc.build(elementos)
         stream.seek(0)
-        
-        nombre_archivo = f"Asistencia_{emp['nombres']}_{mes}_{anio}.pdf"
         
         return StreamingResponse(
             stream, 
             media_type="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename={nombre_archivo}"}
+            headers={"Content-Disposition": f"attachment; filename=PDF_Asistencia.pdf"}
         )
     finally:
         cur.close(); conn.close()
