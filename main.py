@@ -2555,10 +2555,9 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
 
             exige_almuerzo = emp_data.get('almuerzo', False) if emp_data else False
             if exige_almuerzo and ausencia_activa and ausencia_activa.get('hora_inicio') and emp_data.get('hora_inicio_almuerzo'):
-                # ⚡ FIX: FÓRMULA MATEMÁTICA CORRECTA DE INTERSECCIÓN
-                # Dos bloques de tiempo chocan SÍ Y SOLO SÍ: 
-                # (Inicio_Permiso < Fin_Almuerzo) Y (Fin_Permiso > Inicio_Almuerzo)
-                if (ausencia_activa['hora_inicio'] < emp_data['hora_fin_almuerzo']) and (ausencia_activa['hora_fin'] > emp_data['hora_inicio_almuerzo']):
+                # ⚡ FIX: Usamos >= y <= (Inclusivo) para detectar si el permiso "toca" la frontera del almuerzo.
+                # Si el permiso termina exactamente a las 12:30 (inicio de almuerzo), lo absorbe.
+                if (ausencia_activa['hora_inicio'] <= emp_data['hora_fin_almuerzo']) and (ausencia_activa['hora_fin'] >= emp_data['hora_inicio_almuerzo']):
                     exige_almuerzo = False
 
             datos_modal = {}
