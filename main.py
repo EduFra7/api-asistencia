@@ -2884,28 +2884,41 @@ async def editar_asistencia_manual(empleado_id: int, data: dict, request: Reques
         if t_ingreso and t_salida and t_salida < t_ingreso:
             es_nocturno = True
 
-        # ⚡ 2. LIMPIEZA INTELIGENTE (Respetando la ventana del turno)
+        # ⚡ 2. LIMPIEZA ABSOLUTA DE LA VENTANA (Mata marcas erróneas del ZKTeco)
         if es_nocturno:
-            # Si es nocturno, limpiamos los eventos manuales desde las 12:00 PM de hoy hasta las 11:59 AM de mañana
             inicio_ventana = f"{fecha} 12:00:00"
             fin_ventana = f"{fecha_dt + timedelta(days=1)} 11:59:59"
         else:
             inicio_ventana = f"{fecha} 00:00:00"
             fin_ventana = f"{fecha} 23:59:59"
 
+        # A) Respaldo de auditoría: Guardamos qué había antes de borrar
+        cur.execute(f"""
+            SELECT fecha_hora, device_no FROM {schema}.eventos_brutos 
+            WHERE item = %s AND fecha_hora >= %s AND fecha_hora <= %s
+            ORDER BY fecha_hora ASC
+        """, (bio_id, inicio_ventana, fin_ventana))
+        eventos_viejos = cur.fetchall()
+        
+        # Armamos un texto: "08:25(Z), 23:37(Z)" (Z=ZKTeco, M=Manual)
+        backup_txt = ", ".join([f"{e['fecha_hora'].strftime('%H:%M')}({'M' if e['device_no'] == 'EDICIÓN-MANUAL' else 'Z'})" for e in eventos_viejos])
+        observacion_final = justificacion
+        if backup_txt:
+            observacion_final += f" | Sobreescribió: [{backup_txt}]"
+
+        # B) Borrado total de la ventana para reiniciar el día y matar el error
         cur.execute(f"""
             DELETE FROM {schema}.eventos_brutos 
-            WHERE item = %s AND device_no = %s AND fecha_hora >= %s AND fecha_hora <= %s
-        """, (bio_id, device_id, inicio_ventana, fin_ventana))
+            WHERE item = %s AND fecha_hora >= %s AND fecha_hora <= %s
+        """, (bio_id, inicio_ventana, fin_ventana))
 
-        # ⚡ 3. INYECTOR INTELIGENTE DE FECHAS (Detecta cruce de medianoche)
+        # ⚡ 3. INYECTOR INTELIGENTE DE FECHAS
         def inyectar_marcaje(hora_str, accion, etiqueta):
             if hora_str:
                 h_obj = datetime.strptime(hora_str, "%H:%M").time()
                 fecha_asignada = fecha_dt
                 
-                # Si es turno nocturno y la hora es menor a las 12 del mediodía (Ej: 06:00 am)
-                # pertenece lógicamente al día siguiente.
+                # Cruce de medianoche en turnos nocturnos
                 if es_nocturno and h_obj < time(12, 0):
                     fecha_asignada = fecha_dt + timedelta(days=1)
                     
@@ -2916,7 +2929,7 @@ async def editar_asistencia_manual(empleado_id: int, data: dict, request: Reques
                     VALUES (%s, %s, %s, %s, %s)
                 """, (device_id, bio_id, accion, fh, psycopg2.extras.Json({"raw": etiqueta})))
 
-        # Inyectamos los 4 posibles marcajes
+        # Inyectamos solo la nueva verdad dictada por RRHH
         inyectar_marcaje(h_entrada, '0', "MANUAL-IN")
         inyectar_marcaje(h_alm_in, '1', "MANUAL-LUNCH-OUT")
         inyectar_marcaje(h_alm_out, '0', "MANUAL-LUNCH-IN")
@@ -2930,16 +2943,14 @@ async def editar_asistencia_manual(empleado_id: int, data: dict, request: Reques
         exito = procesar_asistencia_dia(schema, empleado_id, fecha_dt)
         
         if exito:
-            # ⚡ CORRECCIÓN: Quitamos el "candado" (modificado_manualmente = TRUE)
-            # Como ahora tus cambios viven en 'eventos_brutos', están a salvo.
-            # Solo guardamos la observación y dejamos el día "Abierto" al reloj físico.
+            # ⚡ Sellamos la observación final con el respaldo incluido
             cur.execute(f"""
                 UPDATE {schema}.asistencia_diaria 
                 SET observaciones = %s, modificado_manualmente = FALSE
                 WHERE empleado_id = %s AND fecha = %s
-            """, (justificacion, empleado_id, fecha_dt))
+            """, (observacion_final, empleado_id, fecha_dt))
             conn.commit()
-            return {"mensaje": "Marcaje manual inyectado. El día sigue abierto para el reloj físico."}
+            return {"mensaje": "Día corregido. El sistema limpió las marcas erróneas y aplicó la edición."}
         else:
             raise HTTPException(status_code=500, detail="Error en el Motor de Cálculo.")
 
