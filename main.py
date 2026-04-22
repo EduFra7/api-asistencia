@@ -2218,7 +2218,8 @@ def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, 
         "hora_entrada": marcajes_limpios[0].time() if len(marcajes_limpios) > 0 else None,
         "hora_inicio_almuerzo": marcajes_limpios[1].time() if len(marcajes_limpios) > 1 else None,
         "hora_fin_almuerzo": marcajes_limpios[2].time() if len(marcajes_limpios) > 2 else None,
-        "hora_salida": marcajes_limpios[-1].time() if len(marcajes_limpios) > 0 else None,
+        # ⚡ FIX: Solo asignamos Salida si hay más de 1 marcaje, evitando el clonado 09:20 / 09:20
+        "hora_salida": marcajes_limpios[-1].time() if len(marcajes_limpios) > 1 else None,
         "minutos_retraso_entrada": 0,
         "minutos_exceso_almuerzo": 0,
         "estado": "Falta",
@@ -2776,7 +2777,6 @@ async def eliminar_feriado(feriado_id: int, usuario = Depends(verificar_token)):
         cur.close()
         conn.close()
 
-
 # ==============================================================================
 # 14. MÓDULO: REPORTE DEL DÍA (GLOBAL) - FILTROS Y ESTADOS INTELIGENTES
 # ==============================================================================
@@ -2801,7 +2801,6 @@ async def obtener_reporte_diario(
         es_hoy = (fecha_req == hoy_srv.date())
         hora_actual = hoy_srv.time()
 
-        # 1. ARMADO DINÁMICO DE LA CONSULTA SQL
         condiciones = ["e.eliminado = FALSE", "e.activo = TRUE"]
         parametros = [fecha, fecha]
 
@@ -2825,8 +2824,9 @@ async def obtener_reporte_diario(
             SELECT 
                 e.id, e.nombres, e.apellidos, e.foto_perfil, e.cargo,
                 s.nombre as sucursal_nombre, sec.nombre as seccion_nombre,
-                t.nombre as turno_nombre, t.hora_ingreso, t.hora_salida,
+                t.nombre as turno_nombre, t.hora_ingreso, t.hora_salida, t.almuerzo as turno_almuerzo,
                 ad.estado, ad.hora_entrada as marcaje_entrada, ad.hora_salida as marcaje_salida, 
+                ad.hora_inicio_almuerzo as marcaje_alm_in, ad.hora_fin_almuerzo as marcaje_alm_out,
                 ad.minutos_retraso_entrada, ad.horas_trabajadas,
                 (SELECT tipo 
                  FROM {schema}.ausencias a 
@@ -2844,27 +2844,35 @@ async def obtener_reporte_diario(
         
         reporte = cur.fetchall()
 
-        # 2. VARIABLES PARA KPIs
+        # ⚡ KPIs SEPARADOS
         kpis = {
             "total": len(reporte),
             "presentes": 0,
             "faltas": 0,
-            "ausencias": 0,
+            "vacaciones": 0,
+            "permisos": 0,
             "retrasos": 0,
             "turnos_activos": []
         }
 
         turnos_en_curso = set()
 
-        # 3. 🧠 PROCESAMIENTO INTELIGENTE PARA EL FRONTEND TONTO
         for fila in reporte:
-            # Formateo básico de horas
             h_in = fila.get("hora_ingreso")
             h_out = fila.get("hora_salida")
+            
             fila["ui_turno"] = f"{str(h_in)[:5]} a {str(h_out)[:5]}" if h_in and h_out else "Sin Turno"
             fila["ui_entrada"] = str(fila["marcaje_entrada"])[:5] if fila.get("marcaje_entrada") else "--:--"
             fila["ui_salida"] = str(fila["marcaje_salida"])[:5] if fila.get("marcaje_salida") else "--:--"
             
+            # ⚡ UI ALMUERZO DINÁMICO
+            if fila.get("turno_almuerzo"):
+                a_in = str(fila["marcaje_alm_in"])[:5] if fila.get("marcaje_alm_in") else "--:--"
+                a_out = str(fila["marcaje_alm_out"])[:5] if fila.get("marcaje_alm_out") else "--:--"
+                fila["ui_almuerzo"] = f"{a_in} / {a_out}"
+            else:
+                fila["ui_almuerzo"] = '<span class="text-gray-400 font-normal">N/A</span>'
+
             estado_ausencia = fila.get("estado_ausencia")
             estado_ad = fila.get("estado")
             
@@ -2872,56 +2880,66 @@ async def obtener_reporte_diario(
             ui_color = "bg-gray-100 text-gray-700 border-gray-200"
             ui_icono = "fa-question-circle"
 
-            # A) DETECCIÓN DE TURNO ACTIVO
             en_horario_laboral = False
             if es_hoy and h_in and h_out:
-                if h_out < h_in: # Turno nocturno
-                    en_horario_laboral = hora_actual >= h_in or hora_actual <= h_out
-                else: # Turno diurno
-                    en_horario_laboral = h_in <= hora_actual <= h_out
-                
-                if en_horario_laboral:
-                    turnos_en_curso.add(fila["turno_nombre"])
+                if h_out < h_in: en_horario_laboral = hora_actual >= h_in or hora_actual <= h_out
+                else: en_horario_laboral = h_in <= hora_actual <= h_out
+                if en_horario_laboral: turnos_en_curso.add(fila["turno_nombre"])
 
-            # B) ÁRBOL DE DECISIONES DE ESTADOS (UI LISTA)
-            if estado_ausencia:
-                kpis["ausencias"] += 1
-                ui_estado = "Vacación" if estado_ausencia == "vacacion" else "Permiso"
-                ui_color = "bg-blue-50 text-blue-700 border-blue-200" if estado_ausencia == "vacacion" else "bg-yellow-50 text-yellow-700 border-yellow-200"
-                ui_icono = "fa-umbrella-beach" if estado_ausencia == "vacacion" else "fa-user-md"
-                
-            elif not h_in:
+            # ⚡ ÁRBOL DE DECISIONES DE PRIORIDAD TÁCTICA
+            if not h_in:
                 ui_estado = "Sin Turno"
                 ui_color = "bg-slate-100 text-slate-500 border-slate-200"
                 ui_icono = "fa-calendar-times"
                 
-            else:
-                # Análisis Temporal Dinámico
-                if es_hoy and not fila.get("marcaje_entrada") and hora_actual < h_in:
-                    ui_estado = "Próximo a Iniciar"
-                    ui_color = "bg-slate-50 text-slate-600 border-slate-200"
-                    ui_icono = "fa-clock"
-                elif es_hoy and en_horario_laboral and not fila.get("marcaje_entrada"):
-                    ui_estado = "Retraso Crítico"
-                    ui_color = "bg-red-50 text-red-600 border-red-200"
-                    ui_icono = "fa-exclamation-triangle"
-                    kpis["faltas"] += 1
-                elif estado_ad in ["Trabajando", "En Curso"]:
+            elif fila.get("marcaje_entrada"):
+                # 1. PRIORIDAD: YA ESTÁ FÍSICAMENTE EN LA EMPRESA
+                kpis["presentes"] += 1
+                if estado_ad in ["Trabajando", "En Curso"]:
                     ui_estado = "En Curso"
                     ui_color = "bg-green-50 text-green-700 border-green-200 shadow-sm"
                     ui_icono = "fa-user-clock"
-                    kpis["presentes"] += 1
                 elif estado_ad == "Puntual":
                     ui_estado = "Jornada Completada"
                     ui_color = "bg-emerald-50 text-emerald-700 border-emerald-200"
                     ui_icono = "fa-check-circle"
-                    kpis["presentes"] += 1
                 elif estado_ad == "Tarde":
                     ui_estado = f"Llegó Tarde ({fila['minutos_retraso_entrada']}m)"
                     ui_color = "bg-orange-50 text-orange-700 border-orange-200"
                     ui_icono = "fa-running"
-                    kpis["presentes"] += 1
                     kpis["retrasos"] += 1
+                else:
+                    ui_estado = estado_ad or "Con Registro"
+                    ui_color = "bg-gray-50 text-gray-500 border-gray-200"
+                    ui_icono = "fa-info-circle"
+            else:
+                # 2. NO HA MARCADO ENTRADA (Evaluamos Ausencias o Faltas)
+                if estado_ausencia == "vacacion":
+                    ui_estado = "Vacación"
+                    ui_color = "bg-blue-50 text-blue-700 border-blue-200"
+                    ui_icono = "fa-umbrella-beach"
+                    kpis["vacaciones"] += 1
+                elif estado_ausencia == "permiso":
+                    # Si tiene permiso pero el motor de cálculo ya lo marcó como "Falta", es que se le pasó la hora del permiso.
+                    if estado_ad in ["Falta", "Retraso Crítico"]:
+                        ui_estado = "Falta Post-Permiso"
+                        ui_color = "bg-red-50 text-red-700 border-red-200"
+                        ui_icono = "fa-exclamation-triangle"
+                        kpis["faltas"] += 1
+                    else:
+                        ui_estado = "De Permiso"
+                        ui_color = "bg-yellow-50 text-yellow-700 border-yellow-200"
+                        ui_icono = "fa-user-md"
+                        kpis["permisos"] += 1
+                elif es_hoy and hora_actual < h_in:
+                    ui_estado = "Próximo a Iniciar"
+                    ui_color = "bg-slate-50 text-slate-600 border-slate-200"
+                    ui_icono = "fa-clock"
+                elif es_hoy and en_horario_laboral:
+                    ui_estado = "Retraso Crítico"
+                    ui_color = "bg-red-50 text-red-600 border-red-200"
+                    ui_icono = "fa-exclamation-triangle"
+                    kpis["faltas"] += 1
                 elif estado_ad in ["Falta", "Incompleto"]:
                     ui_estado = "Falta Injustificada"
                     ui_color = "bg-red-50 text-red-700 border-red-200"
@@ -2932,7 +2950,6 @@ async def obtener_reporte_diario(
                     ui_color = "bg-gray-50 text-gray-500 border-gray-200"
                     ui_icono = "fa-minus-circle"
 
-            # Inyectamos el diseño al diccionario
             fila["ui_estado"] = ui_estado
             fila["ui_color"] = ui_color
             fila["ui_icono"] = ui_icono

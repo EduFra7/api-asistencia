@@ -29,10 +29,10 @@
                 <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
                     <div>
                         <h2 class="text-xl font-bold text-slate-800"><i class="fas fa-camera text-blue-600 mr-2"></i>Monitor de Asistencia</h2>
-                        <p class="text-xs text-gray-500 mt-1">Fotografía táctica de la asistencia del personal.</p>
+                        <p class="text-xs text-gray-500 mt-1">Fotografía táctica de la asistencia del personal en tiempo real.</p>
                     </div>
                     <div class="w-full md:w-auto">
-                        <input type="date" id="filtro_fecha" onchange="cargarReporte()" class="w-full md:w-auto bg-gray-50 border border-gray-300 rounded-lg px-4 py-2 text-sm font-bold text-blue-700 outline-none focus:ring-2 focus:ring-blue-500">
+                        <input type="date" id="filtro_fecha" onchange="cargarReporte()" class="w-full md:w-auto bg-gray-50 border border-gray-300 rounded-lg px-4 py-2 text-sm font-bold text-blue-700 outline-none focus:ring-2 focus:ring-blue-500 shadow-sm">
                     </div>
                 </div>
 
@@ -47,49 +47,54 @@
                 </div>
             </div>
 
-            <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
                 <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-                    <p class="text-xs text-gray-500 font-bold uppercase mb-1">Personal Activo</p>
-                    <p id="kpi-total" class="text-2xl font-black text-slate-800">0</p>
+                    <p class="text-[10px] md:text-xs text-gray-500 font-bold uppercase mb-1">Personal Activo</p>
+                    <p id="kpi-total" class="text-xl md:text-2xl font-black text-slate-800">0</p>
                 </div>
                 <div class="bg-white p-4 rounded-xl shadow-sm border border-emerald-100 border-b-4 border-b-emerald-500">
-                    <p class="text-xs text-emerald-600 font-bold uppercase mb-1">Presentes</p>
-                    <p id="kpi-presentes" class="text-2xl font-black text-emerald-700">0</p>
+                    <p class="text-[10px] md:text-xs text-emerald-600 font-bold uppercase mb-1">Presentes</p>
+                    <p id="kpi-presentes" class="text-xl md:text-2xl font-black text-emerald-700">0</p>
                 </div>
                 <div class="bg-white p-4 rounded-xl shadow-sm border border-orange-100 border-b-4 border-b-orange-400">
-                    <p class="text-xs text-orange-600 font-bold uppercase mb-1">Con Retraso</p>
-                    <p id="kpi-retrasos" class="text-2xl font-black text-orange-700">0</p>
+                    <p class="text-[10px] md:text-xs text-orange-600 font-bold uppercase mb-1">Con Retraso</p>
+                    <p id="kpi-retrasos" class="text-xl md:text-2xl font-black text-orange-700">0</p>
                 </div>
                 <div class="bg-white p-4 rounded-xl shadow-sm border border-red-100 border-b-4 border-b-red-500">
-                    <p class="text-xs text-red-600 font-bold uppercase mb-1">Faltas</p>
-                    <p id="kpi-faltas" class="text-2xl font-black text-red-700">0</p>
+                    <p class="text-[10px] md:text-xs text-red-600 font-bold uppercase mb-1">Faltas</p>
+                    <p id="kpi-faltas" class="text-xl md:text-2xl font-black text-red-700">0</p>
                 </div>
                 <div class="bg-white p-4 rounded-xl shadow-sm border border-blue-100 border-b-4 border-b-blue-500">
-                    <p class="text-xs text-blue-600 font-bold uppercase mb-1">Ausencias/Vac.</p>
-                    <p id="kpi-ausencias" class="text-2xl font-black text-blue-700">0</p>
+                    <p class="text-[10px] md:text-xs text-blue-600 font-bold uppercase mb-1">De Vacación</p>
+                    <p id="kpi-vacaciones" class="text-xl md:text-2xl font-black text-blue-700">0</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-yellow-100 border-b-4 border-b-yellow-400">
+                    <p class="text-[10px] md:text-xs text-yellow-600 font-bold uppercase mb-1">De Permiso</p>
+                    <p id="kpi-permisos" class="text-xl md:text-2xl font-black text-yellow-700">0</p>
                 </div>
             </div>
 
             <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col flex-1">
                 <div class="bg-slate-800 p-3 flex justify-between items-center shrink-0">
                     <h3 class="text-sm font-bold text-white uppercase tracking-wider"><i class="fas fa-list-ul mr-2"></i>Detalle de Empleados</h3>
-                    <div id="contenedor-turnos-activos" class="flex gap-2"></div>
+                    <div id="contenedor-turnos-activos" class="flex gap-2 flex-wrap justify-end"></div>
                 </div>
                 
                 <div class="overflow-x-auto flex-1">
                     <table class="w-full text-left text-sm whitespace-nowrap">
-                        <thead class="bg-gray-50 border-b border-gray-200 text-xs uppercase text-gray-500 sticky top-0 z-10">
+                        <thead class="bg-gray-50 border-b border-gray-200 text-[11px] uppercase text-gray-500 sticky top-0 z-10">
                             <tr>
                                 <th class="px-4 py-3 font-bold">Empleado</th>
                                 <th class="px-4 py-3 font-bold">Ubicación</th>
                                 <th class="px-4 py-3 font-bold">Turno Asignado</th>
                                 <th class="px-4 py-3 font-bold text-center">Entrada</th>
+                                <th class="px-4 py-3 font-bold text-center">Almuerzo (Sal/Ret)</th>
                                 <th class="px-4 py-3 font-bold text-center">Salida</th>
                                 <th class="px-4 py-3 font-bold">Estado en Tiempo Real</th>
                             </tr>
                         </thead>
                         <tbody id="tabla-reporte" class="divide-y divide-gray-100">
-                            <tr><td colspan="6" class="text-center py-10 text-gray-400"><i class="fas fa-spinner fa-spin text-3xl mb-2"></i><p>Cargando información...</p></td></tr>
+                            <tr><td colspan="7" class="text-center py-10 text-gray-400"><i class="fas fa-spinner fa-spin text-3xl mb-2"></i><p>Cargando información...</p></td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -104,11 +109,9 @@
         const token_api = localStorage.getItem('token');
         let timeoutBusqueda = null;
 
-        // Iniciar pantalla
         async function init() {
             renderizarMenu('reporte');
             
-            // Setear fecha de hoy
             const hoy = new Date();
             const tzOffset = hoy.getTimezoneOffset() * 60000;
             const localISOTime = (new Date(hoy - tzOffset)).toISOString().split('T')[0];
@@ -148,7 +151,7 @@
 
         async function cargarReporte() {
             const tabla = document.getElementById('tabla-reporte');
-            tabla.innerHTML = '<tr><td colspan="6" class="text-center py-10 text-gray-400"><i class="fas fa-spinner fa-spin text-3xl mb-2"></i><p>Analizando...</p></td></tr>';
+            tabla.innerHTML = '<tr><td colspan="7" class="text-center py-10 text-gray-400"><i class="fas fa-spinner fa-spin text-3xl mb-2"></i><p>Analizando táctica...</p></td></tr>';
             
             const params = new URLSearchParams({
                 fecha: document.getElementById('filtro_fecha').value,
@@ -165,17 +168,18 @@
                 const data = await res.json();
                 pintarDatos(data);
             } catch (e) {
-                tabla.innerHTML = '<tr><td colspan="6" class="text-center py-10 text-red-500 font-bold"><i class="fas fa-exclamation-triangle text-3xl mb-2"></i><p>Error de conexión</p></td></tr>';
+                tabla.innerHTML = '<tr><td colspan="7" class="text-center py-10 text-red-500 font-bold"><i class="fas fa-exclamation-triangle text-3xl mb-2"></i><p>Error de conexión</p></td></tr>';
             }
         }
 
         function pintarDatos(data) {
-            // 1. Pintar KPIs
+            // 1. Pintar KPIs Segregados
             document.getElementById('kpi-total').textContent = data.kpis.total;
             document.getElementById('kpi-presentes').textContent = data.kpis.presentes;
             document.getElementById('kpi-retrasos').textContent = data.kpis.retrasos;
             document.getElementById('kpi-faltas').textContent = data.kpis.faltas;
-            document.getElementById('kpi-ausencias').textContent = data.kpis.ausencias;
+            document.getElementById('kpi-vacaciones').textContent = data.kpis.vacaciones;
+            document.getElementById('kpi-permisos').textContent = data.kpis.permisos;
 
             // 2. Pintar Turnos Activos
             const contTurnos = document.getElementById('contenedor-turnos-activos');
@@ -185,12 +189,12 @@
                 contTurnos.innerHTML = `<span class="bg-slate-700 text-[10px] px-2 py-0.5 rounded text-slate-400 font-bold">Fuera de Horario Laboral</span>`;
             }
 
-            // 3. ⚡ EL FRONTEND TONTO EN ACCIÓN: Solo lee variables y pinta el HTML
+            // 3. Frontend Tonto
             const tabla = document.getElementById('tabla-reporte');
             tabla.innerHTML = '';
 
             if (data.detalle.length === 0) {
-                tabla.innerHTML = '<tr><td colspan="6" class="text-center py-10 text-gray-400">No se encontraron empleados.</td></tr>';
+                tabla.innerHTML = '<tr><td colspan="7" class="text-center py-10 text-gray-400">No se encontraron empleados en este criterio.</td></tr>';
                 return;
             }
 
@@ -220,9 +224,10 @@
                             <p class="text-[10px] text-slate-500"><i class="fas fa-clock mr-1"></i>${emp.ui_turno}</p>
                         </td>
                         <td class="px-4 py-3 text-center font-bold text-gray-700">${emp.ui_entrada}</td>
+                        <td class="px-4 py-3 text-center font-bold text-gray-700">${emp.ui_almuerzo}</td>
                         <td class="px-4 py-3 text-center font-bold text-gray-700">${emp.ui_salida}</td>
                         <td class="px-4 py-3">
-                            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${emp.ui_color}">
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold border shadow-sm ${emp.ui_color}">
                                 <i class="fas ${emp.ui_icono} mr-1.5"></i>
                                 ${emp.ui_estado}
                             </span>
