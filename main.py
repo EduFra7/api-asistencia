@@ -3589,9 +3589,113 @@ async def simulador_evento(data: dict, background_tasks: BackgroundTasks, usuari
         cur.close()
         conn.close()
 
+# ==============================================================================
+# 16. MÓDULO: DASHBOARD Y MÉTRICAS TÁCTICAS (FRONTEND TONTO)
+# ==============================================================================
+
+@app.get("/dashboard/resumen")
+async def obtener_dashboard_resumen(usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    conn = conectar_bd(schema)
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        from datetime import datetime, date
+        hoy_dt = datetime.now()
+        hoy = hoy_dt.date()
+        ahora = hoy_dt.time()
+
+        # 1. FUERZA LABORAL
+        cur.execute(f"SELECT COUNT(*) FILTER (WHERE activo=TRUE) as activos, COUNT(*) FILTER (WHERE activo=FALSE) as inactivos FROM {schema}.empleados WHERE eliminado=FALSE")
+        res_personal = cur.fetchone()
+        activos = res_personal['activos'] or 0
+        inactivos = res_personal['inactivos'] or 0
+
+        # 2. IDENTIFICAR TURNOS EN CURSO (Tiempo Real)
+        cur.execute(f"SELECT id, nombre, hora_ingreso, hora_salida FROM {schema}.turnos WHERE eliminado=FALSE")
+        todos_turnos = cur.fetchall()
+        turnos_activos_ids = []
+        turnos_activos_info = []
+
+        for t in todos_turnos:
+            h_in = t['hora_ingreso']
+            h_out = t['hora_salida']
+            is_active = False
+            if h_in and h_out:
+                if h_out < h_in: # Nocturno
+                    is_active = ahora >= h_in or ahora <= h_out
+                else: # Diurno
+                    is_active = h_in <= ahora <= h_out
+
+            if is_active:
+                turnos_activos_ids.append(t['id'])
+                # Formatear horas para el frontend
+                t['rango'] = f"{str(h_in)[:5]} a {str(h_out)[:5]}"
+                turnos_activos_info.append(t)
+
+        # 3. MÉTRICAS TÁCTICAS (Solo de los empleados en el Turno Activo)
+        asistencia_stats = {"total_esperado": 0, "en_curso": 0, "tarde": 0, "faltas": 0, "vacaciones": 0, "permisos": 0}
+
+        if turnos_activos_ids:
+            ids_tuple = tuple(turnos_activos_ids)
+            cur.execute(f"""
+                SELECT 
+                    e.id, ad.estado, ad.hora_entrada,
+                    (SELECT tipo FROM {schema}.ausencias a WHERE a.empleado_id = e.id AND a.estado = 'aprobado' AND a.eliminado = FALSE AND %s BETWEEN a.fecha_inicio AND a.fecha_fin LIMIT 1) as estado_ausencia
+                FROM {schema}.empleados e
+                LEFT JOIN {schema}.asistencia_diaria ad ON ad.empleado_id = e.id AND ad.fecha = %s
+                WHERE e.eliminado = FALSE AND e.activo = TRUE AND e.turno_id IN %s
+            """, (hoy, hoy, ids_tuple))
+
+            empleados_activos = cur.fetchall()
+            asistencia_stats["total_esperado"] = len(empleados_activos)
+
+            for emp in empleados_activos:
+                ausencia = emp['estado_ausencia']
+                estado_ad = emp['estado']
+
+                if emp['hora_entrada']:
+                    if estado_ad in ["Trabajando", "En Curso", "Puntual"]: asistencia_stats["en_curso"] += 1
+                    elif estado_ad == "Tarde": asistencia_stats["tarde"] += 1
+                else:
+                    if ausencia == "vacacion": asistencia_stats["vacaciones"] += 1
+                    elif ausencia == "permiso": asistencia_stats["permisos"] += 1
+                    else: asistencia_stats["faltas"] += 1 # Si debía marcar y no lo hizo, o está en Retraso Crítico
+
+        # 4. PRÓXIMOS FERIADOS (Desde hoy en adelante)
+        cur.execute(f"SELECT fecha, descripcion, recurrente FROM {schema}.feriados WHERE eliminado = FALSE")
+        feriados_db = cur.fetchall()
+        proximos_feriados = []
+
+        for f in feriados_db:
+            f_date = f['fecha']
+            if f['recurrente']:
+                try: # Construir fecha para este año
+                    f_date_this_year = date(hoy.year, f_date.month, f_date.day)
+                    if f_date_this_year >= hoy:
+                        proximos_feriados.append({"fecha": f_date_this_year, "descripcion": f['descripcion']})
+                    else: # Si ya pasó este año, lo agendamos para el próximo
+                        proximos_feriados.append({"fecha": date(hoy.year + 1, f_date.month, f_date.day), "descripcion": f['descripcion']})
+                except ValueError: pass
+            else:
+                if f_date >= hoy:
+                    proximos_feriados.append({"fecha": f_date, "descripcion": f['descripcion']})
+
+        # Ordenar cronológicamente y tomar los 4 más próximos
+        proximos_feriados.sort(key=lambda x: x['fecha'])
+        feriados_formateados = [{"fecha_str": x['fecha'].strftime("%d/%m/%Y"), "descripcion": x['descripcion']} for x in proximos_feriados[:4]]
+
+        return {
+            "personal": {"activos": activos, "inactivos": inactivos, "total": activos + inactivos},
+            "turnos": {"total_configurados": len(todos_turnos), "activos": turnos_activos_info},
+            "asistencia": asistencia_stats,
+            "feriados": feriados_formateados
+        }
+    finally:
+        cur.close()
+        conn.close()
 
 # ==============================================================================
-# 16. MÓDULO: GESTIÓN DE LECTORES BIOMÉTRICOS
+# 17. MÓDULO: GESTIÓN DE LECTORES BIOMÉTRICOS
 # ==============================================================================
 
 @app.get("/lectores")
