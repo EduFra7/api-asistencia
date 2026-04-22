@@ -3025,7 +3025,7 @@ async def eliminar_asistencia_dia(empleado_id: int, fecha: str, request: Request
         conn.close()
 
 # ==============================================================================
-# 📊 MOTOR DE REPORTES: EXCEL Y PDF (VERSIÓN CON DATOS REALES)
+# 📊 MOTOR DE REPORTES: EXCEL Y PDF (NIVEL ENTERPRISE)
 # ==============================================================================
 
 @app.get("/empleados/{empleado_id}/reporte/excel/{anio}/{mes}")
@@ -3035,74 +3035,122 @@ async def descargar_reporte_excel(empleado_id: int, anio: int, mes: int, usuario
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     
     try:
-        # 1. Datos del empleado
-        cur.execute(f"SELECT nombres, apellidos, ci, cargo FROM {schema}.empleados WHERE id = %s", (empleado_id,))
+        # 1. DATOS COMPLETOS DEL EMPLEADO Y SU ENTORNO
+        cur.execute(f"""
+            SELECT e.nombres, e.apellidos, e.ci, e.cargo, 
+                   s.nombre as sucursal, sec.nombre as seccion, 
+                   t.nombre as turno_nombre, t.hora_ingreso, t.hora_salida
+            FROM {schema}.empleados e
+            LEFT JOIN {schema}.sucursales s ON e.sucursal_id = s.id
+            LEFT JOIN {schema}.secciones sec ON e.seccion_id = sec.id
+            LEFT JOIN {schema}.turnos t ON e.turno_id = t.id
+            WHERE e.id = %s
+        """, (empleado_id,))
         emp = cur.fetchone()
 
-        # 2. Extraer datos reales de asistencia del mes (NOMBRES AUDITADOS)
+        # 2. ASISTENCIA DIARIA
         cur.execute(f"""
-            SELECT fecha, hora_entrada, hora_salida, horas_trabajadas, estado, minutos_retraso_entrada, observaciones
+            SELECT fecha, hora_entrada, hora_salida, horas_trabajadas, horas_extras, 
+                   minutos_retraso_entrada, deuda_generada_bs, estado, observaciones, modificado_manualmente
             FROM {schema}.asistencia_diaria
             WHERE empleado_id = %s AND EXTRACT(YEAR FROM fecha) = %s AND EXTRACT(MONTH FROM fecha) = %s
             ORDER BY fecha ASC
         """, (empleado_id, anio, mes))
         asistencias = cur.fetchall()
 
+        # 3. DEUDAS PENDIENTES (PERMISOS A REPONER)
+        cur.execute(f"""
+            SELECT SUM(horas_totales) as deuda_horas
+            FROM {schema}.ausencias
+            WHERE empleado_id = %s AND tipo = 'permiso' AND requiere_reposicion = TRUE AND estado = 'aprobado' AND eliminado = FALSE
+            AND ((EXTRACT(YEAR FROM fecha_inicio) = %s AND EXTRACT(MONTH FROM fecha_inicio) = %s) 
+                 OR (EXTRACT(YEAR FROM fecha_fin) = %s AND EXTRACT(MONTH FROM fecha_fin) = %s))
+        """, (empleado_id, anio, mes, anio, mes))
+        res_deuda = cur.fetchone()
+        horas_a_reponer = float(res_deuda['deuda_horas'] or 0)
+
+        # 4. CÁLCULO DE KPIs
+        total_dias = 0
+        total_horas = 0.0
+        total_extras = 0.0
+        total_retraso = 0
+        total_multa = 0.0
+
+        for a in asistencias:
+            if float(a['horas_trabajadas'] or 0) > 0: total_dias += 1
+            total_horas += float(a['horas_trabajadas'] or 0)
+            total_extras += float(a['horas_extras'] or 0)
+            total_retraso += int(a['minutos_retraso_entrada'] or 0)
+            total_multa += float(a['deuda_generada_bs'] or 0)
+
+        # ----------------- ARMADO DEL EXCEL -----------------
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = f"{mes}-{anio}"
+        ws.title = f"Reporte {mes}-{anio}"
 
-        # Estilos corporativos
         header_font = Font(bold=True, color="FFFFFF")
         header_fill = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid")
-        center_align = Alignment(horizontal="center", vertical="center")
+        kpi_font = Font(bold=True, color="1E3A8A")
 
-        ws.merge_cells('A1:G1')
-        ws['A1'] = f"REPORTE DE ASISTENCIA - {emp['nombres']} {emp['apellidos']}"
-        ws['A1'].font = Font(bold=True, size=14)
-        ws['A1'].alignment = center_align
+        # ENCABEZADO
+        ws.merge_cells('A1:I1')
+        ws['A1'] = f"REPORTE MENSUAL DE ASISTENCIA Y RENDIMIENTO - {mes:02d}/{anio}"
+        ws['A1'].font = Font(bold=True, size=14, color="1E3A8A")
+        ws['A1'].alignment = Alignment(horizontal="center")
 
-        ws['A3'] = "C.I.:"; ws['B3'] = emp['ci']
-        ws['A4'] = "Periodo:"; ws['B4'] = f"{mes}/{anio}"
-        ws['A5'] = "Cargo:";   ws['B5'] = emp['cargo']
+        # BLOQUE 1: Info Empleado
+        ws['A3'] = "Colaborador:"; ws['B3'] = f"{emp['nombres']} {emp['apellidos']}"
+        ws['A4'] = "Doc (C.I.):";  ws['B4'] = emp['ci']
+        ws['A5'] = "Cargo:";       ws['B5'] = emp.get('cargo', 'N/A')
+        
+        ws['D3'] = "Sucursal:";    ws['E3'] = emp.get('sucursal', 'N/A')
+        ws['D4'] = "Sección:";     ws['E4'] = emp.get('seccion', 'N/A')
+        ws['D5'] = "Turno Base:";  
+        ws['E5'] = f"{emp.get('turno_nombre', 'N/A')} ({str(emp['hora_ingreso'])[:5] if emp.get('hora_ingreso') else ''} - {str(emp['hora_salida'])[:5] if emp.get('hora_salida') else ''})"
 
-        # Cabeceras
-        headers = ["Fecha", "Entrada", "Salida", "Hrs Netas", "Estado", "Atraso (min)", "Observaciones"]
+        # BLOQUE 2: KPIs Resumen
+        ws['H3'] = "Días Trabajados:"; ws['I3'] = total_dias; ws['I3'].font = kpi_font
+        ws['H4'] = "Total Horas:";     ws['I4'] = round(total_horas, 2); ws['I4'].font = kpi_font
+        ws['H5'] = "Multas (Bs.):";    ws['I5'] = round(total_multa, 2); ws['I5'].font = Font(bold=True, color="FF0000")
+        ws['H6'] = "Deuda Hrs:";       ws['I6'] = horas_a_reponer; ws['I6'].font = Font(bold=True, color="FF8C00")
+
+        # CABECERAS DE TABLA
+        headers = ["Fecha", "Entrada", "Salida", "Hrs Trab.", "Hrs Ext.", "Retraso (m)", "Multa (Bs)", "Estado", "Observaciones"]
         for col_num, header in enumerate(headers, 1):
-            cell = ws.cell(row=7, column=col_num, value=header)
+            cell = ws.cell(row=8, column=col_num, value=header)
             cell.font = header_font
             cell.fill = header_fill
-            cell.alignment = center_align
+            cell.alignment = Alignment(horizontal="center")
 
-        # ⚡ POBLAR CON DATOS REALES (LLAVES AUDITADAS)
-        fila_actual = 8
+        # DATA DE LA TABLA
+        fila_actual = 9
         for a in asistencias:
             ent = a['hora_entrada'].strftime('%H:%M') if a['hora_entrada'] else '--:--'
             sal = a['hora_salida'].strftime('%H:%M') if a['hora_salida'] else '--:--'
+            obs = a['observaciones'] or ''
+            if a['modificado_manualmente']: obs = f"[*] {obs}" # Marca visual
             
-            ws.cell(row=fila_actual, column=1, value=str(a['fecha'])).alignment = center_align
-            ws.cell(row=fila_actual, column=2, value=ent).alignment = center_align
-            ws.cell(row=fila_actual, column=3, value=sal).alignment = center_align
-            ws.cell(row=fila_actual, column=4, value=float(a['horas_trabajadas'] or 0)).alignment = center_align
-            ws.cell(row=fila_actual, column=5, value=a['estado']).alignment = center_align
-            ws.cell(row=fila_actual, column=6, value=a['minutos_retraso_entrada'] or 0).alignment = center_align
-            ws.cell(row=fila_actual, column=7, value=a['observaciones'] or '')
-            
+            ws.cell(row=fila_actual, column=1, value=str(a['fecha'])).alignment = Alignment(horizontal="center")
+            ws.cell(row=fila_actual, column=2, value=ent).alignment = Alignment(horizontal="center")
+            ws.cell(row=fila_actual, column=3, value=sal).alignment = Alignment(horizontal="center")
+            ws.cell(row=fila_actual, column=4, value=float(a['horas_trabajadas'] or 0)).alignment = Alignment(horizontal="center")
+            ws.cell(row=fila_actual, column=5, value=float(a['horas_extras'] or 0)).alignment = Alignment(horizontal="center")
+            ws.cell(row=fila_actual, column=6, value=int(a['minutos_retraso_entrada'] or 0)).alignment = Alignment(horizontal="center")
+            ws.cell(row=fila_actual, column=7, value=float(a['deuda_generada_bs'] or 0)).alignment = Alignment(horizontal="center")
+            ws.cell(row=fila_actual, column=8, value=a['estado']).alignment = Alignment(horizontal="center")
+            ws.cell(row=fila_actual, column=9, value=obs)
             fila_actual += 1
 
-        for col in ws.columns:
-            ws.column_dimensions[col[0].column_letter].width = 15
-        ws.column_dimensions['G'].width = 35 
+        # Formato de celdas
+        anchos = [12, 10, 10, 10, 10, 12, 12, 15, 45]
+        for i, ancho in enumerate(anchos, 1):
+            ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = ancho
 
         stream = io.BytesIO()
         wb.save(stream)
         stream.seek(0)
         
-        return StreamingResponse(
-            stream, 
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f"attachment; filename=Excel_Asistencia.xlsx"}
-        )
+        return StreamingResponse(stream, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": f"attachment; filename=Reporte_Completo_{mes}_{anio}.xlsx"})
     finally:
         cur.close(); conn.close()
 
@@ -3114,59 +3162,147 @@ async def descargar_reporte_pdf(empleado_id: int, anio: int, mes: int, usuario =
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     
     try:
-        cur.execute(f"SELECT nombres, apellidos, ci FROM {schema}.empleados WHERE id = %s", (empleado_id,))
+        # 1. EXTRACCIÓN DE DATOS (Misma lógica pesada que el Excel)
+        cur.execute(f"""
+            SELECT e.nombres, e.apellidos, e.ci, e.cargo, s.nombre as sucursal, sec.nombre as seccion, 
+                   t.nombre as turno, t.hora_ingreso, t.hora_salida
+            FROM {schema}.empleados e
+            LEFT JOIN {schema}.sucursales s ON e.sucursal_id = s.id
+            LEFT JOIN {schema}.secciones sec ON e.seccion_id = sec.id
+            LEFT JOIN {schema}.turnos t ON e.turno_id = t.id
+            WHERE e.id = %s
+        """, (empleado_id,))
         emp = cur.fetchone()
 
-        # NOMBRES AUDITADOS
         cur.execute(f"""
-            SELECT fecha, hora_entrada, hora_salida, estado, observaciones
+            SELECT fecha, hora_entrada, hora_salida, horas_trabajadas, horas_extras, 
+                   minutos_retraso_entrada, deuda_generada_bs, estado, observaciones, modificado_manualmente
             FROM {schema}.asistencia_diaria
             WHERE empleado_id = %s AND EXTRACT(YEAR FROM fecha) = %s AND EXTRACT(MONTH FROM fecha) = %s
             ORDER BY fecha ASC
         """, (empleado_id, anio, mes))
         asistencias = cur.fetchall()
 
+        cur.execute(f"""
+            SELECT SUM(horas_totales) as deuda_horas FROM {schema}.ausencias
+            WHERE empleado_id = %s AND tipo = 'permiso' AND requiere_reposicion = TRUE AND estado = 'aprobado' AND eliminado = FALSE
+            AND ((EXTRACT(YEAR FROM fecha_inicio) = %s AND EXTRACT(MONTH FROM fecha_inicio) = %s) OR (EXTRACT(YEAR FROM fecha_fin) = %s AND EXTRACT(MONTH FROM fecha_fin) = %s))
+        """, (empleado_id, anio, mes, anio, mes))
+        horas_a_reponer = float(cur.fetchone()['deuda_horas'] or 0)
+
+        # KPIs
+        t_dias = 0; t_hrs = 0.0; t_ext = 0.0; t_ret = 0; t_mul = 0.0
+        for a in asistencias:
+            if float(a['horas_trabajadas'] or 0) > 0: t_dias += 1
+            t_hrs += float(a['horas_trabajadas'] or 0)
+            t_ext += float(a['horas_extras'] or 0)
+            t_ret += int(a['minutos_retraso_entrada'] or 0)
+            t_mul += float(a['deuda_generada_bs'] or 0)
+
+        # ----------------- ARMADO DEL PDF (LANDSCAPE / HORIZONTAL) -----------------
         stream = io.BytesIO()
-        doc = SimpleDocTemplate(stream, pagesize=letter)
+        doc = SimpleDocTemplate(stream, pagesize=landscape(letter), leftMargin=30, rightMargin=30, topMargin=30, bottomMargin=30)
         elementos = []
         estilos = getSampleStyleSheet()
 
-        elementos.append(Paragraph(f"<b>Reporte de Asistencia:</b> {emp['nombres']} {emp['apellidos']}", estilos['Title']))
-        elementos.append(Paragraph(f"<b>Periodo:</b> {mes}/{anio} | <b>C.I.:</b> {emp['ci']}", estilos['Normal']))
-        elementos.append(Spacer(1, 20))
+        # ESTILOS PERSONALIZADOS
+        estilo_titulo = estilos['Title']
+        estilo_titulo.textColor = colors.HexColor("#1E3A8A")
+        estilo_normal = estilos['Normal']
+        estilo_normal.fontSize = 9
 
-        datos_tabla = [["Fecha", "Entrada", "Salida", "Estado", "Observaciones"]] 
+        # TÍTULO
+        elementos.append(Paragraph(f"<b>REPORTE MENSUAL DE ASISTENCIA Y RENDIMIENTO</b>", estilo_titulo))
+        elementos.append(Spacer(1, 10))
+
+        # BLOQUE DE INFORMACIÓN (Tabla de 2 columnas)
+        turno_txt = f"{emp.get('turno', 'N/A')} ({str(emp['hora_ingreso'])[:5] if emp.get('hora_ingreso') else ''} - {str(emp['hora_salida'])[:5] if emp.get('hora_salida') else ''})"
         
-        # LLAVES AUDITADAS
+        info_data = [
+            [Paragraph(f"<b>Colaborador:</b> {emp['nombres']} {emp['apellidos']}", estilo_normal), 
+             Paragraph(f"<b>Días Trabajados:</b> {t_dias}", estilo_normal)],
+            [Paragraph(f"<b>Documento:</b> {emp['ci']}", estilo_normal), 
+             Paragraph(f"<b>Total Horas Netas:</b> {round(t_hrs, 2)} hrs", estilo_normal)],
+            [Paragraph(f"<b>Cargo:</b> {emp.get('cargo', 'N/A')} | <b>Sucursal:</b> {emp.get('sucursal', 'N/A')}", estilo_normal), 
+             Paragraph(f"<b>Horas Extras:</b> <font color='green'>+{round(t_ext, 2)}</font>", estilo_normal)],
+            [Paragraph(f"<b>Turno Base:</b> {turno_txt}", estilo_normal), 
+             Paragraph(f"<b>Horas a Reponer:</b> <font color='orange'>{horas_a_reponer}</font>", estilo_normal)],
+            [Paragraph(f"<b>Periodo:</b> {mes:02d}/{anio}", estilo_normal), 
+             Paragraph(f"<b>Total Multas:</b> <font color='red'><b>Bs. {round(t_mul, 2)}</b></font> ({t_ret} min retraso)", estilo_normal)]
+        ]
+        
+        t_info = Table(info_data, colWidths=[400, 300])
+        t_info.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#F8FAFC")),
+            ('BOX', (0, 0), (-1, -1), 1, colors.HexColor("#E2E8F0")),
+            ('PADDING', (0, 0), (-1, -1), 6),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ]))
+        elementos.append(t_info)
+        elementos.append(Spacer(1, 15))
+
+        # TABLA PRINCIPAL DE DATOS
+        datos_tabla = [["Fecha", "Entrada", "Salida", "Hrs Netas", "Hrs Ext.", "Retraso", "Multa", "Estado", "Observaciones"]]
+        
         for a in asistencias:
             ent = a['hora_entrada'].strftime('%H:%M') if a['hora_entrada'] else '--:--'
             sal = a['hora_salida'].strftime('%H:%M') if a['hora_salida'] else '--:--'
-            obs = a['observaciones'] if a['observaciones'] else ''
-            if len(obs) > 40: obs = obs[:37] + "..." 
+            obs = a['observaciones'] or ''
             
-            datos_tabla.append([str(a['fecha']), ent, sal, a['estado'], obs])
+            # Cortar obs largas
+            if len(obs) > 45: obs = obs[:42] + "..."
+            if a['modificado_manualmente']: obs = f"[*] {obs}" # [*] Indica edición manual
+            
+            estado_str = a['estado']
+            if estado_str == 'Falta': estado_str = f"<font color='red'>{estado_str}</font>"
+            elif estado_str == 'Tarde': estado_str = f"<font color='orange'>{estado_str}</font>"
+            
+            multa_str = f"Bs {a['deuda_generada_bs']}" if float(a['deuda_generada_bs'] or 0) > 0 else "-"
 
-        tabla = Table(datos_tabla, colWidths=[80, 60, 60, 80, 200])
-        estilo_tabla = TableStyle([
+            datos_tabla.append([
+                str(a['fecha']), ent, sal, 
+                f"{a['horas_trabajadas']}", 
+                f"{a['horas_extras']}", 
+                f"{a['minutos_retraso_entrada']}m", 
+                multa_str,
+                Paragraph(estado_str, estilo_normal), 
+                Paragraph(obs, estilo_normal)
+            ])
+
+        # Anchos de columna en Landscape (Total ~ 730pts)
+        t_datos = Table(datos_tabla, colWidths=[65, 50, 50, 55, 50, 50, 50, 65, 295])
+        t_datos.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1E3A8A")),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('ALIGN', (0, 0), (7, -1), 'CENTER'), # Centrar todo excepto observaciones
+            ('ALIGN', (8, 0), (8, -1), 'LEFT'),   # Observaciones a la izquierda
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor("#F9FAFB")),
-            ('GRID', (0, 0), (-1, -1), 1, colors.lightgrey),
-        ])
-        tabla.setStyle(estilo_tabla)
-        elementos.append(tabla)
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#F9FAFB")]),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.lightgrey),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ]))
+        
+        elementos.append(t_datos)
+        
+        # LEYENDA FINAL
+        elementos.append(Spacer(1, 10))
+        elementos.append(Paragraph("<font size=7 color=gray>[*] El símbolo asterisco en observaciones indica que los marcajes del día fueron editados o completados manualmente por Recursos Humanos o el Administrador.</font>", estilos['Normal']))
 
+        # FIRMAS
+        elementos.append(Spacer(1, 40))
+        firmas_data = [[Paragraph("<center>_________________________<br/>Firma del Empleado</center>", estilo_normal),
+                        Paragraph("<center>_________________________<br/>Autorizado por (RRHH)</center>", estilo_normal)]]
+        t_firmas = Table(firmas_data, colWidths=[365, 365])
+        elementos.append(t_firmas)
+
+        # Construir el PDF
         doc.build(elementos)
         stream.seek(0)
         
-        return StreamingResponse(
-            stream, 
-            media_type="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename=PDF_Asistencia.pdf"}
-        )
+        return StreamingResponse(stream, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=Reporte_Completo_{mes}_{anio}.pdf"})
     finally:
         cur.close(); conn.close()
 
