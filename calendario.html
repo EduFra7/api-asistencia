@@ -172,12 +172,12 @@
                         <div class="flex flex-col sm:flex-row items-end sm:items-center gap-4 w-full xl:w-auto mt-2 xl:mt-0">
                             <!-- EXPORTAR -->
                             <div class="flex flex-col items-end border-r border-gray-200 pr-4 hidden sm:flex">
-                                <span class="text- font-bold text-gray-400 uppercase tracking-wider mb-1">Generar Reporte:</span>
+                                <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Generar Reporte:</span>
                                 <div class="flex space-x-2">
-                                    <button class="bg-green-50 text-green-700 border border-green-200 px-3 py-1.5 rounded hover:bg-green-100 font-medium text-xs transition-colors flex items-center shadow-sm">
+                                    <button onclick="descargarExcel()" class="bg-green-50 text-green-700 border border-green-200 px-3 py-1.5 rounded hover:bg-green-100 font-medium text-xs transition-colors flex items-center shadow-sm">
                                         <i class="fas fa-file-excel mr-1.5"></i>Excel
                                     </button>
-                                    <button class="bg-red-50 text-red-700 border border-red-200 px-3 py-1.5 rounded hover:bg-red-100 font-medium text-xs transition-colors flex items-center shadow-sm">
+                                    <button onclick="descargarPDF()" class="bg-red-50 text-red-700 border border-red-200 px-3 py-1.5 rounded hover:bg-red-100 font-medium text-xs transition-colors flex items-center shadow-sm">
                                         <i class="fas fa-file-pdf mr-1.5"></i>PDF
                                     </button>
                                 </div>
@@ -938,6 +938,40 @@
             }
         }
 
+        // ==========================================
+        // 📊 MOTOR DE EXPORTACIÓN (PDF Y EXCEL)
+        // ==========================================
+
+        function descargarExcel() {
+            if (!empleadoIdActual) {
+                mostrarError("Por favor, selecciona un empleado primero.");
+                return;
+            }
+            
+            // Sumamos 1 al mes porque en JavaScript los meses van del 0 al 11
+            const anio = fechaVisualizada.getFullYear();
+            const mes = fechaVisualizada.getMonth() + 1;
+            
+            // Abrimos el endpoint en una nueva pestaña. El navegador detectará que es un archivo y lo descargará.
+            const url = `${API_URL}/empleados/${empleadoIdActual}/reporte/excel/${anio}/${mes}?token=${token}`;
+            window.open(url, '_blank');
+        }
+
+        function descargarPDF() {
+            if (!empleadoIdActual) {
+                mostrarError("Por favor, selecciona un empleado primero.");
+                return;
+            }
+
+            const anio = fechaVisualizada.getFullYear();
+            const mes = fechaVisualizada.getMonth() + 1;
+            
+            const url = `${API_URL}/empleados/${empleadoIdActual}/reporte/pdf/${anio}/${mes}?token=${token}`;
+            window.open(url, '_blank');
+        }
+
+
+            
         arrancarPantalla();
     </script>
 </body>

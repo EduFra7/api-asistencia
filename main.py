@@ -39,6 +39,7 @@ from reportlab.lib.pagesizes import letter, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.pagesizes import A5, portrait
+from reportlab.pdfgen import canvas
 
 # ==============================================================================
 # 2. CONFIGURACIÓN INICIAL DE LA APLICACIÓN
@@ -3021,6 +3022,125 @@ async def eliminar_asistencia_dia(empleado_id: int, fecha: str, request: Request
     finally:
         cur.close()
         conn.close()
+
+# ==============================================================================
+# 📊 MOTOR DE REPORTES: EXCEL Y PDF
+# ==============================================================================
+
+@app.get("/empleados/{empleado_id}/reporte/excel/{anio}/{mes}")
+async def descargar_reporte_excel(empleado_id: int, anio: int, mes: int, usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    conn = conectar_bd(schema)
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    
+    try:
+        # 1. Obtener datos básicos del empleado
+        cur.execute(f"SELECT nombres, apellidos, documento, cargo FROM {schema}.empleados WHERE id = %s", (empleado_id,))
+        emp = cur.fetchone()
+        if not emp:
+            raise HTTPException(status_code=404, detail="Empleado no encontrado")
+
+        # Aquí deberías obtener la lista de asistencias del mes usando tu lógica existente
+        # Para el ejemplo, simularemos la obtención de datos
+        # cur.execute(...) -> asistencias = cur.fetchall()
+        
+        # 2. Crear el libro de Excel en memoria
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = f"Reporte {mes}-{anio}"
+
+        # 3. Estilos corporativos
+        header_font = Font(bold=True, color="FFFFFF")
+        header_fill = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid") # Azul oscuro Tailwind
+        center_align = Alignment(horizontal="center", vertical="center")
+
+        # 4. Escribir Encabezado de Identidad
+        ws.merge_cells('A1:G1')
+        ws['A1'] = f"REPORTE MENSUAL DE ASISTENCIA - {emp['nombres']} {emp['apellidos']}"
+        ws['A1'].font = Font(bold=True, size=14)
+        ws['A1'].alignment = center_align
+
+        ws['A3'] = "Documento:"; ws['B3'] = emp['documento']
+        ws['A4'] = "Cargo:";     ws['B4'] = emp['cargo']
+        ws['A5'] = "Periodo:";   ws['B5'] = f"{mes}/{anio}"
+
+        # 5. Cabeceras de la Tabla de Días
+        headers = ["Fecha", "Entrada", "Salida", "Horas Netas", "Estado", "Multa ($)", "Observaciones"]
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=7, column=col_num, value=header)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = center_align
+
+        # 6. Llenar los datos (AQUÍ SE ITERA SOBRE TUS DATOS REALES DE LA BASE DE DATOS)
+        # Ejemplo simulado de una fila:
+        ws.append(["2023-10-01", "08:25", "18:30", "8.0", "Puntual", "0", ""])
+        
+        # Ajustar ancho de columnas
+        for col in ws.columns:
+            ws.column_dimensions[col[0].column_letter].width = 15
+
+        # 7. Guardar en memoria RAM (BytesIO) y enviar
+        stream = io.BytesIO()
+        wb.save(stream)
+        stream.seek(0)
+        
+        nombre_archivo = f"Asistencia_{emp['nombres'].replace(' ', '_')}_{mes}_{anio}.xlsx"
+        
+        return StreamingResponse(
+            stream, 
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={nombre_archivo}"}
+        )
+        
+    finally:
+        cur.close(); conn.close()
+
+
+@app.get("/empleados/{empleado_id}/reporte/pdf/{anio}/{mes}")
+async def descargar_reporte_pdf(empleado_id: int, anio: int, mes: int, usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    conn = conectar_bd(schema)
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    
+    try:
+        cur.execute(f"SELECT nombres, apellidos FROM {schema}.empleados WHERE id = %s", (empleado_id,))
+        emp = cur.fetchone()
+
+        # Crear el PDF en memoria
+        stream = io.BytesIO()
+        pdf = canvas.Canvas(stream, pagesize=letter)
+        pdf.setTitle(f"Reporte_{mes}_{anio}")
+
+        # Dibujar el encabezado
+        pdf.setFont("Helvetica-Bold", 16)
+        pdf.drawString(50, 750, "Reporte Mensual de Asistencia Corporativa")
+        
+        pdf.setFont("Helvetica", 12)
+        pdf.drawString(50, 720, f"Empleado: {emp['nombres']} {emp['apellidos']}")
+        pdf.drawString(50, 700, f"Periodo: {mes}/{anio}")
+
+        # Dibujar línea separadora
+        pdf.line(50, 690, 550, 690)
+
+        # Aquí iría el bucle para dibujar los días (usando pdf.drawString ajustando coordenadas 'y')
+        pdf.setFont("Helvetica-Oblique", 10)
+        pdf.drawString(50, 670, "Documento generado automáticamente por C.A Lector.")
+
+        # Finalizar el PDF
+        pdf.showPage()
+        pdf.save()
+        stream.seek(0)
+        
+        nombre_archivo = f"Asistencia_{emp['nombres']}_{mes}_{anio}.pdf"
+        
+        return StreamingResponse(
+            stream, 
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={nombre_archivo}"}
+        )
+    finally:
+        cur.close(); conn.close()
 
 # ==============================================================================
 # 1x. MÓDULO: SIMULADOR DE HARDWARE (DEV / QA)
