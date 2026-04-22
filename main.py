@@ -3036,7 +3036,7 @@ async def descargar_reporte_excel(empleado_id: int, anio: int, mes: int, usuario
     
     try:
         # 1. Datos del empleado
-        cur.execute(f"SELECT nombres, apellidos, documento, cargo FROM {schema}.empleados WHERE id = %s", (empleado_id,))
+        cur.execute(f"SELECT nombres, apellidos, ci, cargo FROM {schema}.empleados WHERE id = %s", (empleado_id,))
         emp = cur.fetchone()
 
         # 2. Extraer datos reales de asistencia del mes
@@ -3062,6 +3062,7 @@ async def descargar_reporte_excel(empleado_id: int, anio: int, mes: int, usuario
         ws['A1'].font = Font(bold=True, size=14)
         ws['A1'].alignment = center_align
 
+        ws['A3'] = "C.I.:"; ws['B3'] = emp['ci'] # no se si debo mantenerlo o borrarlo
         ws['A3'] = "Periodo:"; ws['B3'] = f"{mes}/{anio}"
         ws['A4'] = "Cargo:";   ws['B4'] = emp['cargo']
 
@@ -3114,7 +3115,7 @@ async def descargar_reporte_pdf(empleado_id: int, anio: int, mes: int, usuario =
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     
     try:
-        cur.execute(f"SELECT nombres, apellidos, documento FROM {schema}.empleados WHERE id = %s", (empleado_id,))
+        cur.execute(f"SELECT nombres, apellidos, ci FROM {schema}.empleados WHERE id = %s", (empleado_id,))
         emp = cur.fetchone()
 
         cur.execute(f"""
@@ -3132,7 +3133,7 @@ async def descargar_reporte_pdf(empleado_id: int, anio: int, mes: int, usuario =
 
         # Título
         elementos.append(Paragraph(f"<b>Reporte de Asistencia:</b> {emp['nombres']} {emp['apellidos']}", estilos['Title']))
-        elementos.append(Paragraph(f"<b>Periodo:</b> {mes}/{anio} | <b>Doc:</b> {emp['documento']}", estilos['Normal']))
+        elementos.append(Paragraph(f"<b>Periodo:</b> {mes}/{anio} | <b>Doc:</b> {emp['ci']}", estilos['Normal']))
         elementos.append(Spacer(1, 20))
 
         # ⚡ CREAR LA TABLA DE DATOS
