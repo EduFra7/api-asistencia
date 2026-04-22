@@ -3039,9 +3039,9 @@ async def descargar_reporte_excel(empleado_id: int, anio: int, mes: int, usuario
         cur.execute(f"SELECT nombres, apellidos, ci, cargo FROM {schema}.empleados WHERE id = %s", (empleado_id,))
         emp = cur.fetchone()
 
-        # 2. Extraer datos reales de asistencia del mes
+        # 2. Extraer datos reales de asistencia del mes (NOMBRES AUDITADOS)
         cur.execute(f"""
-            SELECT fecha, entrada_real, salida_real, horas_trabajadas_netas, estado, minutos_atraso, observaciones
+            SELECT fecha, hora_entrada, hora_salida, horas_trabajadas, estado, minutos_retraso_entrada, observaciones
             FROM {schema}.asistencia_diaria
             WHERE empleado_id = %s AND EXTRACT(YEAR FROM fecha) = %s AND EXTRACT(MONTH FROM fecha) = %s
             ORDER BY fecha ASC
@@ -3062,38 +3062,37 @@ async def descargar_reporte_excel(empleado_id: int, anio: int, mes: int, usuario
         ws['A1'].font = Font(bold=True, size=14)
         ws['A1'].alignment = center_align
 
-        ws['A3'] = "C.I.:"; ws['B3'] = emp['ci'] # no se si debo mantenerlo o borrarlo
-        ws['A3'] = "Periodo:"; ws['B3'] = f"{mes}/{anio}"
-        ws['A4'] = "Cargo:";   ws['B4'] = emp['cargo']
+        ws['A3'] = "C.I.:"; ws['B3'] = emp['ci']
+        ws['A4'] = "Periodo:"; ws['B4'] = f"{mes}/{anio}"
+        ws['A5'] = "Cargo:";   ws['B5'] = emp['cargo']
 
         # Cabeceras
         headers = ["Fecha", "Entrada", "Salida", "Hrs Netas", "Estado", "Atraso (min)", "Observaciones"]
         for col_num, header in enumerate(headers, 1):
-            cell = ws.cell(row=6, column=col_num, value=header)
+            cell = ws.cell(row=7, column=col_num, value=header)
             cell.font = header_font
             cell.fill = header_fill
             cell.alignment = center_align
 
-        # ⚡ POBLAR CON DATOS REALES
-        fila_actual = 7
+        # ⚡ POBLAR CON DATOS REALES (LLAVES AUDITADAS)
+        fila_actual = 8
         for a in asistencias:
-            # Formateamos las horas para evitar errores si están vacías (None)
-            ent = a['entrada_real'].strftime('%H:%M') if a['entrada_real'] else '--:--'
-            sal = a['salida_real'].strftime('%H:%M') if a['salida_real'] else '--:--'
+            ent = a['hora_entrada'].strftime('%H:%M') if a['hora_entrada'] else '--:--'
+            sal = a['hora_salida'].strftime('%H:%M') if a['hora_salida'] else '--:--'
             
             ws.cell(row=fila_actual, column=1, value=str(a['fecha'])).alignment = center_align
             ws.cell(row=fila_actual, column=2, value=ent).alignment = center_align
             ws.cell(row=fila_actual, column=3, value=sal).alignment = center_align
-            ws.cell(row=fila_actual, column=4, value=float(a['horas_trabajadas_netas'] or 0)).alignment = center_align
+            ws.cell(row=fila_actual, column=4, value=float(a['horas_trabajadas'] or 0)).alignment = center_align
             ws.cell(row=fila_actual, column=5, value=a['estado']).alignment = center_align
-            ws.cell(row=fila_actual, column=6, value=a['minutos_atraso'] or 0).alignment = center_align
+            ws.cell(row=fila_actual, column=6, value=a['minutos_retraso_entrada'] or 0).alignment = center_align
             ws.cell(row=fila_actual, column=7, value=a['observaciones'] or '')
             
             fila_actual += 1
 
         for col in ws.columns:
             ws.column_dimensions[col[0].column_letter].width = 15
-        ws.column_dimensions['G'].width = 35 # Columna de obs más ancha
+        ws.column_dimensions['G'].width = 35 
 
         stream = io.BytesIO()
         wb.save(stream)
@@ -3118,8 +3117,9 @@ async def descargar_reporte_pdf(empleado_id: int, anio: int, mes: int, usuario =
         cur.execute(f"SELECT nombres, apellidos, ci FROM {schema}.empleados WHERE id = %s", (empleado_id,))
         emp = cur.fetchone()
 
+        # NOMBRES AUDITADOS
         cur.execute(f"""
-            SELECT fecha, entrada_real, salida_real, estado, observaciones
+            SELECT fecha, hora_entrada, hora_salida, estado, observaciones
             FROM {schema}.asistencia_diaria
             WHERE empleado_id = %s AND EXTRACT(YEAR FROM fecha) = %s AND EXTRACT(MONTH FROM fecha) = %s
             ORDER BY fecha ASC
@@ -3131,24 +3131,21 @@ async def descargar_reporte_pdf(empleado_id: int, anio: int, mes: int, usuario =
         elementos = []
         estilos = getSampleStyleSheet()
 
-        # Título
         elementos.append(Paragraph(f"<b>Reporte de Asistencia:</b> {emp['nombres']} {emp['apellidos']}", estilos['Title']))
-        elementos.append(Paragraph(f"<b>Periodo:</b> {mes}/{anio} | <b>Doc:</b> {emp['ci']}", estilos['Normal']))
+        elementos.append(Paragraph(f"<b>Periodo:</b> {mes}/{anio} | <b>C.I.:</b> {emp['ci']}", estilos['Normal']))
         elementos.append(Spacer(1, 20))
 
-        # ⚡ CREAR LA TABLA DE DATOS
-        datos_tabla = [["Fecha", "Entrada", "Salida", "Estado", "Observaciones"]] # Fila 1 (Cabecera)
+        datos_tabla = [["Fecha", "Entrada", "Salida", "Estado", "Observaciones"]] 
         
+        # LLAVES AUDITADAS
         for a in asistencias:
-            ent = a['entrada_real'].strftime('%H:%M') if a['entrada_real'] else '--:--'
-            sal = a['salida_real'].strftime('%H:%M') if a['salida_real'] else '--:--'
+            ent = a['hora_entrada'].strftime('%H:%M') if a['hora_entrada'] else '--:--'
+            sal = a['hora_salida'].strftime('%H:%M') if a['hora_salida'] else '--:--'
             obs = a['observaciones'] if a['observaciones'] else ''
-            # Cortar obs muy largas para que no rompan el PDF
             if len(obs) > 40: obs = obs[:37] + "..." 
             
             datos_tabla.append([str(a['fecha']), ent, sal, a['estado'], obs])
 
-        # Dar formato corporativo a la tabla
         tabla = Table(datos_tabla, colWidths=[80, 60, 60, 80, 200])
         estilo_tabla = TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1E3A8A")),
@@ -3162,7 +3159,6 @@ async def descargar_reporte_pdf(empleado_id: int, anio: int, mes: int, usuario =
         tabla.setStyle(estilo_tabla)
         elementos.append(tabla)
 
-        # Construir el PDF
         doc.build(elementos)
         stream.seek(0)
         
