@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reporte del Día - BITECH</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        .animate-emerger { animation: fadeInRight 0.3s ease-out forwards; }
+        @keyframes fadeInRight { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans flex h-screen overflow-hidden text-gray-800 relative">
+
+    <div id="overlay-menu" class="fixed inset-0 bg-slate-900/60 z-30 hidden backdrop-blur-sm transition-opacity" onclick="toggleMenu()"></div>
+    <aside id="menu-lateral" class="w-64 bg-slate-900 text-white flex flex-col h-full shadow-2xl z-40 absolute xl:relative transform -translate-x-full xl:translate-x-0 transition-transform duration-300 shrink-0"></aside>
+
+    <main class="flex-1 flex flex-col h-screen overflow-hidden w-full relative">
+        <div class="xl:hidden bg-slate-900 text-white p-4 flex items-center justify-between shadow-md shrink-0 z-20">
+            <button onclick="toggleMenu()" class="text-white hover:text-blue-400 focus:outline-none"><i class="fas fa-bars text-xl"></i></button>
+            <h1 class="font-bold tracking-wide"><i class="fas fa-fingerprint text-blue-500 mr-2"></i>BITECH</h1>
+        </div>
+
+        <div class="flex-1 flex flex-col overflow-y-auto p-4 md:p-6 w-full max-w-7xl mx-auto space-y-4 md:space-y-6">
+            
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
+                    <div>
+                        <h2 class="text-xl font-bold text-slate-800"><i class="fas fa-camera text-blue-600 mr-2"></i>Monitor de Asistencia</h2>
+                        <p class="text-xs text-gray-500 mt-1">Fotografía táctica de la asistencia del personal.</p>
+                    </div>
+                    <div class="w-full md:w-auto">
+                        <input type="date" id="filtro_fecha" onchange="cargarReporte()" class="w-full md:w-auto bg-gray-50 border border-gray-300 rounded-lg px-4 py-2 text-sm font-bold text-blue-700 outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div class="relative">
+                        <i class="fas fa-search absolute left-3 top-2.5 text-gray-400 text-sm"></i>
+                        <input type="text" id="filtro_busqueda" oninput="debounceRecarga()" placeholder="Buscar empleado..." class="w-full pl-9 pr-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <select id="filtro_sucursal" onchange="cargarReporte()" class="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"><option value="">Todas las Sucursales</option></select>
+                    <select id="filtro_seccion" onchange="cargarReporte()" class="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"><option value="">Todas las Secciones</option></select>
+                    <select id="filtro_turno" onchange="cargarReporte()" class="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"><option value="">Todos los Turnos</option></select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                    <p class="text-xs text-gray-500 font-bold uppercase mb-1">Personal Activo</p>
+                    <p id="kpi-total" class="text-2xl font-black text-slate-800">0</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-emerald-100 border-b-4 border-b-emerald-500">
+                    <p class="text-xs text-emerald-600 font-bold uppercase mb-1">Presentes</p>
+                    <p id="kpi-presentes" class="text-2xl font-black text-emerald-700">0</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-orange-100 border-b-4 border-b-orange-400">
+                    <p class="text-xs text-orange-600 font-bold uppercase mb-1">Con Retraso</p>
+                    <p id="kpi-retrasos" class="text-2xl font-black text-orange-700">0</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-red-100 border-b-4 border-b-red-500">
+                    <p class="text-xs text-red-600 font-bold uppercase mb-1">Faltas</p>
+                    <p id="kpi-faltas" class="text-2xl font-black text-red-700">0</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-blue-100 border-b-4 border-b-blue-500">
+                    <p class="text-xs text-blue-600 font-bold uppercase mb-1">Ausencias/Vac.</p>
+                    <p id="kpi-ausencias" class="text-2xl font-black text-blue-700">0</p>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col flex-1">
+                <div class="bg-slate-800 p-3 flex justify-between items-center shrink-0">
+                    <h3 class="text-sm font-bold text-white uppercase tracking-wider"><i class="fas fa-list-ul mr-2"></i>Detalle de Empleados</h3>
+                    <div id="contenedor-turnos-activos" class="flex gap-2"></div>
+                </div>
+                
+                <div class="overflow-x-auto flex-1">
+                    <table class="w-full text-left text-sm whitespace-nowrap">
+                        <thead class="bg-gray-50 border-b border-gray-200 text-xs uppercase text-gray-500 sticky top-0 z-10">
+                            <tr>
+                                <th class="px-4 py-3 font-bold">Empleado</th>
+                                <th class="px-4 py-3 font-bold">Ubicación</th>
+                                <th class="px-4 py-3 font-bold">Turno Asignado</th>
+                                <th class="px-4 py-3 font-bold text-center">Entrada</th>
+                                <th class="px-4 py-3 font-bold text-center">Salida</th>
+                                <th class="px-4 py-3 font-bold">Estado en Tiempo Real</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-reporte" class="divide-y divide-gray-100">
+                            <tr><td colspan="6" class="text-center py-10 text-gray-400"><i class="fas fa-spinner fa-spin text-3xl mb-2"></i><p>Cargando información...</p></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script src="menu.js"></script>
+    <script>
+        const API_URL = "https://asistencia-api.up.railway.app";
+        const token_api = localStorage.getItem('token');
+        let timeoutBusqueda = null;
+
+        // Iniciar pantalla
+        async function init() {
+            renderizarMenu('reporte');
+            
+            // Setear fecha de hoy
+            const hoy = new Date();
+            const tzOffset = hoy.getTimezoneOffset() * 60000;
+            const localISOTime = (new Date(hoy - tzOffset)).toISOString().split('T')[0];
+            document.getElementById('filtro_fecha').value = localISOTime;
+
+            await cargarCatalogos();
+            cargarReporte();
+        }
+
+        async function cargarCatalogos() {
+            try {
+                const promesas = [
+                    fetch(`${API_URL}/sucursales`, { headers: { 'Authorization': `Bearer ${token_api}` } }),
+                    fetch(`${API_URL}/secciones`, { headers: { 'Authorization': `Bearer ${token_api}` } }),
+                    fetch(`${API_URL}/turnos`, { headers: { 'Authorization': `Bearer ${token_api}` } })
+                ];
+                const res = await Promise.all(promesas);
+                
+                const sucursales = await res[0].json();
+                const secciones = await res[1].json();
+                const turnos = await res[2].json();
+                
+                const sSucursal = document.getElementById('filtro_sucursal');
+                const sSeccion = document.getElementById('filtro_seccion');
+                const sTurno = document.getElementById('filtro_turno');
+                
+                sucursales.forEach(s => sSucursal.innerHTML += `<option value="${s.id}">${s.nombre}</option>`);
+                secciones.forEach(s => sSeccion.innerHTML += `<option value="${s.id}">${s.nombre}</option>`);
+                turnos.forEach(t => sTurno.innerHTML += `<option value="${t.id}">${t.nombre} (${t.hora_ingreso.substring(0,5)} - ${t.hora_salida.substring(0,5)})</option>`);
+            } catch (e) { console.error(e); }
+        }
+
+        function debounceRecarga() {
+            clearTimeout(timeoutBusqueda);
+            timeoutBusqueda = setTimeout(() => cargarReporte(), 400);
+        }
+
+        async function cargarReporte() {
+            const tabla = document.getElementById('tabla-reporte');
+            tabla.innerHTML = '<tr><td colspan="6" class="text-center py-10 text-gray-400"><i class="fas fa-spinner fa-spin text-3xl mb-2"></i><p>Analizando...</p></td></tr>';
+            
+            const params = new URLSearchParams({
+                fecha: document.getElementById('filtro_fecha').value,
+                q: document.getElementById('filtro_busqueda').value,
+                sucursal_id: document.getElementById('filtro_sucursal').value,
+                seccion_id: document.getElementById('filtro_seccion').value,
+                turno_id: document.getElementById('filtro_turno').value
+            });
+
+            try {
+                const res = await fetch(`${API_URL}/reporte-diario/${params.get('fecha')}?${params.toString()}`, {
+                    headers: { 'Authorization': `Bearer ${token_api}` }
+                });
+                const data = await res.json();
+                pintarDatos(data);
+            } catch (e) {
+                tabla.innerHTML = '<tr><td colspan="6" class="text-center py-10 text-red-500 font-bold"><i class="fas fa-exclamation-triangle text-3xl mb-2"></i><p>Error de conexión</p></td></tr>';
+            }
+        }
+
+        function pintarDatos(data) {
+            // 1. Pintar KPIs
+            document.getElementById('kpi-total').textContent = data.kpis.total;
+            document.getElementById('kpi-presentes').textContent = data.kpis.presentes;
+            document.getElementById('kpi-retrasos').textContent = data.kpis.retrasos;
+            document.getElementById('kpi-faltas').textContent = data.kpis.faltas;
+            document.getElementById('kpi-ausencias').textContent = data.kpis.ausencias;
+
+            // 2. Pintar Turnos Activos
+            const contTurnos = document.getElementById('contenedor-turnos-activos');
+            if (data.kpis.turnos_activos.length > 0) {
+                contTurnos.innerHTML = data.kpis.turnos_activos.map(t => `<span class="bg-blue-600 text-[10px] px-2 py-0.5 rounded shadow border border-blue-500 font-bold"><i class="fas fa-bolt text-yellow-300 mr-1"></i>${t} Activo</span>`).join('');
+            } else {
+                contTurnos.innerHTML = `<span class="bg-slate-700 text-[10px] px-2 py-0.5 rounded text-slate-400 font-bold">Fuera de Horario Laboral</span>`;
+            }
+
+            // 3. ⚡ EL FRONTEND TONTO EN ACCIÓN: Solo lee variables y pinta el HTML
+            const tabla = document.getElementById('tabla-reporte');
+            tabla.innerHTML = '';
+
+            if (data.detalle.length === 0) {
+                tabla.innerHTML = '<tr><td colspan="6" class="text-center py-10 text-gray-400">No se encontraron empleados.</td></tr>';
+                return;
+            }
+
+            data.detalle.forEach(emp => {
+                const iniciales = emp.nombres.charAt(0) + emp.apellidos.charAt(0);
+                const avatar = emp.foto_perfil 
+                    ? `<img src="${emp.foto_perfil}" class="w-10 h-10 rounded-full object-cover shadow-sm border border-gray-200">`
+                    : `<div class="w-10 h-10 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs shadow-sm">${iniciales}</div>`;
+
+                tabla.innerHTML += `
+                    <tr class="hover:bg-blue-50/50 transition-colors animate-emerger">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center">
+                                <div class="shrink-0 mr-3">${avatar}</div>
+                                <div>
+                                    <p class="font-bold text-gray-800 text-sm">${emp.nombres} ${emp.apellidos}</p>
+                                    <p class="text-[10px] text-gray-500 font-medium">${emp.cargo || 'Sin cargo'}</p>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-4 py-3 text-xs text-gray-600">
+                            <p class="font-bold"><i class="fas fa-building text-gray-400 mr-1"></i>${emp.sucursal_nombre || '-'}</p>
+                            <p class="text-[10px] mt-0.5">${emp.seccion_nombre || '-'}</p>
+                        </td>
+                        <td class="px-4 py-3">
+                            <p class="text-xs font-bold text-slate-700">${emp.turno_nombre || 'No asignado'}</p>
+                            <p class="text-[10px] text-slate-500"><i class="fas fa-clock mr-1"></i>${emp.ui_turno}</p>
+                        </td>
+                        <td class="px-4 py-3 text-center font-bold text-gray-700">${emp.ui_entrada}</td>
+                        <td class="px-4 py-3 text-center font-bold text-gray-700">${emp.ui_salida}</td>
+                        <td class="px-4 py-3">
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border ${emp.ui_color}">
+                                <i class="fas ${emp.ui_icono} mr-1.5"></i>
+                                ${emp.ui_estado}
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        init();
+    </script>
+</body>
+</html>

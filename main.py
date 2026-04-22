@@ -2778,24 +2778,56 @@ async def eliminar_feriado(feriado_id: int, usuario = Depends(verificar_token)):
 
 
 # ==============================================================================
-# 14. MÓDULO: REPORTE DEL DÍA (GLOBAL)
+# 14. MÓDULO: REPORTE DEL DÍA (GLOBAL) - FILTROS Y ESTADOS INTELIGENTES
 # ==============================================================================
 
 @app.get("/reporte-diario/{fecha}")
-async def obtener_reporte_diario(fecha: str, usuario = Depends(verificar_token)):
+async def obtener_reporte_diario(
+    fecha: str, 
+    q: str = "", 
+    sucursal_id: str = "", 
+    seccion_id: str = "", 
+    turno_id: str = "", 
+    usuario = Depends(verificar_token)
+):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     
     try:
-        # 🚀 LA VENTAJA EVENT-DRIVEN: 
-        # Ya no calculamos nada. Solo cruzamos al empleado con la tabla caché (asistencia_diaria)
+        from datetime import datetime, time
+        hoy_srv = datetime.now()
+        fecha_req = datetime.strptime(fecha, "%Y-%m-%d").date()
+        es_hoy = (fecha_req == hoy_srv.date())
+        hora_actual = hoy_srv.time()
+
+        # 1. ARMADO DINÁMICO DE LA CONSULTA SQL
+        condiciones = ["e.eliminado = FALSE", "e.activo = TRUE"]
+        parametros = [fecha, fecha]
+
+        if sucursal_id and sucursal_id.isdigit():
+            condiciones.append("e.sucursal_id = %s")
+            parametros.append(int(sucursal_id))
+        if seccion_id and seccion_id.isdigit():
+            condiciones.append("e.seccion_id = %s")
+            parametros.append(int(seccion_id))
+        if turno_id and turno_id.isdigit():
+            condiciones.append("e.turno_id = %s")
+            parametros.append(int(turno_id))
+        if q:
+            condiciones.append("(e.nombres ILIKE %s OR e.apellidos ILIKE %s OR e.ci ILIKE %s)")
+            termino = f"%{q}%"
+            parametros.extend([termino, termino, termino])
+
+        where_clause = " AND ".join(condiciones)
+
         cur.execute(f"""
             SELECT 
                 e.id, e.nombres, e.apellidos, e.foto_perfil, e.cargo,
-                s.nombre as sucursal_nombre,
+                s.nombre as sucursal_nombre, sec.nombre as seccion_nombre,
                 t.nombre as turno_nombre, t.hora_ingreso, t.hora_salida,
-                ad.estado, ad.hora_entrada as marcaje_entrada, ad.hora_salida as marcaje_salida, ad.minutos_retraso_entrada,
+                ad.estado, ad.hora_entrada as marcaje_entrada, ad.hora_salida as marcaje_salida, 
+                ad.minutos_retraso_entrada, ad.horas_trabajadas,
                 (SELECT tipo 
                  FROM {schema}.ausencias a 
                  WHERE a.empleado_id = e.id AND a.estado = 'aprobado' AND a.eliminado = FALSE
@@ -2803,26 +2835,116 @@ async def obtener_reporte_diario(fecha: str, usuario = Depends(verificar_token))
                  LIMIT 1) as estado_ausencia
             FROM {schema}.empleados e
             LEFT JOIN {schema}.sucursales s ON e.sucursal_id = s.id
+            LEFT JOIN {schema}.secciones sec ON e.seccion_id = sec.id
             LEFT JOIN {schema}.turnos t ON e.turno_id = t.id
             LEFT JOIN {schema}.asistencia_diaria ad ON ad.empleado_id = e.id AND ad.fecha = %s
-            WHERE e.eliminado = FALSE AND e.activo = TRUE
-            ORDER BY s.nombre ASC, e.nombres ASC
-        """, (fecha, fecha))
+            WHERE {where_clause}
+            ORDER BY t.hora_ingreso ASC, e.nombres ASC
+        """, tuple(parametros))
         
         reporte = cur.fetchall()
 
-        # ⚡ LIMPIEZA Y FORMATEO SEGURO PARA JSON (Sin bucles tóxicos)
-        for fila in reporte:
-            fila["hora_ingreso"] = str(fila["hora_ingreso"]) if fila.get("hora_ingreso") else None
-            fila["hora_salida"] = str(fila["hora_salida"]) if fila.get("hora_salida") else None
-            fila["marcaje_entrada"] = str(fila["marcaje_entrada"]) if fila.get("marcaje_entrada") else None
-            fila["marcaje_salida"] = str(fila["marcaje_salida"]) if fila.get("marcaje_salida") else None
-            
-            # Si el Motor de Eventos aún no ha registrado nada hoy, asumimos que no ha llegado
-            if not fila.get("estado"):
-                fila["estado"] = "Sin Registro"
+        # 2. VARIABLES PARA KPIs
+        kpis = {
+            "total": len(reporte),
+            "presentes": 0,
+            "faltas": 0,
+            "ausencias": 0,
+            "retrasos": 0,
+            "turnos_activos": []
+        }
 
-        return reporte
+        turnos_en_curso = set()
+
+        # 3. 🧠 PROCESAMIENTO INTELIGENTE PARA EL FRONTEND TONTO
+        for fila in reporte:
+            # Formateo básico de horas
+            h_in = fila.get("hora_ingreso")
+            h_out = fila.get("hora_salida")
+            fila["ui_turno"] = f"{str(h_in)[:5]} a {str(h_out)[:5]}" if h_in and h_out else "Sin Turno"
+            fila["ui_entrada"] = str(fila["marcaje_entrada"])[:5] if fila.get("marcaje_entrada") else "--:--"
+            fila["ui_salida"] = str(fila["marcaje_salida"])[:5] if fila.get("marcaje_salida") else "--:--"
+            
+            estado_ausencia = fila.get("estado_ausencia")
+            estado_ad = fila.get("estado")
+            
+            ui_estado = "Desconocido"
+            ui_color = "bg-gray-100 text-gray-700 border-gray-200"
+            ui_icono = "fa-question-circle"
+
+            # A) DETECCIÓN DE TURNO ACTIVO
+            en_horario_laboral = False
+            if es_hoy and h_in and h_out:
+                if h_out < h_in: # Turno nocturno
+                    en_horario_laboral = hora_actual >= h_in or hora_actual <= h_out
+                else: # Turno diurno
+                    en_horario_laboral = h_in <= hora_actual <= h_out
+                
+                if en_horario_laboral:
+                    turnos_en_curso.add(fila["turno_nombre"])
+
+            # B) ÁRBOL DE DECISIONES DE ESTADOS (UI LISTA)
+            if estado_ausencia:
+                kpis["ausencias"] += 1
+                ui_estado = "Vacación" if estado_ausencia == "vacacion" else "Permiso"
+                ui_color = "bg-blue-50 text-blue-700 border-blue-200" if estado_ausencia == "vacacion" else "bg-yellow-50 text-yellow-700 border-yellow-200"
+                ui_icono = "fa-umbrella-beach" if estado_ausencia == "vacacion" else "fa-user-md"
+                
+            elif not h_in:
+                ui_estado = "Sin Turno"
+                ui_color = "bg-slate-100 text-slate-500 border-slate-200"
+                ui_icono = "fa-calendar-times"
+                
+            else:
+                # Análisis Temporal Dinámico
+                if es_hoy and not fila.get("marcaje_entrada") and hora_actual < h_in:
+                    ui_estado = "Próximo a Iniciar"
+                    ui_color = "bg-slate-50 text-slate-600 border-slate-200"
+                    ui_icono = "fa-clock"
+                elif es_hoy and en_horario_laboral and not fila.get("marcaje_entrada"):
+                    ui_estado = "Retraso Crítico"
+                    ui_color = "bg-red-50 text-red-600 border-red-200"
+                    ui_icono = "fa-exclamation-triangle"
+                    kpis["faltas"] += 1
+                elif estado_ad in ["Trabajando", "En Curso"]:
+                    ui_estado = "En Curso"
+                    ui_color = "bg-green-50 text-green-700 border-green-200 shadow-sm"
+                    ui_icono = "fa-user-clock"
+                    kpis["presentes"] += 1
+                elif estado_ad == "Puntual":
+                    ui_estado = "Jornada Completada"
+                    ui_color = "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    ui_icono = "fa-check-circle"
+                    kpis["presentes"] += 1
+                elif estado_ad == "Tarde":
+                    ui_estado = f"Llegó Tarde ({fila['minutos_retraso_entrada']}m)"
+                    ui_color = "bg-orange-50 text-orange-700 border-orange-200"
+                    ui_icono = "fa-running"
+                    kpis["presentes"] += 1
+                    kpis["retrasos"] += 1
+                elif estado_ad in ["Falta", "Incompleto"]:
+                    ui_estado = "Falta Injustificada"
+                    ui_color = "bg-red-50 text-red-700 border-red-200"
+                    ui_icono = "fa-times-circle"
+                    kpis["faltas"] += 1
+                else:
+                    ui_estado = estado_ad or "Sin Registro"
+                    ui_color = "bg-gray-50 text-gray-500 border-gray-200"
+                    ui_icono = "fa-minus-circle"
+
+            # Inyectamos el diseño al diccionario
+            fila["ui_estado"] = ui_estado
+            fila["ui_color"] = ui_color
+            fila["ui_icono"] = ui_icono
+
+        kpis["turnos_activos"] = list(turnos_en_curso)
+
+        return {
+            "fecha": fecha,
+            "es_hoy": es_hoy,
+            "kpis": kpis,
+            "detalle": reporte
+        }
     finally:
         cur.close()
         conn.close()
@@ -2948,7 +3070,7 @@ async def editar_asistencia_manual(empleado_id: int, data: dict, request: Reques
             # ⚡ Sellamos la observación final con el respaldo incluido
             cur.execute(f"""
                 UPDATE {schema}.asistencia_diaria 
-                SET observaciones = %s, modificado_manualmente = FALSE
+                SET observaciones = %s, modificado_manualmente = TRUE
                 WHERE empleado_id = %s AND fecha = %s
             """, (observacion_final, empleado_id, fecha_dt))
             conn.commit()

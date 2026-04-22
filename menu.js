@@ -202,7 +202,7 @@ function renderizarMenu(pantallaActiva) {
                 <a href="calendario.html" class="${pantallaActiva === 'asistencia' ? claseActiva : claseInactiva}">
                     <i class="fas fa-calendar-alt w-5 mr-2 text-center"></i> Calendario
                 </a>
-                <a href="#" class="${claseInactiva}">
+                <a href="reporte_dia.html" class="${pantallaActiva === 'reporte' ? claseActiva : claseInactiva}">
                     <i class="fas fa-file-alt w-5 mr-2 text-center"></i> Reporte del Día
                 </a>
 
