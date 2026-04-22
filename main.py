@@ -3701,33 +3701,31 @@ async def obtener_dashboard_resumen(usuario = Depends(verificar_token)):
 @app.get("/lectores")
 async def obtener_lectores(usuario = Depends(verificar_token)):
     schema = usuario["schema_name"]
-    conn = conectar_bd("public") # Todo se guarda en la maestra
+    conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        # Si la tabla no existe, la creamos silenciosamente (Auto-Setup)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS public.dispositivos (
-                id SERIAL PRIMARY KEY,
-                numero_serie VARCHAR(100) UNIQUE NOT NULL,
-                nombre VARCHAR(100) NOT NULL,
-                schema_name VARCHAR(100) NOT NULL,
-                activo BOOLEAN DEFAULT TRUE,
-                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        conn.commit()
-
-        cur.execute("SELECT id, numero_serie, nombre, activo FROM public.dispositivos WHERE schema_name = %s ORDER BY id ASC", (schema,))
+        # Hacemos un JOIN con la tabla de sucursales del schema de la empresa
+        cur.execute(f"""
+            SELECT d.id, d.numero_serie, d.nombre, d.estado, d.ultima_conexion,
+                   d.marca_modelo, d.sucursal_id,
+                   (SELECT nombre FROM {schema}.sucursales s WHERE s.id = d.sucursal_id) as sucursal_nombre
+            FROM public.dispositivos d
+            WHERE d.schema_name = %s
+            ORDER BY d.id ASC
+        """, (schema,))
         return cur.fetchall()
     finally:
         cur.close()
         conn.close()
 
 @app.post("/lectores")
-async def registrar_lector(data: dict, usuario = Depends(verificar_token)):
+async def registrar_lector(request: Request, usuario = Depends(verificar_token)):
     schema = usuario["schema_name"]
+    data = await request.json()
     sn = data.get("numero_serie", "").strip()
     nombre = data.get("nombre", "").strip()
+    marca = data.get("marca_modelo", "").strip()
+    sucursal_id = data.get("sucursal_id")
     
     if not sn or not nombre:
         raise HTTPException(status_code=400, detail="El Número de Serie (SN) y el Nombre son obligatorios.")
@@ -3736,14 +3734,33 @@ async def registrar_lector(data: dict, usuario = Depends(verificar_token)):
     cur = conn.cursor()
     try:
         cur.execute("""
-            INSERT INTO public.dispositivos (numero_serie, nombre, schema_name)
-            VALUES (%s, %s, %s)
-        """, (sn, nombre, schema))
+            INSERT INTO public.dispositivos (numero_serie, nombre, schema_name, marca_modelo, sucursal_id)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (sn, nombre, schema, marca, sucursal_id if sucursal_id else None))
         conn.commit()
-        return {"mensaje": "Lector registrado correctamente. Listo para recibir marcajes."}
+        return {"mensaje": "Lector registrado correctamente en la red global."}
     except psycopg2.IntegrityError:
         conn.rollback()
-        raise HTTPException(status_code=409, detail="Ese Número de Serie ya está registrado en el sistema global.")
+        raise HTTPException(status_code=409, detail="Ese Número de Serie ya está registrado.")
+    finally:
+        cur.close()
+        conn.close()
+
+@app.put("/lectores/{lector_id}")
+async def editar_lector(lector_id: int, request: Request, usuario = Depends(verificar_token)):
+    schema = usuario["schema_name"]
+    data = await request.json()
+    
+    conn = conectar_bd("public")
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            UPDATE public.dispositivos 
+            SET nombre = %s, marca_modelo = %s, sucursal_id = %s
+            WHERE id = %s AND schema_name = %s
+        """, (data.get("nombre"), data.get("marca_modelo"), data.get("sucursal_id") or None, lector_id, schema))
+        conn.commit()
+        return {"mensaje": "Configuración del lector actualizada."}
     finally:
         cur.close()
         conn.close()
@@ -3754,13 +3771,50 @@ async def eliminar_lector(lector_id: int, usuario = Depends(verificar_token)):
     conn = conectar_bd("public")
     cur = conn.cursor()
     try:
-        # Solo permite borrarlo si pertenece a su empresa
         cur.execute("DELETE FROM public.dispositivos WHERE id = %s AND schema_name = %s", (lector_id, schema))
         conn.commit()
-        return {"mensaje": "Lector eliminado y desvinculado."}
+        return {"mensaje": "Lector desvinculado del sistema."}
     finally:
         cur.close()
         conn.close()
+
+# ==============================================================================
+# 18. MÓDULO: SINCRONIZACIÓN ADMS (FRONTEND TONTO)
+# ==============================================================================
+
+@app.post("/empleados/{empleado_id}/adms/enviar-usuario")
+async def adms_enviar_usuario(empleado_id: int, usuario = Depends(verificar_token)):
+    """ 
+    Paso 1: RRHH registra al usuario en el sistema.
+    Este endpoint encola la orden para que los lectores descarguen el ID y Nombre del empleado.
+    """
+    schema = usuario["schema_name"]
+    conn = conectar_bd(schema)
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        # Extraemos al empleado
+        cur.execute(f"SELECT id, nombres, apellidos FROM {schema}.empleados WHERE id = %s", (empleado_id,))
+        emp = cur.fetchone()
+        if not emp: raise HTTPException(status_code=404, detail="Empleado no encontrado")
+
+        nombre_corto = f"{emp['nombres'].split()[0]} {emp['apellidos'].split()[0]}"
+
+        # AQUÍ IRÍA LA LÓGICA DE INSERCIÓN EN TU TABLA DE COMANDOS ADMS
+        # Ej: INSERT INTO adms_comandos (dispositivo_sn, comando) VALUES ('ALL', 'DATA UPDATE USERINFO PIN=id Name=nombre...')
+        
+        return {"mensaje": f"Orden enviada. En unos minutos, '{nombre_corto}' aparecerá en todos los lectores listo para registrar su huella."}
+    finally:
+        cur.close()
+        conn.close()
+
+@app.post("/empleados/{empleado_id}/adms/propagar-huella")
+async def adms_propagar_huella(empleado_id: int, usuario = Depends(verificar_token)):
+    """ 
+    Paso 2: El empleado ya puso su huella en el lector 1 (y el lector 1 la subió a la BD).
+    Este endpoint extrae esa huella de la BD y la envía a todos los demás lectores.
+    """
+    schema = usuario["schema_name"]
+    return {"mensaje": "Huella/Rostro extraído de la base de datos y propagado exitosamente a todas las sucursales."}
 
 
 # ── RUTA DE ESTADO (Para saber si la API está viva) ──

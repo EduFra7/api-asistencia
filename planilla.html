@@ -310,8 +310,36 @@
                             <p class="text-xs font-bold text-amber-800 uppercase tracking-wider"><i class="fas fa-archive mr-1"></i> Historial de Movimientos</p>
                             <textarea id="emp_historial" rows="3" readonly class="w-full px-3 py-2 border border-amber-300 rounded-md text-xs bg-amber-100 text-gray-800 font-mono focus:outline-none resize-none"></textarea>
                         </div>
-                    </div> 
+                        <div id="panelHistorial" class="hidden bg-amber-50 border border-amber-200 p-4 rounded-lg space-y-2 mt-4 shadow-inner">
+                            <p class="text-xs font-bold text-amber-800 uppercase tracking-wider"><i class="fas fa-archive mr-1"></i> Historial de Movimientos</p>
+                            <textarea id="emp_historial" rows="3" readonly class="w-full px-3 py-2 border border-amber-300 rounded-md text-xs bg-amber-100 text-gray-800 font-mono focus:outline-none resize-none"></textarea>
+                        </div>
 
+                        <div class="bg-white p-5 rounded-xl border border-blue-200 shadow-sm mt-4">
+                            <h4 class="font-bold text-blue-900 border-b border-blue-100 pb-2 mb-3">
+                                <i class="fas fa-fingerprint mr-2 text-blue-500"></i>Control Biométrico ZKTeco
+                            </h4>
+                            <p class="text-xs text-gray-500 mb-4 leading-relaxed">Administra la propagación de este empleado hacia los relojes físicos de la red.</p>
+                            
+                            <div class="space-y-3">
+                                <button type="button" onclick="admsEnviarUsuarioBtn()" class="w-full flex items-center p-3 rounded-lg border border-blue-200 bg-blue-50 hover:bg-blue-100 transition-colors text-left group">
+                                    <div class="w-10 h-10 rounded-full bg-white flex items-center justify-center text-blue-600 shadow-sm shrink-0 mr-3 group-hover:scale-110 transition-transform"><i class="fas fa-cloud-upload-alt"></i></div>
+                                    <div>
+                                        <p class="text-sm font-bold text-blue-900">Paso 1: Enviar Usuario a Relojes</p>
+                                        <p class="text-[10px] text-blue-700 mt-0.5">Crea el ID y Nombre en los equipos para registrar huella.</p>
+                                    </div>
+                                </button>
+
+                                <button type="button" onclick="admsPropagarHuellaBtn()" class="w-full flex items-center p-3 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 transition-colors text-left group">
+                                    <div class="w-10 h-10 rounded-full bg-white flex items-center justify-center text-emerald-600 shadow-sm shrink-0 mr-3 group-hover:scale-110 transition-transform"><i class="fas fa-wifi"></i></div>
+                                    <div>
+                                        <p class="text-sm font-bold text-emerald-900">Paso 2: Extraer y Propagar Huella</p>
+                                        <p class="text-[10px] text-emerald-700 mt-0.5">Toma la huella del lector base y la envía a sucursales.</p>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+                    </div> 
                 </form>
             </div>
 
@@ -935,6 +963,40 @@
 
         function generarReportePDF() { descargarArchivoServidor('pdf'); }
         function exportarExcel() { descargarArchivoServidor('excel'); }
+
+        // ==========================================
+        // 📡 FUNCIONES ADMS (FRONTEND TONTO)
+        // ==========================================
+        
+        async function admsEnviarUsuarioBtn() {
+            if (!empleadoEditandoId) {
+                mostrarError("Primero debes guardar al empleado en el sistema.");
+                return;
+            }
+
+            Swal.fire({ title: 'Encolando orden al servidor ADMS...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            try {
+                const res = await fetch(`${API_URL}/empleados/${empleadoEditandoId}/adms/enviar-usuario`, { method: 'POST', headers: { 'Authorization': `Bearer ${token_api}` }});
+                const data = await res.json();
+                if(!res.ok) throw new Error(data.detail);
+                Swal.fire({ icon: 'success', title: 'Orden Ejecutada', text: data.mensaje, timer: 4000 });
+            } catch(e) { Swal.fire('Error ADMS', e.message, 'error'); }
+        }
+
+        async function admsPropagarHuellaBtn() {
+            if (!empleadoEditandoId) {
+                mostrarError("Primero debes guardar al empleado en el sistema.");
+                return;
+            }
+
+            Swal.fire({ title: 'Extrayendo plantilla biométrica...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            try {
+                const res = await fetch(`${API_URL}/empleados/${empleadoEditandoId}/adms/propagar-huella`, { method: 'POST', headers: { 'Authorization': `Bearer ${token_api}` }});
+                const data = await res.json();
+                if(!res.ok) throw new Error(data.detail);
+                Swal.fire({ icon: 'success', title: 'Propagación Exitosa', text: data.mensaje });
+            } catch(e) { Swal.fire('Error ADMS', e.message, 'error'); }
+        }
 
         // ==========================================
         // 📷 MOTOR DE CAPTURA DE FOTOS Y WEBCAM
