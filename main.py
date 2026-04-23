@@ -797,44 +797,46 @@ async def iclock_data(request: Request, background_tasks: BackgroundTasks):
         cur_h = conn_huellas.cursor()
         try:
             for linea in texto.strip().splitlines():
-                # El formato ZKTeco es: PIN=102 \t FID=0 \t Size=700 \t Valid=1 \t TMP=XYZ...
                 partes = {p.split('=')[0]: p.split('=')[1] for p in linea.split('\t') if '=' in p}
                 if 'PIN' in partes and 'TMP' in partes:
+                    # ⚡ CAPTURAMOS EL TAMAÑO ORIGINAL EXACTO
+                    tamano = int(partes.get('Size', 0))
+                    
                     cur_h.execute("""
-                        INSERT INTO public.huellas_adms (schema_name, pin, fid, template)
-                        VALUES (%s, %s, %s, %s)
+                        INSERT INTO public.huellas_adms (schema_name, pin, fid, template, template_size)
+                        VALUES (%s, %s, %s, %s, %s)
                         ON CONFLICT (schema_name, pin, fid) 
-                        DO UPDATE SET template = EXCLUDED.template, fecha_actualizacion = CURRENT_TIMESTAMP
-                    """, (schema_destino, partes['PIN'], partes.get('FID', '0'), partes['TMP']))
+                        DO UPDATE SET template = EXCLUDED.template, template_size = EXCLUDED.template_size, fecha_actualizacion = CURRENT_TIMESTAMP
+                    """, (schema_destino, partes['PIN'], partes.get('FID', '0'), partes['TMP'], tamano))
             conn_huellas.commit()
-            print(f"🧬 [BÓVEDA BIOMÉTRICA] Huellas respaldadas en BD para empresa: {schema_destino}")
+            print(f"🧬 [BÓVEDA BIOMÉTRICA] Huella con Size Original guardada para empresa: {schema_destino}")
         except Exception as e: print(f"❌ Error guardando huella: {e}")
         finally: cur_h.close(); conn_huellas.close()
+        
     # ⚡ 5. SI EL RELOJ RESPONDE A UNA EXTRACCIÓN MANUAL (OPERLOG)
     elif table == "OPERLOG":
         conn_huellas = conectar_bd("public")
         cur_h = conn_huellas.cursor()
         try:
             for linea in texto.strip().splitlines():
-                # Buscamos si la línea es una respuesta de huella (empieza con "FP PIN=")
                 if linea.startswith("FP PIN="):
-                    # Le quitamos el "FP " del inicio para poder leerlo normal
                     linea_limpia = linea.replace("FP ", "", 1)
-                    
-                    # Ahora lo partimos como siempre
                     partes = {p.split('=')[0]: p.split('=')[1] for p in linea_limpia.split('\t') if '=' in p}
                     
                     if 'PIN' in partes and 'TMP' in partes:
+                        # ⚡ CAPTURAMOS EL TAMAÑO ORIGINAL EXACTO
+                        tamano = int(partes.get('Size', 0))
+                        
                         cur_h.execute("""
-                            INSERT INTO public.huellas_adms (schema_name, pin, fid, template)
-                            VALUES (%s, %s, %s, %s)
+                            INSERT INTO public.huellas_adms (schema_name, pin, fid, template, template_size)
+                            VALUES (%s, %s, %s, %s, %s)
                             ON CONFLICT (schema_name, pin, fid) 
-                            DO UPDATE SET template = EXCLUDED.template, fecha_actualizacion = CURRENT_TIMESTAMP
-                        """, (schema_destino, partes['PIN'], partes.get('FID', '0'), partes['TMP']))
-                        print(f"✅ [EXTRACCIÓN EXITOSA] Huella de PIN {partes['PIN']} guardada en Bóveda desde OPERLOG.")
+                            DO UPDATE SET template = EXCLUDED.template, template_size = EXCLUDED.template_size, fecha_actualizacion = CURRENT_TIMESTAMP
+                        """, (schema_destino, partes['PIN'], partes.get('FID', '0'), partes['TMP'], tamano))
+                        print(f"✅ [EXTRACCIÓN EXITOSA] Huella de PIN {partes['PIN']} (Size: {tamano}) guardada en Bóveda desde OPERLOG.")
             conn_huellas.commit()
         except Exception as e: print(f"❌ Error en OPERLOG: {e}")
-        finally: cur_h.close(); conn_huellas.close()    
+        finally: cur_h.close(); conn_huellas.close()   
 
     return PlainTextResponse("OK\n")
 
@@ -4209,11 +4211,11 @@ async def adms_propagar_huella(empleado_id: int, usuario = Depends(verificar_tok
     finally:
         cur_priv.close(); conn_priv.close()
 
-    # 2. Buscamos en la Bóveda Global si este PIN ya tiene huellas y propagamos
+    # 2. Buscamos en la Bóveda Global (⚡ AHORA TRAEMOS EL TEMPLATE_SIZE)
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        cur.execute("SELECT fid, template FROM public.huellas_adms WHERE schema_name = %s AND pin = %s", (schema, str(pin_zk)))
+        cur.execute("SELECT fid, template, template_size FROM public.huellas_adms WHERE schema_name = %s AND pin = %s", (schema, str(pin_zk)))
         huellas = cur.fetchall()
 
         if not huellas:
@@ -4226,17 +4228,18 @@ async def adms_propagar_huella(empleado_id: int, usuario = Depends(verificar_tok
         for r in relojes:
             sn_r = r['numero_serie'].strip().upper()
             for h in huellas:
-                # ⚡ LA CORRECCIÓN: Quitamos el parámetro 'Size=' y aplicamos .strip() a la huella
                 huella_limpia = h['template'].strip()
+                # ⚡ EXTRAEMOS EL TAMAÑO ORIGINAL QUE EL RELOJ NOS REPORTÓ ANTES
+                tamano_exacto = h['template_size']
                 
-                # El comando ahora es más limpio y a prueba de fallos
-                cmd = f"DATA UPDATE FINGERTMP PIN={pin_zk}\tFID={h['fid']}\tValid=1\tTMP={huella_limpia}"
+                # ⚡ VOLVEMOS A INCLUIR 'Size=' EN EL COMANDO (PERO CON EL NÚMERO PERFECTO)
+                cmd = f"DATA UPDATE FINGERTMP PIN={pin_zk}\tFID={h['fid']}\tSize={tamano_exacto}\tValid=1\tTMP={huella_limpia}"
                 
                 cur.execute("INSERT INTO public.comandos_adms (numero_serie, comando) VALUES (%s, %s)", (sn_r, cmd))
                 comandos_encolados += 1
         
         conn.commit()
-        return {"mensaje": f"Se extrajeron {len(huellas)} plantilla(s) biométrica(s). Se están enviando a los lectores registrados."}
+        return {"mensaje": f"Se extrajeron {len(huellas)} plantilla(s) biométrica(s) con peso exacto. Se están enviando a los lectores registrados."}
     finally:
         cur.close(); conn.close()
 
