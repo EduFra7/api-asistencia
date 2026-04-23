@@ -4063,48 +4063,48 @@ async def adms_enviar_usuario(empleado_id: int, usuario = Depends(verificar_toke
 
 @app.post("/lectores/{lector_id}/extraer-huellas")
 async def adms_extraer_huellas(lector_id: int, usuario = Depends(verificar_token)):
-    """ Ordena al reloj que suba las huellas de todos los empleados registrados en el ERP (Una por una) """
+    """ Ordena al reloj que suba las huellas de todos los empleados activos (Bucle For) """
     schema = usuario["schema_name"]
     
-    # 1. Buscamos a todos los empleados activos de la base de datos de la empresa
-    conn_priv = conectar_bd(schema)
-    cur_priv = conn_priv.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    try:
-        # Traemos los IDs para saber qué PINs preguntarle al reloj
-        cur_priv.execute(f"SELECT id, bio_id FROM {schema}.empleados WHERE estado = 'Activo'")
-        empleados = cur_priv.fetchall()
-        if not empleados:
-            raise HTTPException(status_code=400, detail="No hay empleados en la planilla para solicitar huellas.")
-    finally:
-        cur_priv.close(); conn_priv.close()
-
-    # 2. Conectamos con el Lector
+    # Usamos una sola conexión global para mayor velocidad
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    
     try:
+        # 1. ⚡ CORRECCIÓN: Buscamos empleados usando el booleano 'activo = TRUE'
+        cur.execute(f"SELECT id, bio_id FROM {schema}.empleados WHERE activo = TRUE")
+        empleados = cur.fetchall()
+        
+        if not empleados:
+            raise HTTPException(status_code=400, detail="No hay empleados activos en la planilla para solicitar huellas.")
+
+        # 2. Buscamos el Lector
         cur.execute("SELECT numero_serie FROM public.dispositivos WHERE id = %s AND schema_name = %s", (lector_id, schema))
         lector = cur.fetchone()
-        if not lector: raise HTTPException(status_code=404, detail="Lector no encontrado.")
+        
+        if not lector: 
+            raise HTTPException(status_code=404, detail="Lector no encontrado.")
 
         sn_limpio = lector['numero_serie'].strip().upper()
 
-        # 3. ⚡ EL BUCLE MÁGICO: Creamos una orden individual por cada empleado
+        # 3. El Bucle Quirúrgico
         comandos_encolados = 0
         for emp in empleados:
-            # Determinamos el PIN (Si RRHH le puso bio_id, usamos ese, sino el ID normal)
             pin_zk = emp.get('bio_id') or emp['id']
-            
-            # Comando quirúrgico individual
             comando = f"DATA QUERY FINGERTMP PIN={pin_zk}"
-            
             cur.execute("INSERT INTO public.comandos_adms (numero_serie, comando) VALUES (%s, %s)", (sn_limpio, comando))
             comandos_encolados += 1
         
         conn.commit()
-        
-        return {"mensaje": f"¡Aspiradora Inteligente Activada! Se enviaron {comandos_encolados} peticiones individuales. El reloj subirá las huellas que encuentre en los próximos minutos."}
+        return {"mensaje": f"¡Aspiradora Activada! Se encolaron {comandos_encolados} peticiones de huellas para empleados activos."}
+
+    except Exception as e:
+        print(f"❌ [ERROR SQL EN EXTRACCIÓN MASIVA]: {e}")
+        raise HTTPException(status_code=500, detail=f"Error en BD: {str(e)}")
+    
     finally:
-        cur.close(); conn.close()
+        cur.close()
+        conn.close()
 
 @app.post("/empleados/{empleado_id}/adms/propagar-huella")
 async def adms_propagar_huella(empleado_id: int, usuario = Depends(verificar_token)):
