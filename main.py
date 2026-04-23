@@ -4226,8 +4226,12 @@ async def adms_propagar_huella(empleado_id: int, usuario = Depends(verificar_tok
         for r in relojes:
             sn_r = r['numero_serie'].strip().upper()
             for h in huellas:
-                # ⚡ COMANDO K50 PARA PROPAGAR HUELLAS (Obligatorio usar \t)
-                cmd = f"DATA UPDATE FINGERTMP PIN={pin_zk}\tFID={h['fid']}\tSize={len(h['template'])}\tValid=1\tTMP={h['template']}"
+                # ⚡ LA CORRECCIÓN: Quitamos el parámetro 'Size=' y aplicamos .strip() a la huella
+                huella_limpia = h['template'].strip()
+                
+                # El comando ahora es más limpio y a prueba de fallos
+                cmd = f"DATA UPDATE FINGERTMP PIN={pin_zk}\tFID={h['fid']}\tValid=1\tTMP={huella_limpia}"
+                
                 cur.execute("INSERT INTO public.comandos_adms (numero_serie, comando) VALUES (%s, %s)", (sn_r, cmd))
                 comandos_encolados += 1
         
