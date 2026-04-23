@@ -4048,8 +4048,8 @@ async def adms_extraer_huellas(lector_id: int, usuario = Depends(verificar_token
         # 2. ⚡ COMANDO DE EXTRACCIÓN MASIVA (El comodín PIN=* pide todos los usuarios)
        # comando = "DATA QUERY FINGERTMP PIN=*"
         # Le pedimos la huella específicamente de Isaac (PIN 102)
-        comando = "DATA QUERY USERINFO PIN=*"
-        #comando = "DATA QUERY FINGERTMP PIN=102"
+        #comando = "DATA QUERY USERINFO PIN=*"
+        comando = "DATA QUERY FINGERTMP PIN=102"
         
         # 3. Metemos la orden al buzón
         cur.execute("INSERT INTO public.comandos_adms (numero_serie, comando) VALUES (%s, %s)", (sn_limpio, comando))
