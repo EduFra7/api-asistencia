@@ -3795,18 +3795,21 @@ async def adms_enviar_usuario(empleado_id: int, usuario = Depends(verificar_toke
 
         nombre_zk = f"{emp['nombres'].split()[0]} {emp['apellidos'].split()[0]}"
         
-        # ⚡ PROTOCOLO K50 PRO: Tabulaciones obligatorias (\t)
+        # ⚡ PROTOCOLO ADMS: Usamos tabulaciones (\t) para que el K50 Pro lo entienda
         comando = f"DATA UPDATE USERINFO PIN={emp['id']}\tName={nombre_zk}\tPri=0\tPasswd=\tCard=\tGrp=1\tTZ=00000001\tVerify=0"
 
+        # Buscamos los relojes registrados para esta empresa
         cur.execute("SELECT numero_serie FROM public.dispositivos WHERE schema_name = %s", (schema,))
         relojes = cur.fetchall()
         
+        if not relojes: raise HTTPException(status_code=400, detail="No hay relojes registrados.")
+
         for r in relojes:
             sn_r = r['numero_serie'].strip().upper()
             cur.execute("INSERT INTO public.comandos_adms (numero_serie, comando) VALUES (%s, %s)", (sn_r, comando))
         
         conn.commit()
-        return {"mensaje": "Orden encolada. El reloj la descargará en segundos."}
+        return {"mensaje": f"Orden encolada para {len(relojes)} equipo(s). El reloj descargará a '{nombre_zk}' en segundos."}
     finally:
         cur.close(); conn.close()
 
@@ -3823,18 +3826,19 @@ async def adms_propagar_huella(empleado_id: int, usuario = Depends(verificar_tok
 # 19. MÓDULO: PROTOCOLO ADMS ZKTECO (ESCUCHA DE EQUIPOS FÍSICOS)
 # ==============================================================================
 @app.get("/iclock/cdata")
-@app.post("/iclock/cdata")
-async def adms_receive_data(SN: str, request: Request):
+@app.post("/iclock/cdata") # ⚡ AHORA SOPORTA POST
+async def adms_receive_data(SN: str):
     """ Escucha pings y registros de asistencia del reloj """
-    sn_clean = SN.strip().upper() # Blindaje total
+    sn_limpio = SN.strip().upper()
     conn = conectar_bd("public")
     cur = conn.cursor()
     try:
+        # ⚡ BUSQUEDA BLINDADA: No importa mayúsculas/minúsculas ni espacios
         cur.execute("""
             UPDATE public.dispositivos 
             SET estado = 'online', ultima_conexion = CURRENT_TIMESTAMP 
             WHERE UPPER(TRIM(numero_serie)) = %s
-        """, (sn_clean,))
+        """, (sn_limpio,))
         conn.commit()
         return PlainTextResponse("OK")
     finally:
@@ -3842,27 +3846,24 @@ async def adms_receive_data(SN: str, request: Request):
 
 @app.get("/iclock/getrequest")
 async def adms_heartbeat(SN: str):
-    """ El reloj pregunta por órdenes (Buzón de Comandos) """
-    sn_clean = SN.strip().upper()
+    """ El reloj pregunta por órdenes pendientes """
+    sn_limpio = SN.strip().upper()
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        # 1. Mantener el estado ONLINE en cada ping
-        cur.execute("""
-            UPDATE public.dispositivos SET estado='online', ultima_conexion=NOW() 
-            WHERE UPPER(TRIM(numero_serie)) = %s
-        """, (sn_clean,))
+        # 1. Mantener el estado ONLINE
+        cur.execute("UPDATE public.dispositivos SET estado='online', ultima_conexion=NOW() WHERE UPPER(TRIM(numero_serie))=%s", (sn_limpio,))
 
-        # 2. Buscar comandos pendientes para ESTE equipo
+        # 2. Buscar comandos en el buzón
         cur.execute("""
             SELECT id, comando FROM public.comandos_adms 
             WHERE UPPER(TRIM(numero_serie)) = %s AND estado = 'pendiente' 
             ORDER BY id ASC LIMIT 1
-        """, (sn_clean,))
+        """, (sn_limpio,))
         cmd = cur.fetchone()
 
         if cmd:
-            # ⚡ FORMATO K50 PRO: C:{ID}:{COMANDO}\n (Importante el salto de línea final)
+            # ⚡ FORMATO ZKTECO: C:ID:COMANDO\n
             cmd_payload = f"C:{cmd['id']}:{cmd['comando']}\n"
             cur.execute("UPDATE public.comandos_adms SET estado = 'enviado' WHERE id = %s", (cmd['id'],))
             conn.commit()
@@ -3875,14 +3876,11 @@ async def adms_heartbeat(SN: str):
 
 @app.post("/iclock/devicecmd")
 async def adms_confirm_cmd(request: Request):
-    """ El reloj confirma que ejecutó la orden correctamente """
-    # Formato recibido: ID=1&Return=0 (donde Return=0 es éxito)
+    """ El reloj confirma que ya recibió el nombre del empleado """
     body = await request.body()
     decoded = body.decode()
-    print(f"✅ Respuesta del Reloj: {decoded}")
-    
-    # Extraemos el ID del comando para marcarlo como 'completado'
     try:
+        # Marcamos como completado para limpiar el buzón
         cmd_id = decoded.split('=')[1].split('&')[0]
         conn = conectar_bd("public")
         cur = conn.cursor()
@@ -3890,7 +3888,6 @@ async def adms_confirm_cmd(request: Request):
         conn.commit()
         cur.close(); conn.close()
     except: pass
-    
     return PlainTextResponse("OK")
 
 # ── RUTA DE ESTADO (Para saber si la API está viva) ──
