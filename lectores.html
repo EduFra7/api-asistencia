@@ -44,7 +44,7 @@
     </main>
 
     <div id="modalLector" class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center z-50 backdrop-blur-sm transition-opacity">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-emerger">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
             <div class="bg-slate-800 p-4 flex justify-between items-center">
                 <h2 id="modalTitle" class="text-white font-bold text-lg">Configurar Lector</h2>
                 <button onclick="cerrarModal()" class="text-gray-400 hover:text-white"><i class="fas fa-times"></i></button>
@@ -57,13 +57,13 @@
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Número de Serie (SN)</label>
-                    <input type="text" id="lectorSN" placeholder="Ej. CJT42345432" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono text-blue-700">
+                    <input type="text" id="lectorSN" placeholder="Ej. FYA1245000117" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono text-blue-700 uppercase">
                     <p class="text-[10px] text-gray-400 mt-1">El SN debe coincidir exactamente con el del reloj físico.</p>
                 </div>
                 <div class="grid grid-cols-2 gap-4">
                     <div>
                         <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Marca / Modelo</label>
-                        <input type="text" id="lectorMarca" placeholder="Ej. ZKTeco K40" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                        <input type="text" id="lectorMarca" placeholder="Ej. ZKTeco K50 Pro" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Sucursal Asignada</label>
@@ -85,11 +85,19 @@
         const API_URL = "https://asistencia-api.up.railway.app";
         const token_api = localStorage.getItem('token');
         let dataLectores = [];
+        let intervaloRefresco = null;
 
         async function init() {
             renderizarMenu('lectores');
             await cargarSucursales();
-            cargarLectores();
+            
+            // Primera carga con spinner
+            await cargarLectores(true); 
+
+            // ⚡ AUTO-REFRESCO SILENCIOSO CADA 5 SEGUNDOS
+            intervaloRefresco = setInterval(() => {
+                cargarLectores(false);
+            }, 5000);
         }
 
         async function cargarSucursales() {
@@ -101,49 +109,57 @@
             } catch (e) { console.error(e); }
         }
 
-        async function cargarLectores() {
+        async function cargarLectores(mostrarSpinner = false) {
             const tbody = document.getElementById('tablaLectores');
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-gray-400"><i class="fas fa-spinner fa-spin text-2xl mb-2"></i><p>Escaneando red de dispositivos...</p></td></tr>';
+            
+            if (mostrarSpinner) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-gray-400"><i class="fas fa-spinner fa-spin text-2xl mb-2"></i><p>Conectando con Servidor ADMS...</p></td></tr>';
+            }
+
             try {
                 const res = await fetch(`${API_URL}/lectores`, { headers: { 'Authorization': `Bearer ${token_api}` }});
                 dataLectores = await res.json();
-                
-                if (dataLectores.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-gray-500">No hay lectores registrados en el sistema.</td></tr>';
-                    return;
-                }
-
-                tbody.innerHTML = dataLectores.map(l => {
-                    const online = l.estado === 'online';
-                    const color = online ? 'text-emerald-500' : 'text-red-500';
-                    const icono = online ? 'fa-check-circle' : 'fa-times-circle';
-                    const estadoText = online ? 'En Línea' : 'Desconectado';
-                    
-                    return `
-                    <tr class="hover:bg-blue-50/50 transition-colors">
-                        <td class="px-6 py-4 font-bold ${color} text-xs"><i class="fas ${icono} mr-1"></i>${estadoText}</td>
-                        <td class="px-6 py-4">
-                            <p class="font-bold text-gray-800">${l.nombre}</p>
-                            <p class="text-[10px] text-gray-500">${l.marca_modelo || 'Modelo no especificado'}</p>
-                        </td>
-                        <td class="px-6 py-4"><span class="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-bold border border-gray-200"><i class="fas fa-building text-gray-400 mr-1"></i>${l.sucursal_nombre || 'Global'}</span></td>
-                        <td class="px-6 py-4 font-mono text-xs text-blue-700 bg-blue-50 rounded px-2">${l.numero_serie}</td>
-                        <td class="px-6 py-4 text-xs text-gray-500"><i class="far fa-clock mr-1"></i>${l.ultima_conexion || 'Nunca'}</td>
-                        <td class="px-6 py-4 text-center">
-                            <button onclick="abrirModal(${l.id})" class="text-blue-500 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 p-2 rounded mr-1 transition-colors"><i class="fas fa-edit"></i></button>
-                            <button onclick="eliminarLector(${l.id})" class="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 p-2 rounded transition-colors"><i class="fas fa-trash"></i></button>
-                        </td>
-                    </tr>`;
-                }).join('');
+                pintarTabla();
             } catch (e) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-red-500">Error de conexión con el servidor.</td></tr>';
+                if (mostrarSpinner) tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-red-500">Error de conexión con el servidor.</td></tr>';
             }
+        }
+
+        function pintarTabla() {
+            const tbody = document.getElementById('tablaLectores');
+            if (dataLectores.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-gray-500">No hay lectores registrados. Añade uno para comenzar.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = dataLectores.map(l => {
+                const online = l.estado === 'online';
+                const color = online ? 'text-emerald-500' : 'text-red-500';
+                const icono = online ? 'fa-check-circle' : 'fa-times-circle';
+                const estadoText = online ? 'En Línea' : 'Desconectado';
+                
+                return `
+                <tr class="hover:bg-blue-50/50 transition-colors">
+                    <td class="px-6 py-4 font-bold ${color} text-xs"><i class="fas ${icono} mr-1"></i>${estadoText}</td>
+                    <td class="px-6 py-4">
+                        <p class="font-bold text-gray-800">${l.nombre}</p>
+                        <p class="text-[10px] text-gray-500">${l.marca_modelo || 'Modelo no especificado'}</p>
+                    </td>
+                    <td class="px-6 py-4"><span class="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-bold border border-gray-200"><i class="fas fa-building text-gray-400 mr-1"></i>${l.sucursal_nombre || 'Global'}</span></td>
+                    <td class="px-6 py-4 font-mono text-xs text-blue-700 bg-blue-50 rounded px-2">${l.numero_serie}</td>
+                    <td class="px-6 py-4 text-xs text-gray-500"><i class="far fa-clock mr-1"></i>${l.ultima_conexion ? l.ultima_conexion.replace('T', ' ').substring(0, 19) : 'Nunca'}</td>
+                    <td class="px-6 py-4 text-center">
+                        <button onclick="abrirModal(${l.id})" class="text-blue-500 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 p-2 rounded mr-1 transition-colors"><i class="fas fa-edit"></i></button>
+                        <button onclick="eliminarLector(${l.id})" class="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 p-2 rounded transition-colors"><i class="fas fa-trash"></i></button>
+                    </td>
+                </tr>`;
+            }).join('');
         }
 
         function abrirModal(id) {
             document.getElementById('lectorId').value = id || '';
             document.getElementById('modalTitle').textContent = id ? 'Editar Lector' : 'Nuevo Lector';
-            document.getElementById('lectorSN').disabled = !!id; // No permitimos editar el SN una vez creado
+            document.getElementById('lectorSN').disabled = !!id;
 
             if (id) {
                 const lector = dataLectores.find(l => l.id === id);
@@ -165,9 +181,12 @@
 
         async function guardarLector() {
             const id = document.getElementById('lectorId').value;
+            // Forzamos el SN a mayúsculas y quitamos espacios por seguridad
+            const snSeguro = document.getElementById('lectorSN').value.trim().toUpperCase();
+            
             const payload = {
                 nombre: document.getElementById('lectorNombre').value,
-                numero_serie: document.getElementById('lectorSN').value,
+                numero_serie: snSeguro, 
                 marca_modelo: document.getElementById('lectorMarca').value,
                 sucursal_id: document.getElementById('lectorSucursal').value || null
             };
@@ -188,7 +207,7 @@
                 
                 mostrarExito(data.mensaje);
                 cerrarModal();
-                cargarLectores();
+                cargarLectores(true);
             } catch (e) { mostrarError(e.message); }
         }
 
@@ -196,7 +215,7 @@
             if (await pedirConfirmacion("¿Desvincular y eliminar este equipo?", "Esta acción no borrará los marcajes ya recibidos.")) {
                 try {
                     const res = await fetch(`${API_URL}/lectores/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token_api}` }});
-                    if (res.ok) { mostrarExito("Equipo eliminado"); cargarLectores(); }
+                    if (res.ok) { mostrarExito("Equipo eliminado"); cargarLectores(true); }
                 } catch(e) { mostrarError("Fallo al eliminar."); }
             }
         }

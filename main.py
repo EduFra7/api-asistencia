@@ -568,24 +568,153 @@ def procesar_asistencia_dia(schema: str, empleado_id: int, fecha: date):
 
 
 # ==============================================================================
-# 5. RUTAS PARA COMUNICACIÓN CON HARDWARE (ZKTeco ADMS)
+# 5. RUTAS PARA COMUNICACIÓN CON HARDWARE (ZKTeco ADMS) (FUSIÓN MAESTRA)
 # ==============================================================================
+
+#codigo antiguo antes de FUSIÓN MAESTRA
+#@app.get("/iclock/cdata")
+#async def iclock_init(request: Request):
+#    sn = request.query_params.get("SN", "")
+#    print(f"✅ Lector intentando conectar: SN={sn}")
+#    return PlainTextResponse(f"GET OPTION FROM: {sn}\nATTLOGStamp=None\nOPERLOGStamp=9999\nRealtime=1\nEncrypt=None\n")
 
 @app.get("/iclock/cdata")
 async def iclock_init(request: Request):
     sn = request.query_params.get("SN", "")
     print(f"✅ Lector intentando conectar: SN={sn}")
+    
+    # ⚡ INYECCIÓN: Ponemos el reloj en VERDE en la base de datos global
+    if sn:
+        sn_limpio = sn.strip().upper()
+        conn = conectar_bd("public")
+        cur = conn.cursor()
+        try:
+            cur.execute("""
+                UPDATE public.dispositivos 
+                SET estado = 'online', ultima_conexion = CURRENT_TIMESTAMP 
+                WHERE UPPER(TRIM(numero_serie)) = %s
+            """, (sn_limpio,))
+            conn.commit()
+        except Exception as e:
+            pass # Si falla, que no bloquee la conexión del reloj
+        finally:
+            cur.close(); conn.close()
+
+    # Mantenemos tu respuesta original intacta
     return PlainTextResponse(f"GET OPTION FROM: {sn}\nATTLOGStamp=None\nOPERLOGStamp=9999\nRealtime=1\nEncrypt=None\n")
+
+#codigo antiguo antes de FUSIÓN MAESTRA
+# ── EL RELOJ PREGUNTA SI HAY ÓRDENES PENDIENTES ──
+#@app.get("/iclock/getrequest")
+#async def iclock_getrequest(request: Request):
+#    sn = request.query_params.get("SN", "")
+#    # Le respondemos "OK" con salto de línea para indicarle que NO hay comandos pendientes.
+#    # Así el reloj se queda tranquilo y deja de hacer spam.
+#    return PlainTextResponse("OK\n")
 
 # ── EL RELOJ PREGUNTA SI HAY ÓRDENES PENDIENTES ──
 @app.get("/iclock/getrequest")
 async def iclock_getrequest(request: Request):
     sn = request.query_params.get("SN", "")
-    # Le respondemos "OK" con salto de línea para indicarle que NO hay comandos pendientes.
-    # Así el reloj se queda tranquilo y deja de hacer spam.
-    return PlainTextResponse("OK\n")
+    if not sn: return PlainTextResponse("OK\n")
+    
+    sn_limpio = sn.strip().upper()
+    conn = conectar_bd("public")
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    
+    try:
+        # 1. ⚡ INYECCIÓN: Mantenemos el estado en VERDE
+        cur.execute("UPDATE public.dispositivos SET estado='online', ultima_conexion=NOW() WHERE UPPER(TRIM(numero_serie))=%s", (sn_limpio,))
+
+        # 2. ⚡ INYECCIÓN: Revisamos el Buzón de Comandos (Para enviar el nombre)
+        cur.execute("""
+            SELECT id, comando FROM public.comandos_adms 
+            WHERE UPPER(TRIM(numero_serie)) = %s AND estado = 'pendiente' 
+            ORDER BY id ASC LIMIT 1
+        """, (sn_limpio,))
+        cmd = cur.fetchone()
+
+        if cmd:
+            # Enviamos el comando y lo marcamos como enviado
+            cmd_payload = f"C:{cmd['id']}:{cmd['comando']}\n"
+            cur.execute("UPDATE public.comandos_adms SET estado = 'enviado' WHERE id = %s", (cmd['id'],))
+            conn.commit()
+            return PlainTextResponse(cmd_payload)
+
+        conn.commit()
+        # Mantenemos tu respuesta original si no hay comandos
+        return PlainTextResponse("OK\n")
+    finally:
+        cur.close(); conn.close()
+
+#codigo antiguo antes de FUSIÓN MAESTRA
+# # ── RECEPCIÓN DE MARCAJES DEL LECTOR (VERSIÓN ASÍNCRONA ULTRA-RÁPIDA) ──
+# @app.post("/iclock/cdata")
+# async def iclock_data(request: Request, background_tasks: BackgroundTasks):
+#     table = request.query_params.get("table", "")
+#     sn = request.query_params.get("SN", "")
+#     body = await request.body()
+#     texto = body.decode("utf-8", errors="ignore")
+    
+#     if table == "ATTLOG":
+#         # 1. ENRUTADOR GLOBAL
+#         conn_maestra = conectar_bd("public")
+#         cur_m = conn_maestra.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        
+#         try:
+#             cur_m.execute("SELECT schema_name FROM public.dispositivos WHERE numero_serie = %s AND activo = TRUE", (sn,))
+#             disp = cur_m.fetchone()
+            
+#             if not disp:
+#                 print(f"⚠️ Reloj desconocido (SN: {sn}).")
+#                 return PlainTextResponse("OK\n")
+                
+#             schema_destino = disp["schema_name"]
+            
+#             # 2. Procesamos las huellas
+#             conn_e = conectar_bd(schema_destino)
+#             cur_e = conn_e.cursor()
+
+#             for linea in texto.strip().splitlines():
+#                 partes = linea.strip().split("\t")
+#                 if len(partes) >= 2:
+#                     bio_id = partes[0]
+#                     fecha_hora_str = partes[1] 
+#                     fecha_dt = datetime.strptime(fecha_hora_str, "%Y-%m-%d %H:%M:%S").date()
+                    
+#                     # ⚡ ESCUDO ANTI-DUPLICADOS: Si la huella exacta ya está, la ignoramos
+#                     cur_e.execute(f"SELECT id FROM {schema_destino}.eventos_brutos WHERE device_no = %s AND item = %s AND fecha_hora = %s", (sn, bio_id, fecha_hora_str))
+#                     if cur_e.fetchone():
+#                         continue 
+                        
+#                     # A) Guardamos en la Caja Negra
+#                     cur_e.execute(f"""
+#                         INSERT INTO {schema_destino}.eventos_brutos (device_no, item, verify_mode, action, fecha_hora, raw_data)
+#                         VALUES (%s, %s, %s, %s, %s, %s)
+#                     """, (sn, bio_id, partes[3] if len(partes)>3 else "1", partes[2] if len(partes)>2 else "0", fecha_hora_str, psycopg2.extras.Json({"raw": linea})))
+
+#                     # B) ⚡ ENCOLAMOS EL CÁLCULO EN SEGUNDO PLANO (El servidor ya no se congela)
+#                     cur_e.execute(f"SELECT id FROM {schema_destino}.empleados WHERE bio_id = %s", (bio_id,))
+#                     res_emp = cur_e.fetchone()
+#                     if res_emp:
+#                         background_tasks.add_task(procesar_asistencia_dia, schema_destino, res_emp[0], fecha_dt)
+#                         print(f"🚀 Marcaje encolado en [{schema_destino}] para BioID: {bio_id}")
+
+#             conn_e.commit()
+#             cur_e.close()
+#             conn_e.close()
+
+#         except Exception as e:
+#             print(f"❌ Error interno ADMS: {e}")
+#         finally:
+#             cur_m.close()
+#             conn_maestra.close()
+            
+#     # ⚡ FIX FINAL: El salto de línea \n es OBLIGATORIO para que el ZKTeco borre su memoria y deje de enviar
+#     return PlainTextResponse("OK\n")
 
 # ── RECEPCIÓN DE MARCAJES DEL LECTOR (VERSIÓN ASÍNCRONA ULTRA-RÁPIDA) ──
+
 @app.post("/iclock/cdata")
 async def iclock_data(request: Request, background_tasks: BackgroundTasks):
     table = request.query_params.get("table", "")
@@ -593,6 +722,17 @@ async def iclock_data(request: Request, background_tasks: BackgroundTasks):
     body = await request.body()
     texto = body.decode("utf-8", errors="ignore")
     
+    # ⚡ INYECCIÓN RÁPIDA: Si está enviando huellas, está ONLINE. Lo ponemos en verde.
+    if sn:
+        sn_limpio = sn.strip().upper()
+        conn_estado = conectar_bd("public")
+        cur_estado = conn_estado.cursor()
+        try:
+            cur_estado.execute("UPDATE public.dispositivos SET estado = 'online', ultima_conexion = CURRENT_TIMESTAMP WHERE UPPER(TRIM(numero_serie)) = %s", (sn_limpio,))
+            conn_estado.commit()
+        except: pass
+        finally: cur_estado.close(); conn_estado.close()
+
     if table == "ATTLOG":
         # 1. ENRUTADOR GLOBAL
         conn_maestra = conectar_bd("public")
@@ -630,7 +770,7 @@ async def iclock_data(request: Request, background_tasks: BackgroundTasks):
                         VALUES (%s, %s, %s, %s, %s, %s)
                     """, (sn, bio_id, partes[3] if len(partes)>3 else "1", partes[2] if len(partes)>2 else "0", fecha_hora_str, psycopg2.extras.Json({"raw": linea})))
 
-                    # B) ⚡ ENCOLAMOS EL CÁLCULO EN SEGUNDO PLANO (El servidor ya no se congela)
+                    # B) ⚡ ENCOLAMOS EL CÁLCULO EN SEGUNDO PLANO
                     cur_e.execute(f"SELECT id FROM {schema_destino}.empleados WHERE bio_id = %s", (bio_id,))
                     res_emp = cur_e.fetchone()
                     if res_emp:
@@ -647,9 +787,24 @@ async def iclock_data(request: Request, background_tasks: BackgroundTasks):
             cur_m.close()
             conn_maestra.close()
             
-    # ⚡ FIX FINAL: El salto de línea \n es OBLIGATORIO para que el ZKTeco borre su memoria y deje de enviar
+    # ⚡ FIX FINAL: El salto de línea \n es OBLIGATORIO
     return PlainTextResponse("OK\n")
 
+# ── EL RELOJ CONFIRMA QUE RECIBIÓ AL EMPLEADO (NUEVO ENDPOINT OBLIGATORIO) ──
+@app.post("/iclock/devicecmd")
+async def iclock_devicecmd(request: Request):
+    body = await request.body()
+    decoded = body.decode("utf-8", errors="ignore")
+    try:
+        # Formato esperado: ID=123&Return=0
+        cmd_id = decoded.split('=')[1].split('&')[0]
+        conn = conectar_bd("public")
+        cur = conn.cursor()
+        cur.execute("UPDATE public.comandos_adms SET estado = 'completado' WHERE id = %s", (cmd_id,))
+        conn.commit()
+        cur.close(); conn.close()
+    except: pass
+    return PlainTextResponse("OK\n")
 
 # ==============================================================================
 # 6. RUTA PARA ELIMINAR UNA EMPRESA (SOLO SUPERADMIN) ──
@@ -3821,74 +3976,6 @@ async def adms_propagar_huella(empleado_id: int, usuario = Depends(verificar_tok
     """
     schema = usuario["schema_name"]
     return {"mensaje": "Huella/Rostro extraído de la base de datos y propagado exitosamente a todas las sucursales."}
-
-# ==============================================================================
-# 19. MÓDULO: PROTOCOLO ADMS ZKTECO (ESCUCHA DE EQUIPOS FÍSICOS)
-# ==============================================================================
-@app.get("/iclock/cdata")
-@app.post("/iclock/cdata") # ⚡ AHORA SOPORTA POST
-async def adms_receive_data(SN: str):
-    """ Escucha pings y registros de asistencia del reloj """
-    sn_limpio = SN.strip().upper()
-    conn = conectar_bd("public")
-    cur = conn.cursor()
-    try:
-        # ⚡ BUSQUEDA BLINDADA: No importa mayúsculas/minúsculas ni espacios
-        cur.execute("""
-            UPDATE public.dispositivos 
-            SET estado = 'online', ultima_conexion = CURRENT_TIMESTAMP 
-            WHERE UPPER(TRIM(numero_serie)) = %s
-        """, (sn_limpio,))
-        conn.commit()
-        return PlainTextResponse("OK")
-    finally:
-        cur.close(); conn.close()
-
-@app.get("/iclock/getrequest")
-async def adms_heartbeat(SN: str):
-    """ El reloj pregunta por órdenes pendientes """
-    sn_limpio = SN.strip().upper()
-    conn = conectar_bd("public")
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    try:
-        # 1. Mantener el estado ONLINE
-        cur.execute("UPDATE public.dispositivos SET estado='online', ultima_conexion=NOW() WHERE UPPER(TRIM(numero_serie))=%s", (sn_limpio,))
-
-        # 2. Buscar comandos en el buzón
-        cur.execute("""
-            SELECT id, comando FROM public.comandos_adms 
-            WHERE UPPER(TRIM(numero_serie)) = %s AND estado = 'pendiente' 
-            ORDER BY id ASC LIMIT 1
-        """, (sn_limpio,))
-        cmd = cur.fetchone()
-
-        if cmd:
-            # ⚡ FORMATO ZKTECO: C:ID:COMANDO\n
-            cmd_payload = f"C:{cmd['id']}:{cmd['comando']}\n"
-            cur.execute("UPDATE public.comandos_adms SET estado = 'enviado' WHERE id = %s", (cmd['id'],))
-            conn.commit()
-            return PlainTextResponse(cmd_payload)
-
-        conn.commit()
-        return PlainTextResponse("OK")
-    finally:
-        cur.close(); conn.close()
-
-@app.post("/iclock/devicecmd")
-async def adms_confirm_cmd(request: Request):
-    """ El reloj confirma que ya recibió el nombre del empleado """
-    body = await request.body()
-    decoded = body.decode()
-    try:
-        # Marcamos como completado para limpiar el buzón
-        cmd_id = decoded.split('=')[1].split('&')[0]
-        conn = conectar_bd("public")
-        cur = conn.cursor()
-        cur.execute("UPDATE public.comandos_adms SET estado = 'completado' WHERE id = %s", (cmd_id,))
-        conn.commit()
-        cur.close(); conn.close()
-    except: pass
-    return PlainTextResponse("OK")
 
 # ── RUTA DE ESTADO (Para saber si la API está viva) ──
 @app.get("/")
