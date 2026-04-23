@@ -42,6 +42,10 @@ from reportlab.lib.pagesizes import A5, portrait
 from reportlab.pdfgen import canvas
 from reportlab.lib import colors
 
+
+import unicodedata
+
+
 # ==============================================================================
 # 2. CONFIGURACIÓN INICIAL DE LA APLICACIÓN
 # ==============================================================================
@@ -571,6 +575,14 @@ def procesar_asistencia_dia(schema: str, empleado_id: int, fecha: date):
 # 5. RUTAS PARA COMUNICACIÓN CON HARDWARE (ZKTeco ADMS) (FUSIÓN MAESTRA)
 # ==============================================================================
 
+def limpiar_texto_zk(texto):
+    """ Purifica el texto para el primitivo procesador del ZKTeco """
+    # Quita acentos (José -> JOSE)
+    texto = ''.join(c for c in unicodedata.normalize('NFD', str(texto)) if unicodedata.category(c) != 'Mn')
+    # Deja solo letras y números, y corta a 24 caracteres máximo
+    texto_limpio = re.sub(r'[^A-Z0-9 ]', '', texto.upper())
+    return texto_limpio[:24]
+
 #codigo antiguo antes de FUSIÓN MAESTRA
 #@app.get("/iclock/cdata")
 #async def iclock_init(request: Request):
@@ -791,18 +803,58 @@ async def iclock_data(request: Request, background_tasks: BackgroundTasks):
     return PlainTextResponse("OK\n")
 
 # ── EL RELOJ CONFIRMA QUE RECIBIÓ AL EMPLEADO (NUEVO ENDPOINT OBLIGATORIO) ──
+@app.get("/iclock/getrequest")
+async def adms_heartbeat(request: Request, SN: str = None):
+    sn_val = SN or request.query_params.get("SN")
+    if not sn_val: return PlainTextResponse("OK\n")
+    
+    sn_limpio = sn_val.strip().upper()
+    conn = conectar_bd("public")
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    
+    try:
+        cur.execute("UPDATE public.dispositivos SET estado='online', ultima_conexion=NOW() WHERE UPPER(TRIM(numero_serie))=%s", (sn_limpio,))
+
+        cur.execute("""
+            SELECT id, comando FROM public.comandos_adms 
+            WHERE UPPER(TRIM(numero_serie)) = %s AND estado = 'pendiente' 
+            ORDER BY id ASC LIMIT 1
+        """, (sn_limpio,))
+        cmd = cur.fetchone()
+
+        if cmd:
+            cmd_payload = f"C:{cmd['id']}:{cmd['comando']}\n"
+            cur.execute("UPDATE public.comandos_adms SET estado = 'enviado' WHERE id = %s", (cmd['id'],))
+            conn.commit()
+            
+            # 🚀 LOG VISUAL: Veremos en Railway el momento exacto en que el reloj se lleva la orden
+            print(f"🚀 [ENTREGA] Enviando al reloj {sn_limpio}: {cmd_payload.strip()}")
+            return PlainTextResponse(cmd_payload)
+
+        conn.commit()
+        return PlainTextResponse("OK\n")
+    finally:
+        cur.close(); conn.close()
+
 @app.post("/iclock/devicecmd")
-async def iclock_devicecmd(request: Request):
+async def iclock_devicecmd(request: Request, SN: str = None):
+    """ El reloj confirma si tuvo éxito o si falló al procesar el nombre """
+    sn_val = SN or request.query_params.get("SN")
     body = await request.body()
     decoded = body.decode("utf-8", errors="ignore")
+    
+    # 🎯 LOG VISUAL: Aquí veremos la verdad. Return=0 es ÉXITO. Return=-1 es ERROR.
+    print(f"🎯 [CONFIRMACIÓN] El reloj {sn_val} respondió: {decoded}")
+    
     try:
-        # Formato esperado: ID=123&Return=0
-        cmd_id = decoded.split('=')[1].split('&')[0]
-        conn = conectar_bd("public")
-        cur = conn.cursor()
-        cur.execute("UPDATE public.comandos_adms SET estado = 'completado' WHERE id = %s", (cmd_id,))
-        conn.commit()
-        cur.close(); conn.close()
+        partes = {p.split('=')[0]: p.split('=')[1] for p in decoded.split('&') if '=' in p}
+        cmd_id = partes.get('ID')
+        if cmd_id:
+            conn = conectar_bd("public")
+            cur = conn.cursor()
+            cur.execute("UPDATE public.comandos_adms SET estado = 'completado' WHERE id = %s", (cmd_id,))
+            conn.commit()
+            cur.close(); conn.close()
     except: pass
     return PlainTextResponse("OK\n")
 
@@ -3944,27 +3996,32 @@ async def adms_enviar_usuario(empleado_id: int, usuario = Depends(verificar_toke
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        cur.execute(f"SELECT id, nombres, apellidos FROM {schema}.empleados WHERE id = %s", (empleado_id,))
+        # Traemos la info del empleado del schema privado
+        cur.execute(f"SELECT id, bio_id, nombres, apellidos FROM {schema}.empleados WHERE id = %s", (empleado_id,))
         emp = cur.fetchone()
         if not emp: raise HTTPException(status_code=404)
 
-        nombre_zk = f"{emp['nombres'].split()[0]} {emp['apellidos'].split()[0]}"
+        # ⚡ 1. USAMOS BIO_ID (El número que el reloj entiende)
+        pin_zk = emp.get('bio_id') or emp['id']
         
-        # ⚡ PROTOCOLO ADMS: Usamos tabulaciones (\t) para que el K50 Pro lo entienda
-        comando = f"DATA UPDATE USERINFO PIN={emp['id']}\tName={nombre_zk}\tPri=0\tPasswd=\tCard=\tGrp=1\tTZ=00000001\tVerify=0"
+        # ⚡ 2. PURIFICAMOS EL NOMBRE (Sin acentos, todo mayúsculas)
+        nombre_crudo = f"{emp['nombres'].split()[0]} {emp['apellidos'].split()[0]}"
+        nombre_zk = limpiar_texto_zk(nombre_crudo)
+        
+        # ⚡ 3. COMANDO ESTRICTO PARA K50 (Solo los campos esenciales separados por \t)
+        comando = f"DATA UPDATE USERINFO PIN={pin_zk}\tName={nombre_zk}\tPri=0\tGrp=1\tTZ=00000001"
 
-        # Buscamos los relojes registrados para esta empresa
         cur.execute("SELECT numero_serie FROM public.dispositivos WHERE schema_name = %s", (schema,))
         relojes = cur.fetchall()
-        
         if not relojes: raise HTTPException(status_code=400, detail="No hay relojes registrados.")
 
         for r in relojes:
             sn_r = r['numero_serie'].strip().upper()
             cur.execute("INSERT INTO public.comandos_adms (numero_serie, comando) VALUES (%s, %s)", (sn_r, comando))
+            print(f"📦 [BUZÓN] Comando encolado para Reloj {sn_r}: {comando}") # LOG VISUAL
         
         conn.commit()
-        return {"mensaje": f"Orden encolada para {len(relojes)} equipo(s). El reloj descargará a '{nombre_zk}' en segundos."}
+        return {"mensaje": f"Orden enviada. El reloj descargará a '{nombre_zk}' (PIN: {pin_zk})."}
     finally:
         cur.close(); conn.close()
 
