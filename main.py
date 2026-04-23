@@ -733,6 +733,11 @@ async def iclock_data(request: Request, background_tasks: BackgroundTasks):
     body = await request.body()
     texto = body.decode("utf-8", errors="ignore")
     
+    # ==========================================
+    # 🕵️‍♂️ EL ESPÍA (Inyecta esta línea aquí)
+    # ==========================================
+    print(f"📦 [DATA RECIBIDA] SN: {sn} | Tabla: {table} | Contenido: {texto[:200]}...")
+    
     # ⚡ 1. ESTADO VERDE INMEDIATO
     if sn:
         sn_limpio = sn.strip().upper()
