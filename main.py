@@ -3782,6 +3782,7 @@ async def eliminar_lector(lector_id: int, usuario = Depends(verificar_token)):
 # 18. MÓDULO: SINCRONIZACIÓN ADMS (FRONTEND TONTO)
 # ==============================================================================
 
+# --- ACTUALIZAR TAMBIÉN ESTA FUNCIÓN EN TU MAIN.PY ---
 @app.post("/empleados/{empleado_id}/adms/enviar-usuario")
 async def adms_enviar_usuario(empleado_id: int, usuario = Depends(verificar_token)):
     schema = usuario["schema_name"]
@@ -3794,18 +3795,18 @@ async def adms_enviar_usuario(empleado_id: int, usuario = Depends(verificar_toke
 
         nombre_zk = f"{emp['nombres'].split()[0]} {emp['apellidos'].split()[0]}"
         
-        # ⚡ PROTOCOLO ADMS MAESTRO: Usamos tabulaciones (\t) en lugar de espacios
-        # Formato: PIN, Name, Pri, Password, Card, Group, Timezone, Verify
+        # ⚡ PROTOCOLO K50 PRO: Tabulaciones obligatorias (\t)
         comando = f"DATA UPDATE USERINFO PIN={emp['id']}\tName={nombre_zk}\tPri=0\tPasswd=\tCard=\tGrp=1\tTZ=00000001\tVerify=0"
 
         cur.execute("SELECT numero_serie FROM public.dispositivos WHERE schema_name = %s", (schema,))
         relojes = cur.fetchall()
         
         for r in relojes:
-            cur.execute("INSERT INTO public.comandos_adms (numero_serie, comando) VALUES (%s, %s)", (r['numero_serie'], comando))
+            sn_r = r['numero_serie'].strip().upper()
+            cur.execute("INSERT INTO public.comandos_adms (numero_serie, comando) VALUES (%s, %s)", (sn_r, comando))
         
         conn.commit()
-        return {"mensaje": "Orden sincronizada. El reloj descargará los datos en su próximo ciclo."}
+        return {"mensaje": "Orden encolada. El reloj la descargará en segundos."}
     finally:
         cur.close(); conn.close()
 
@@ -3822,18 +3823,18 @@ async def adms_propagar_huella(empleado_id: int, usuario = Depends(verificar_tok
 # 19. MÓDULO: PROTOCOLO ADMS ZKTECO (ESCUCHA DE EQUIPOS FÍSICOS)
 # ==============================================================================
 @app.get("/iclock/cdata")
-@app.post("/iclock/cdata") # El reloj también manda datos por POST
+@app.post("/iclock/cdata")
 async def adms_receive_data(SN: str, request: Request):
     """ Escucha pings y registros de asistencia del reloj """
+    sn_clean = SN.strip().upper() # Blindaje total
     conn = conectar_bd("public")
     cur = conn.cursor()
     try:
-        # 1. Actualizamos estado del reloj detectado
         cur.execute("""
             UPDATE public.dispositivos 
             SET estado = 'online', ultima_conexion = CURRENT_TIMESTAMP 
-            WHERE numero_serie = %s
-        """, (SN,))
+            WHERE UPPER(TRIM(numero_serie)) = %s
+        """, (sn_clean,))
         conn.commit()
         return PlainTextResponse("OK")
     finally:
@@ -3841,26 +3842,27 @@ async def adms_receive_data(SN: str, request: Request):
 
 @app.get("/iclock/getrequest")
 async def adms_heartbeat(SN: str):
-    """ El reloj pregunta por órdenes pendientes (Buzón de Comandos) """
+    """ El reloj pregunta por órdenes (Buzón de Comandos) """
+    sn_clean = SN.strip().upper()
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        # Log de conexión para ver el SN real en consola
-        print(f"📡 Lector {SN} solicitando comandos...")
-        
-        # 1. Mantener el estado ONLINE
-        cur.execute("UPDATE public.dispositivos SET estado='online', ultima_conexion=NOW() WHERE numero_serie=%s", (SN,))
+        # 1. Mantener el estado ONLINE en cada ping
+        cur.execute("""
+            UPDATE public.dispositivos SET estado='online', ultima_conexion=NOW() 
+            WHERE UPPER(TRIM(numero_serie)) = %s
+        """, (sn_clean,))
 
-        # 2. Buscar comandos pendientes
+        # 2. Buscar comandos pendientes para ESTE equipo
         cur.execute("""
             SELECT id, comando FROM public.comandos_adms 
-            WHERE numero_serie = %s AND estado = 'pendiente' 
+            WHERE UPPER(TRIM(numero_serie)) = %s AND estado = 'pendiente' 
             ORDER BY id ASC LIMIT 1
-        """, (SN,))
+        """, (sn_clean,))
         cmd = cur.fetchone()
 
         if cmd:
-            # ⚡ IMPORTANTE: El formato C:ID:COMANDO\n es vital para ZKTeco
+            # ⚡ FORMATO K50 PRO: C:{ID}:{COMANDO}\n (Importante el salto de línea final)
             cmd_payload = f"C:{cmd['id']}:{cmd['comando']}\n"
             cur.execute("UPDATE public.comandos_adms SET estado = 'enviado' WHERE id = %s", (cmd['id'],))
             conn.commit()
