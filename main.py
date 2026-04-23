@@ -3784,25 +3784,36 @@ async def eliminar_lector(lector_id: int, usuario = Depends(verificar_token)):
 
 @app.post("/empleados/{empleado_id}/adms/enviar-usuario")
 async def adms_enviar_usuario(empleado_id: int, usuario = Depends(verificar_token)):
-    """ 
-    Paso 1: RRHH registra al usuario en el sistema.
-    Este endpoint encola la orden para que los lectores descarguen el ID y Nombre del empleado.
-    """
     schema = usuario["schema_name"]
-    conn = conectar_bd(schema)
+    conn = conectar_bd("public") # Usamos public para poder acceder a los comandos globales
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        # Extraemos al empleado
+        # 1. Obtenemos datos del empleado
         cur.execute(f"SELECT id, nombres, apellidos FROM {schema}.empleados WHERE id = %s", (empleado_id,))
         emp = cur.fetchone()
         if not emp: raise HTTPException(status_code=404, detail="Empleado no encontrado")
 
         nombre_corto = f"{emp['nombres'].split()[0]} {emp['apellidos'].split()[0]}"
-
-        # AQUÍ IRÍA LA LÓGICA DE INSERCIÓN EN TU TABLA DE COMANDOS ADMS
-        # Ej: INSERT INTO adms_comandos (dispositivo_sn, comando) VALUES ('ALL', 'DATA UPDATE USERINFO PIN=id Name=nombre...')
         
-        return {"mensaje": f"Orden enviada. En unos minutos, '{nombre_corto}' aparecerá en todos los lectores listo para registrar su huella."}
+        # 2. Obtenemos todos los relojes de esta empresa
+        cur.execute("SELECT numero_serie FROM public.dispositivos WHERE schema_name = %s", (schema,))
+        relojes = cur.fetchall()
+
+        if not relojes:
+            raise HTTPException(status_code=400, detail="No hay relojes registrados para esta empresa.")
+
+        # 3. Metemos el comando en el "Buzón" para cada reloj
+        # El formato ZKTeco es: DATA UPDATE USERINFO PIN={id} Name={nombre} Pri=0
+        comando_adms = f"DATA UPDATE USERINFO PIN={emp['id']} Name={nombre_corto} Pri=0"
+
+        for reloj in relojes:
+            cur.execute("""
+                INSERT INTO public.comandos_adms (numero_serie, comando)
+                VALUES (%s, %s)
+            """, (reloj['numero_serie'], comando_adms))
+            
+        conn.commit()
+        return {"mensaje": f"Orden encolada. En los próximos segundos, '{nombre_corto}' aparecerá en la pantalla del equipo."}
     finally:
         cur.close()
         conn.close()
@@ -3844,22 +3855,39 @@ async def adms_handshake(SN: str):
 
 @app.get("/iclock/getrequest")
 async def adms_heartbeat(SN: str):
-    """
-    Paso 2 del ADMS: El reloj hace un ping periódico preguntando "¿Tienes órdenes para mí?".
-    Esto mantiene el estado del reloj como ONLINE.
-    """
     conn = conectar_bd("public")
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
+        # 1. El reloj dice "Estoy vivo", actualizamos su estado
         cur.execute("""
             UPDATE public.dispositivos 
             SET estado = 'online', ultima_conexion = CURRENT_TIMESTAMP 
             WHERE numero_serie = %s
         """, (SN,))
+
+        # 2. El reloj pregunta "¿Tienes órdenes para mí?"
+        # Buscamos en el buzón si hay algo pendiente
+        cur.execute("""
+            SELECT id, comando 
+            FROM public.comandos_adms 
+            WHERE numero_serie = %s AND estado = 'pendiente' 
+            ORDER BY id ASC LIMIT 1
+        """, (SN,))
+        cmd = cur.fetchone()
+
+        if cmd:
+            # Si hay un comando, ZKTeco exige este formato estricto: C:{ID_COMANDO}:{TEXTO_COMANDO}
+            cmd_string = f"C:{cmd['id']}:{cmd['comando']}"
+            
+            # Lo marcamos como enviado para no mandarlo dos veces
+            cur.execute("UPDATE public.comandos_adms SET estado = 'enviado' WHERE id = %s", (cmd['id'],))
+            conn.commit()
+            
+            # ¡Le entregamos la orden al reloj!
+            return PlainTextResponse(cmd_string)
+
         conn.commit()
-        
-        # Aquí enviaremos los comandos de huellas después. 
-        # Por ahora, le decimos "OK" (no hay comandos pendientes).
+        # Si el buzón está vacío, le decimos "Todo tranquilo"
         return PlainTextResponse("OK")
     finally:
         cur.close()
