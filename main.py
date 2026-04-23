@@ -737,7 +737,7 @@ async def iclock_data(request: Request, background_tasks: BackgroundTasks):
     # 🕵️‍♂️ EL ESPÍA (Inyecta esta línea aquí)
     # ==========================================
     print(f"📦 [DATA RECIBIDA] SN: {sn} | Tabla: {table} | Contenido: {texto[:200]}...")
-    
+
     # ⚡ 1. ESTADO VERDE INMEDIATO
     if sn:
         sn_limpio = sn.strip().upper()
@@ -810,6 +810,31 @@ async def iclock_data(request: Request, background_tasks: BackgroundTasks):
             print(f"🧬 [BÓVEDA BIOMÉTRICA] Huellas respaldadas en BD para empresa: {schema_destino}")
         except Exception as e: print(f"❌ Error guardando huella: {e}")
         finally: cur_h.close(); conn_huellas.close()
+    # ⚡ 5. SI EL RELOJ RESPONDE A UNA EXTRACCIÓN MANUAL (OPERLOG)
+    elif table == "OPERLOG":
+        conn_huellas = conectar_bd("public")
+        cur_h = conn_huellas.cursor()
+        try:
+            for linea in texto.strip().splitlines():
+                # Buscamos si la línea es una respuesta de huella (empieza con "FP PIN=")
+                if linea.startswith("FP PIN="):
+                    # Le quitamos el "FP " del inicio para poder leerlo normal
+                    linea_limpia = linea.replace("FP ", "", 1)
+                    
+                    # Ahora lo partimos como siempre
+                    partes = {p.split('=')[0]: p.split('=')[1] for p in linea_limpia.split('\t') if '=' in p}
+                    
+                    if 'PIN' in partes and 'TMP' in partes:
+                        cur_h.execute("""
+                            INSERT INTO public.huellas_adms (schema_name, pin, fid, template)
+                            VALUES (%s, %s, %s, %s)
+                            ON CONFLICT (schema_name, pin, fid) 
+                            DO UPDATE SET template = EXCLUDED.template, fecha_actualizacion = CURRENT_TIMESTAMP
+                        """, (schema_destino, partes['PIN'], partes.get('FID', '0'), partes['TMP']))
+                        print(f"✅ [EXTRACCIÓN EXITOSA] Huella de PIN {partes['PIN']} guardada en Bóveda desde OPERLOG.")
+            conn_huellas.commit()
+        except Exception as e: print(f"❌ Error en OPERLOG: {e}")
+        finally: cur_h.close(); conn_huellas.close()    
 
     return PlainTextResponse("OK\n")
 
@@ -4038,29 +4063,46 @@ async def adms_enviar_usuario(empleado_id: int, usuario = Depends(verificar_toke
 
 @app.post("/lectores/{lector_id}/extraer-huellas")
 async def adms_extraer_huellas(lector_id: int, usuario = Depends(verificar_token)):
-    """ Ordena al reloj físico que suba toda su memoria de huellas a la Bóveda """
+    """ Ordena al reloj que suba las huellas de todos los empleados registrados en el ERP (Una por una) """
     schema = usuario["schema_name"]
+    
+    # 1. Buscamos a todos los empleados activos de la base de datos de la empresa
+    conn_priv = conectar_bd(schema)
+    cur_priv = conn_priv.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        # Traemos los IDs para saber qué PINs preguntarle al reloj
+        cur_priv.execute(f"SELECT id, bio_id FROM {schema}.empleados WHERE estado = 'Activo'")
+        empleados = cur_priv.fetchall()
+        if not empleados:
+            raise HTTPException(status_code=400, detail="No hay empleados en la planilla para solicitar huellas.")
+    finally:
+        cur_priv.close(); conn_priv.close()
+
+    # 2. Conectamos con el Lector
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        # 1. Buscamos el Número de Serie del lector que el usuario eligió
         cur.execute("SELECT numero_serie FROM public.dispositivos WHERE id = %s AND schema_name = %s", (lector_id, schema))
         lector = cur.fetchone()
         if not lector: raise HTTPException(status_code=404, detail="Lector no encontrado.")
 
         sn_limpio = lector['numero_serie'].strip().upper()
 
-        # 2. ⚡ COMANDO DE EXTRACCIÓN MASIVA (El comodín PIN=* pide todos los usuarios)
-       # comando = "DATA QUERY FINGERTMP PIN=*"
-        # Le pedimos la huella específicamente de Isaac (PIN 102)
-        #comando = "DATA QUERY USERINFO PIN=*"
-        comando = "DATA QUERY FINGERTMP PIN=102"
+        # 3. ⚡ EL BUCLE MÁGICO: Creamos una orden individual por cada empleado
+        comandos_encolados = 0
+        for emp in empleados:
+            # Determinamos el PIN (Si RRHH le puso bio_id, usamos ese, sino el ID normal)
+            pin_zk = emp.get('bio_id') or emp['id']
+            
+            # Comando quirúrgico individual
+            comando = f"DATA QUERY FINGERTMP PIN={pin_zk}"
+            
+            cur.execute("INSERT INTO public.comandos_adms (numero_serie, comando) VALUES (%s, %s)", (sn_limpio, comando))
+            comandos_encolados += 1
         
-        # 3. Metemos la orden al buzón
-        cur.execute("INSERT INTO public.comandos_adms (numero_serie, comando) VALUES (%s, %s)", (sn_limpio, comando))
         conn.commit()
         
-        return {"mensaje": "Orden de Extracción enviada. El reloj comenzará a subir todas sus huellas a la Nube en los próximos minutos."}
+        return {"mensaje": f"¡Aspiradora Inteligente Activada! Se enviaron {comandos_encolados} peticiones individuales. El reloj subirá las huellas que encuentre en los próximos minutos."}
     finally:
         cur.close(); conn.close()
 
