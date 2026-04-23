@@ -797,11 +797,10 @@ async def iclock_data(request: Request, background_tasks: BackgroundTasks):
         cur_h = conn_huellas.cursor()
         try:
             for linea in texto.strip().splitlines():
-                partes = {p.split('=')[0]: p.split('=')[1] for p in linea.split('\t') if '=' in p}
+                # 🛡️ FIX CRÍTICO: split('=', 1) para no cortar los "==" del Base64
+                partes = {p.split('=', 1)[0]: p.split('=', 1)[1] for p in linea.split('\t') if '=' in p}
                 if 'PIN' in partes and 'TMP' in partes:
-                    # ⚡ CAPTURAMOS EL TAMAÑO ORIGINAL EXACTO
                     tamano = int(partes.get('Size', 0))
-                    
                     cur_h.execute("""
                         INSERT INTO public.huellas_adms (schema_name, pin, fid, template, template_size)
                         VALUES (%s, %s, %s, %s, %s)
@@ -821,12 +820,11 @@ async def iclock_data(request: Request, background_tasks: BackgroundTasks):
             for linea in texto.strip().splitlines():
                 if linea.startswith("FP PIN="):
                     linea_limpia = linea.replace("FP ", "", 1)
-                    partes = {p.split('=')[0]: p.split('=')[1] for p in linea_limpia.split('\t') if '=' in p}
+                    # 🛡️ FIX CRÍTICO: split('=', 1) para no cortar los "==" del Base64
+                    partes = {p.split('=', 1)[0]: p.split('=', 1)[1] for p in linea_limpia.split('\t') if '=' in p}
                     
                     if 'PIN' in partes and 'TMP' in partes:
-                        # ⚡ CAPTURAMOS EL TAMAÑO ORIGINAL EXACTO
                         tamano = int(partes.get('Size', 0))
-                        
                         cur_h.execute("""
                             INSERT INTO public.huellas_adms (schema_name, pin, fid, template, template_size)
                             VALUES (%s, %s, %s, %s, %s)
@@ -836,7 +834,7 @@ async def iclock_data(request: Request, background_tasks: BackgroundTasks):
                         print(f"✅ [EXTRACCIÓN EXITOSA] Huella de PIN {partes['PIN']} (Size: {tamano}) guardada en Bóveda desde OPERLOG.")
             conn_huellas.commit()
         except Exception as e: print(f"❌ Error en OPERLOG: {e}")
-        finally: cur_h.close(); conn_huellas.close()   
+        finally: cur_h.close(); conn_huellas.close()
 
     return PlainTextResponse("OK\n")
 
@@ -4199,8 +4197,9 @@ async def adms_extraer_huellas(lector_id: int, usuario = Depends(verificar_token
 @app.post("/empleados/{empleado_id}/adms/propagar-huella")
 async def adms_propagar_huella(empleado_id: int, usuario = Depends(verificar_token)):
     schema = usuario["schema_name"]
+    import base64 # 🛡️ Importamos para el salvavidas matemático
     
-    # 1. Obtenemos el PIN del empleado en la empresa actual
+    # 1. Obtenemos el PIN
     conn_priv = conectar_bd(schema)
     cur_priv = conn_priv.cursor()
     try:
@@ -4211,7 +4210,7 @@ async def adms_propagar_huella(empleado_id: int, usuario = Depends(verificar_tok
     finally:
         cur_priv.close(); conn_priv.close()
 
-    # 2. Buscamos en la Bóveda Global (⚡ AHORA TRAEMOS EL TEMPLATE_SIZE)
+    # 2. Buscamos en la Bóveda Global
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
@@ -4219,7 +4218,7 @@ async def adms_propagar_huella(empleado_id: int, usuario = Depends(verificar_tok
         huellas = cur.fetchall()
 
         if not huellas:
-            raise HTTPException(status_code=400, detail=f"No hay huellas guardadas en la nube para este empleado. Por favor, registre su huella en el reloj físico primero para que se sincronice.")
+            raise HTTPException(status_code=400, detail=f"No hay huellas guardadas en la nube para este empleado.")
 
         cur.execute("SELECT numero_serie FROM public.dispositivos WHERE schema_name = %s", (schema,))
         relojes = cur.fetchall()
@@ -4228,21 +4227,38 @@ async def adms_propagar_huella(empleado_id: int, usuario = Depends(verificar_tok
         for r in relojes:
             sn_r = r['numero_serie'].strip().upper()
             for h in huellas:
-                huella_limpia = h['template'].strip()
-                # ⚡ EXTRAEMOS EL TAMAÑO ORIGINAL QUE EL RELOJ NOS REPORTÓ ANTES
-                tamano_exacto = h['template_size']
+                # 🛡️ LIMPIEZA EXTREMA
+                huella_limpia = str(h['template']).replace('\n', '').replace('\r', '').replace(' ', '').strip()
                 
-                # ⚡ VOLVEMOS A INCLUIR 'Size=' EN EL COMANDO (PERO CON EL NÚMERO PERFECTO)
+                # 🛡️ RESTAURAR PADDING BASE64 (Obligatorio)
+                faltan = len(huella_limpia) % 4
+                if faltan:
+                    huella_limpia += '=' * (4 - faltan)
+                
+                # ⚡ EL DATO MÁGICO DE TU BASE DE DATOS
+                tamano_exacto = h.get('template_size') or 0
+                
+                # 🛡️ SALVAVIDAS: Si el tamaño es 0 (Huella guardada antes del update), lo calculamos
+                if tamano_exacto == 0:
+                    try:
+                        tamano_exacto = len(base64.b64decode(huella_limpia))
+                    except:
+                        tamano_exacto = len(huella_limpia) # Último recurso
+                
+                # ⚡ COMANDO PERFECTO
                 cmd = f"DATA UPDATE FINGERTMP PIN={pin_zk}\tFID={h['fid']}\tSize={tamano_exacto}\tValid=1\tTMP={huella_limpia}"
+                
+                print(f"📦 [ENVIANDO HUELLA] {sn_r} | PIN={pin_zk} | Size={tamano_exacto} | Command: {cmd[:60]}...")
                 
                 cur.execute("INSERT INTO public.comandos_adms (numero_serie, comando) VALUES (%s, %s)", (sn_r, cmd))
                 comandos_encolados += 1
         
         conn.commit()
-        return {"mensaje": f"Se extrajeron {len(huellas)} plantilla(s) biométrica(s) con peso exacto. Se están enviando a los lectores registrados."}
+        return {"mensaje": f"Se extrajeron {len(huellas)} plantilla(s). Enviando a relojes con peso ajustado."}
     finally:
         cur.close(); conn.close()
 
+        
 # ── RUTA DE ESTADO (Para saber si la API está viva) ──
 @app.get("/")
 def inicio():
