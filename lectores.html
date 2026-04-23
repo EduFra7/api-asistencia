@@ -149,8 +149,9 @@
                     <td class="px-6 py-4 font-mono text-xs text-blue-700 bg-blue-50 rounded px-2">${l.numero_serie}</td>
                     <td class="px-6 py-4 text-xs text-gray-500"><i class="far fa-clock mr-1"></i>${l.ultima_conexion ? l.ultima_conexion.replace('T', ' ').substring(0, 19) : 'Nunca'}</td>
                     <td class="px-6 py-4 text-center">
-                        <button onclick="abrirModal(${l.id})" class="text-blue-500 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 p-2 rounded mr-1 transition-colors"><i class="fas fa-edit"></i></button>
-                        <button onclick="eliminarLector(${l.id})" class="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 p-2 rounded transition-colors"><i class="fas fa-trash"></i></button>
+                        <button onclick="extraerHuellasLector(${l.id})" title="Extraer Huellas al Servidor" class="text-amber-500 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 p-2 rounded mr-1 transition-colors"><i class="fas fa-cloud-download-alt"></i></button>
+                        <button onclick="abrirModal(${l.id})" title="Editar" class="text-blue-500 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 p-2 rounded mr-1 transition-colors"><i class="fas fa-edit"></i></button>
+                        <button onclick="eliminarLector(${l.id})" title="Eliminar" class="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 p-2 rounded transition-colors"><i class="fas fa-trash"></i></button>
                     </td>
                 </tr>`;
             }).join('');
@@ -217,6 +218,19 @@
                     const res = await fetch(`${API_URL}/lectores/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token_api}` }});
                     if (res.ok) { mostrarExito("Equipo eliminado"); cargarLectores(true); }
                 } catch(e) { mostrarError("Fallo al eliminar."); }
+            }
+        }
+
+        async function extraerHuellasLector(id) {
+            if (await pedirConfirmacion("¿Extraer todas las huellas de este equipo?", "El reloj subirá una copia de su memoria a la Bóveda en la Nube. Esto puede tardar un par de minutos si hay muchos empleados.")) {
+                Swal.fire({ title: 'Enviando orden...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                try {
+                    const res = await fetch(`${API_URL}/lectores/${id}/extraer-huellas`, { method: 'POST', headers: { 'Authorization': `Bearer ${token_api}` }});
+                    const data = await res.json();
+                    if (res.ok) { 
+                        Swal.fire('¡Aspiradora Activada!', data.mensaje, 'success'); 
+                    } else { throw new Error(data.detail); }
+                } catch(e) { mostrarError(e.message); }
             }
         }
 

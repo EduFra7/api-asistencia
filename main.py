@@ -725,8 +725,7 @@ async def iclock_getrequest(request: Request):
 #     # ⚡ FIX FINAL: El salto de línea \n es OBLIGATORIO para que el ZKTeco borre su memoria y deje de enviar
 #     return PlainTextResponse("OK\n")
 
-# ── RECEPCIÓN DE MARCAJES DEL LECTOR (VERSIÓN ASÍNCRONA ULTRA-RÁPIDA) ──
-
+# ── RECEPCIÓN DE MARCAJES Y HUELLAS DEL LECTOR (VERSIÓN ULTRA-RÁPIDA) ──
 @app.post("/iclock/cdata")
 async def iclock_data(request: Request, background_tasks: BackgroundTasks):
     table = request.query_params.get("table", "")
@@ -734,36 +733,36 @@ async def iclock_data(request: Request, background_tasks: BackgroundTasks):
     body = await request.body()
     texto = body.decode("utf-8", errors="ignore")
     
-    # ⚡ INYECCIÓN RÁPIDA: Si está enviando huellas, está ONLINE. Lo ponemos en verde.
+    # ⚡ 1. ESTADO VERDE INMEDIATO
     if sn:
         sn_limpio = sn.strip().upper()
         conn_estado = conectar_bd("public")
         cur_estado = conn_estado.cursor()
         try:
-            cur_estado.execute("UPDATE public.dispositivos SET estado = 'online', ultima_conexion = CURRENT_TIMESTAMP WHERE UPPER(TRIM(numero_serie)) = %s", (sn_limpio,))
+            cur_estado.execute("UPDATE public.dispositivos SET estado='online', ultima_conexion=CURRENT_TIMESTAMP WHERE UPPER(TRIM(numero_serie))=%s", (sn_limpio,))
             conn_estado.commit()
         except: pass
         finally: cur_estado.close(); conn_estado.close()
 
-    if table == "ATTLOG":
-        # 1. ENRUTADOR GLOBAL
-        conn_maestra = conectar_bd("public")
-        cur_m = conn_maestra.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        
-        try:
-            cur_m.execute("SELECT schema_name FROM public.dispositivos WHERE numero_serie = %s AND activo = TRUE", (sn,))
-            disp = cur_m.fetchone()
-            
-            if not disp:
-                print(f"⚠️ Reloj desconocido (SN: {sn}).")
-                return PlainTextResponse("OK\n")
-                
-            schema_destino = disp["schema_name"]
-            
-            # 2. Procesamos las huellas
-            conn_e = conectar_bd(schema_destino)
-            cur_e = conn_e.cursor()
+    # ⚡ 2. ENRUTADOR GLOBAL
+    conn_maestra = conectar_bd("public")
+    cur_m = conn_maestra.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    schema_destino = None
+    try:
+        cur_m.execute("SELECT schema_name FROM public.dispositivos WHERE UPPER(TRIM(numero_serie)) = %s AND activo = TRUE", (sn_limpio,))
+        disp = cur_m.fetchone()
+        if disp: schema_destino = disp["schema_name"]
+    except: pass
+    finally: cur_m.close(); conn_maestra.close()
 
+    if not schema_destino:
+        return PlainTextResponse("OK\n")
+
+    # ⚡ 3. SI EL RELOJ ENVÍA ASISTENCIA (ATTLOG)
+    if table == "ATTLOG":
+        conn_e = conectar_bd(schema_destino)
+        cur_e = conn_e.cursor()
+        try:
             for linea in texto.strip().splitlines():
                 partes = linea.strip().split("\t")
                 if len(partes) >= 2:
@@ -771,35 +770,42 @@ async def iclock_data(request: Request, background_tasks: BackgroundTasks):
                     fecha_hora_str = partes[1] 
                     fecha_dt = datetime.strptime(fecha_hora_str, "%Y-%m-%d %H:%M:%S").date()
                     
-                    # ⚡ ESCUDO ANTI-DUPLICADOS: Si la huella exacta ya está, la ignoramos
                     cur_e.execute(f"SELECT id FROM {schema_destino}.eventos_brutos WHERE device_no = %s AND item = %s AND fecha_hora = %s", (sn, bio_id, fecha_hora_str))
-                    if cur_e.fetchone():
-                        continue 
+                    if cur_e.fetchone(): continue 
                         
-                    # A) Guardamos en la Caja Negra
                     cur_e.execute(f"""
                         INSERT INTO {schema_destino}.eventos_brutos (device_no, item, verify_mode, action, fecha_hora, raw_data)
                         VALUES (%s, %s, %s, %s, %s, %s)
                     """, (sn, bio_id, partes[3] if len(partes)>3 else "1", partes[2] if len(partes)>2 else "0", fecha_hora_str, psycopg2.extras.Json({"raw": linea})))
 
-                    # B) ⚡ ENCOLAMOS EL CÁLCULO EN SEGUNDO PLANO
                     cur_e.execute(f"SELECT id FROM {schema_destino}.empleados WHERE bio_id = %s", (bio_id,))
                     res_emp = cur_e.fetchone()
                     if res_emp:
                         background_tasks.add_task(procesar_asistencia_dia, schema_destino, res_emp[0], fecha_dt)
-                        print(f"🚀 Marcaje encolado en [{schema_destino}] para BioID: {bio_id}")
-
             conn_e.commit()
-            cur_e.close()
-            conn_e.close()
+        except Exception as e: print(f"❌ Error interno ADMS Asistencia: {e}")
+        finally: cur_e.close(); conn_e.close()
 
-        except Exception as e:
-            print(f"❌ Error interno ADMS: {e}")
-        finally:
-            cur_m.close()
-            conn_maestra.close()
-            
-    # ⚡ FIX FINAL: El salto de línea \n es OBLIGATORIO
+    # ⚡ 4. SI EL RELOJ SUBE UNA HUELLA NUEVA (FINGERTMP)
+    elif table == "FINGERTMP":
+        conn_huellas = conectar_bd("public")
+        cur_h = conn_huellas.cursor()
+        try:
+            for linea in texto.strip().splitlines():
+                # El formato ZKTeco es: PIN=102 \t FID=0 \t Size=700 \t Valid=1 \t TMP=XYZ...
+                partes = {p.split('=')[0]: p.split('=')[1] for p in linea.split('\t') if '=' in p}
+                if 'PIN' in partes and 'TMP' in partes:
+                    cur_h.execute("""
+                        INSERT INTO public.huellas_adms (schema_name, pin, fid, template)
+                        VALUES (%s, %s, %s, %s)
+                        ON CONFLICT (schema_name, pin, fid) 
+                        DO UPDATE SET template = EXCLUDED.template, fecha_actualizacion = CURRENT_TIMESTAMP
+                    """, (schema_destino, partes['PIN'], partes.get('FID', '0'), partes['TMP']))
+            conn_huellas.commit()
+            print(f"🧬 [BÓVEDA BIOMÉTRICA] Huellas respaldadas en BD para empresa: {schema_destino}")
+        except Exception as e: print(f"❌ Error guardando huella: {e}")
+        finally: cur_h.close(); conn_huellas.close()
+
     return PlainTextResponse("OK\n")
 
 # ── EL RELOJ CONFIRMA QUE RECIBIÓ AL EMPLEADO (NUEVO ENDPOINT OBLIGATORIO) ──
@@ -4025,14 +4031,72 @@ async def adms_enviar_usuario(empleado_id: int, usuario = Depends(verificar_toke
     finally:
         cur.close(); conn.close()
 
+@app.post("/lectores/{lector_id}/extraer-huellas")
+async def adms_extraer_huellas(lector_id: int, usuario = Depends(verificar_token)):
+    """ Ordena al reloj físico que suba toda su memoria de huellas a la Bóveda """
+    schema = usuario["schema_name"]
+    conn = conectar_bd("public")
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        # 1. Buscamos el Número de Serie del lector que el usuario eligió
+        cur.execute("SELECT numero_serie FROM public.dispositivos WHERE id = %s AND schema_name = %s", (lector_id, schema))
+        lector = cur.fetchone()
+        if not lector: raise HTTPException(status_code=404, detail="Lector no encontrado.")
+
+        sn_limpio = lector['numero_serie'].strip().upper()
+
+        # 2. ⚡ COMANDO DE EXTRACCIÓN MASIVA (El comodín PIN=* pide todos los usuarios)
+        comando = "DATA QUERY FINGERTMP PIN=*"
+        
+        # 3. Metemos la orden al buzón
+        cur.execute("INSERT INTO public.comandos_adms (numero_serie, comando) VALUES (%s, %s)", (sn_limpio, comando))
+        conn.commit()
+        
+        return {"mensaje": "Orden de Extracción enviada. El reloj comenzará a subir todas sus huellas a la Nube en los próximos minutos."}
+    finally:
+        cur.close(); conn.close()
+
 @app.post("/empleados/{empleado_id}/adms/propagar-huella")
 async def adms_propagar_huella(empleado_id: int, usuario = Depends(verificar_token)):
-    """ 
-    Paso 2: El empleado ya puso su huella en el lector 1 (y el lector 1 la subió a la BD).
-    Este endpoint extrae esa huella de la BD y la envía a todos los demás lectores.
-    """
     schema = usuario["schema_name"]
-    return {"mensaje": "Huella/Rostro extraído de la base de datos y propagado exitosamente a todas las sucursales."}
+    
+    # 1. Obtenemos el PIN del empleado en la empresa actual
+    conn_priv = conectar_bd(schema)
+    cur_priv = conn_priv.cursor()
+    try:
+        cur_priv.execute(f"SELECT id, bio_id FROM {schema}.empleados WHERE id = %s", (empleado_id,))
+        emp = cur_priv.fetchone()
+        if not emp: raise HTTPException(status_code=404)
+        pin_zk = emp[1] or str(emp[0])
+    finally:
+        cur_priv.close(); conn_priv.close()
+
+    # 2. Buscamos en la Bóveda Global si este PIN ya tiene huellas y propagamos
+    conn = conectar_bd("public")
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("SELECT fid, template FROM public.huellas_adms WHERE schema_name = %s AND pin = %s", (schema, str(pin_zk)))
+        huellas = cur.fetchall()
+
+        if not huellas:
+            raise HTTPException(status_code=400, detail=f"No hay huellas guardadas en la nube para este empleado. Por favor, registre su huella en el reloj físico primero para que se sincronice.")
+
+        cur.execute("SELECT numero_serie FROM public.dispositivos WHERE schema_name = %s", (schema,))
+        relojes = cur.fetchall()
+
+        comandos_encolados = 0
+        for r in relojes:
+            sn_r = r['numero_serie'].strip().upper()
+            for h in huellas:
+                # ⚡ COMANDO K50 PARA PROPAGAR HUELLAS (Obligatorio usar \t)
+                cmd = f"DATA UPDATE FINGERTMP PIN={pin_zk}\tFID={h['fid']}\tSize={len(h['template'])}\tValid=1\tTMP={h['template']}"
+                cur.execute("INSERT INTO public.comandos_adms (numero_serie, comando) VALUES (%s, %s)", (sn_r, cmd))
+                comandos_encolados += 1
+        
+        conn.commit()
+        return {"mensaje": f"Se extrajeron {len(huellas)} plantilla(s) biométrica(s). Se están enviando a los lectores registrados."}
+    finally:
+        cur.close(); conn.close()
 
 # ── RUTA DE ESTADO (Para saber si la API está viva) ──
 @app.get("/")
