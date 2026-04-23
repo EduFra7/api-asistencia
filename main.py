@@ -3816,6 +3816,54 @@ async def adms_propagar_huella(empleado_id: int, usuario = Depends(verificar_tok
     schema = usuario["schema_name"]
     return {"mensaje": "Huella/Rostro extraído de la base de datos y propagado exitosamente a todas las sucursales."}
 
+# ==============================================================================
+# 19. MÓDULO: PROTOCOLO ADMS ZKTECO (ESCUCHA DE EQUIPOS FÍSICOS)
+# ==============================================================================
+
+@app.get("/iclock/cdata")
+async def adms_handshake(SN: str):
+    """
+    Paso 1 del ADMS: El reloj se conecta y se presenta al servidor.
+    Actualizamos su estado a ONLINE en la base de datos global.
+    """
+    conn = conectar_bd("public")
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            UPDATE public.dispositivos 
+            SET estado = 'online', ultima_conexion = CURRENT_TIMESTAMP 
+            WHERE numero_serie = %s
+        """, (SN,))
+        conn.commit()
+        
+        # El protocolo ZKTeco exige que el servidor responda un "OK" en texto plano
+        return PlainTextResponse("OK")
+    finally:
+        cur.close()
+        conn.close()
+
+@app.get("/iclock/getrequest")
+async def adms_heartbeat(SN: str):
+    """
+    Paso 2 del ADMS: El reloj hace un ping periódico preguntando "¿Tienes órdenes para mí?".
+    Esto mantiene el estado del reloj como ONLINE.
+    """
+    conn = conectar_bd("public")
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            UPDATE public.dispositivos 
+            SET estado = 'online', ultima_conexion = CURRENT_TIMESTAMP 
+            WHERE numero_serie = %s
+        """, (SN,))
+        conn.commit()
+        
+        # Aquí enviaremos los comandos de huellas después. 
+        # Por ahora, le decimos "OK" (no hay comandos pendientes).
+        return PlainTextResponse("OK")
+    finally:
+        cur.close()
+        conn.close()
 
 # ── RUTA DE ESTADO (Para saber si la API está viva) ──
 @app.get("/")
