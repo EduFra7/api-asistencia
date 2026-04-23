@@ -1367,17 +1367,16 @@ async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depe
     # --- 2. ACTUALIZACIÓN Y CAJA NEGRA ---
     conn = conectar_bd(schema)
     cur = conn.cursor()
-    # --- 2. ACTUALIZACIÓN Y CAJA NEGRA ---
-    conn = conectar_bd(schema)
-    cur = conn.cursor()
     try:
         # A. Consultamos el estado ACTUAL antes de guardar los cambios
-        cur.execute(f"SELECT activo, fecha_retiro, motivo_retiro, historial_movimientos, foto_perfil FROM {schema}.empleados WHERE id = %s", (empleado_id,))
+        # ⚡ MODIFICACIÓN: Agregamos 'bio_id' a la consulta inicial (posición 5)
+        cur.execute(f"SELECT activo, fecha_retiro, motivo_retiro, historial_movimientos, foto_perfil, bio_id FROM {schema}.empleados WHERE id = %s", (empleado_id,))
         estado_db = cur.fetchone()
         
         activo_actual = estado_db[0]
         historial_existente = estado_db[3] or ""
         foto_actual_bd = estado_db[4] # Guardamos la foto que ya existe
+        bio_id_actual = estado_db[5] or empleado_id # ⚡ Recuperamos el PIN para los relojes
         nuevo_historial = historial_existente
         
         fecha_retiro_final = data.get("fecha_retiro")
@@ -1401,6 +1400,36 @@ async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depe
             # CASO: DESPIDO / RETIRO
             anotacion = f"➤ [DADO DE BAJA EL {fecha_auditoria}]: Motivo registrado: {motivo_retiro_final}.\n"
             nuevo_historial = anotacion + historial_existente
+
+            # ===============================================================
+            # ⚡ PROTOCOLO DE BAJA SEGURA (OFFBOARDING BIOMÉTRICO) ⚡
+            # ===============================================================
+            pin_str = str(bio_id_actual)
+            conn_boveda = conectar_bd("public")
+            cur_boveda = conn_boveda.cursor()
+            try:
+                # 1. Destruimos las huellas de la Bóveda Secreta (Cumplimiento legal)
+                cur_boveda.execute("DELETE FROM public.huellas_adms WHERE schema_name = %s AND pin = %s", (schema, pin_str))
+                
+                # 2. Preparamos el "Comando Letal" para la memoria de plástico del equipo
+                # NOTA: USERINFO borra todo asociado al ID (Rostro, Huellas, Nombre y Clave)
+                comando_borrado = f"DATA DELETE USERINFO PIN={pin_str}"
+                
+                # 3. Metemos la orden al buzón de TODOS los relojes de la sucursal/empresa
+                cur_boveda.execute("SELECT numero_serie FROM public.dispositivos WHERE schema_name = %s", (schema,))
+                relojes = cur_boveda.fetchall()
+                
+                for r in relojes:
+                    sn_r = r[0].strip().upper()
+                    cur_boveda.execute("INSERT INTO public.comandos_adms (numero_serie, comando) VALUES (%s, %s)", (sn_r, comando_borrado))
+                
+                conn_boveda.commit()
+                print(f"💀 [SEGURIDAD] Offboarding completado. Huellas borradas en Nube y relojes notificados para PIN {pin_str}")
+            except Exception as e:
+                print(f"❌ Error durante el protocolo de seguridad: {e}")
+            finally:
+                cur_boveda.close(); conn_boveda.close()
+            # ===============================================================
 
         # ⚡ BLINDAJE DE FOTO UNIFICADO (El embudo perfecto)
         foto_perfil = data.get("foto_perfil")
@@ -1435,7 +1464,7 @@ async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depe
             fecha_retiro_final, motivo_retiro_final,
             data.get("turno_id"),
             nuevo_historial,
-            foto_a_guardar, # ⚡ Aquí entra nuestra variable ya definida y procesada
+            foto_a_guardar, 
             empleado_id
         ))
         
@@ -1454,28 +1483,87 @@ async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depe
 
 @app.delete("/empleados/{empleado_id}")
 async def eliminar_empleado(empleado_id: int, request: Request, usuario = Depends(verificar_token)):
+    """ 
+    BORRADO HÍBRIDO: 
+    1. Soft Delete en ERP (Mantiene historial).
+    2. Hard Delete en Relojes (Revoca acceso físico).
+    3. Hard Delete en Bóveda (Privacidad biometría).
+    """
     schema = usuario["schema_name"]
+    
+    # --- 1. SEGURIDAD: Contraseña de Admin ---
+    try:
+        data = await request.json()
+    except:
+        data = {}
+
+    admin_password = data.get("admin_password")
+    if not admin_password:
+        raise HTTPException(status_code=409, detail="Se requiere contraseña de administrador para esta operación.")
+
+    conn_pub = conectar_bd("public")
+    cur_pub = conn_pub.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur_pub.execute("SELECT password_hash FROM usuarios WHERE id = %s", (usuario["id"],))
+    user_db = cur_pub.fetchone()
+    cur_pub.close(); conn_pub.close()
+
+    if not user_db or not bcrypt.checkpw(admin_password.encode(), user_db["password_hash"].encode()):
+        raise HTTPException(status_code=409, detail="Contraseña de administrador incorrecta.")
+
+    # --- 2. PROCESO HÍBRIDO ---
     conn = conectar_bd(schema)
     cur = conn.cursor()
     try:
-        # TRUCO SENIOR: Renombramos el CI para liberarlo y ponemos bio_id en NULL
+        # A. Capturamos el bio_id ANTES de ponerlo en NULL para saber qué borrar en el hardware
+        cur.execute(f"SELECT bio_id FROM {schema}.empleados WHERE id = %s", (empleado_id,))
+        emp = cur.fetchone()
+        if not emp:
+            raise HTTPException(status_code=404, detail="Empleado no encontrado.")
+        
+        pin_a_limpiar = emp[0] or str(empleado_id)
+
+        # B. TRUCO SENIOR: Soft Delete (Ocultar visualmente y liberar CI/PIN)
         cur.execute(f"""
             UPDATE {schema}.empleados 
             SET eliminado = TRUE, 
                 activo = FALSE, 
                 bio_id = NULL,
-                ci = ci || '-DEL-' || id  -- Agrega "-DEL-ID" al carnet para liberar el número original
+                ci = ci || '-DEL-' || id 
             WHERE id = %s
         """, (empleado_id,))
         
+        # C. ⚡ LIMPIEZA NUCLEAR (Hardware + Bóveda)
+        conn_global = conectar_bd("public")
+        cur_global = conn_global.cursor()
+        try:
+            # 1. Borramos la huella de la Bóveda Secreta (Privacidad total)
+            cur_global.execute("DELETE FROM public.huellas_adms WHERE schema_name = %s AND pin = %s", (schema, str(pin_a_limpiar)))
+            
+            # 2. Orden de expulsión inmediata para todos los relojes
+            comando_borrado = f"DATA DELETE USERINFO PIN={pin_a_limpiar}"
+            
+            cur_global.execute("SELECT numero_serie FROM public.dispositivos WHERE schema_name = %s", (schema,))
+            relojes = cur_global.fetchall()
+            
+            for r in relojes:
+                sn_r = r[0].strip().upper()
+                cur_global.execute("INSERT INTO public.comandos_adms (numero_serie, comando) VALUES (%s, %s)", (sn_r, comando_borrado))
+            
+            conn_global.commit()
+            print(f"🛡️ [HÍBRIDO] Registro oculto en ERP. Huellas borradas y acceso revocado para PIN {pin_a_limpiar}")
+        except Exception as ge:
+            print(f"⚠️ Error en limpieza de hardware: {ge}")
+        finally:
+            cur_global.close(); conn_global.close()
+
         conn.commit()
-        return {"mensaje": "Registro de prueba eliminado. C.I. y ID Biométrico liberados."}
+        return {"mensaje": "Empleado retirado. Acceso físico revocado y biometría eliminada de la nube."}
+        
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        cur.close()
-        conn.close()
+        cur.close(); conn.close()
 
 # ⚡ NUEVO: FABRICANTE DE EXCEL SERVER-SIDE
 @app.get("/empleados/exportar/excel")
