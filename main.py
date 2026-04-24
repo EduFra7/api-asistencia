@@ -191,10 +191,9 @@ def mi_perfil(usuario = Depends(verificar_token)):
     return usuario # Devuelve lo que la función verificar_token descifró
 
 
-# ── MOTOR DE APROVISIONAMIENTO (CREAR EMPRESAS NUEVAS) ──
+# ── MOTOR DE APROVISIONAMIENTO (CREAR EMPRESAS NUEVAS SaaS) ──
 @app.post("/empresas")
 async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
-    # 1. Filtro de seguridad: ¿Es el dueño del sistema?
     if usuario["rol"] != "superadmin":
         raise HTTPException(status_code=403, detail="Sin permisos. Solo SuperAdmin.")
     
@@ -204,27 +203,33 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
         admin_nombre   = data.get("admin_nombre")
         admin_email    = data.get("admin_email")
         admin_password = data.get("admin_password")
+        
+        # ⚡ NUEVOS DATOS SaaS EXTRAÍDOS DEL FRONTEND
+        razon_social   = data.get("razon_social", "")
+        nit            = data.get("nit", "")
+        plan_nombre    = data.get("plan_nombre", "Básico")
+        limite         = int(data.get("limite_usuarios", 50))
+        meses_regalo   = int(data.get("meses_regalo", 1))
 
-        # 2. Preparar un nombre seguro para el esquema en PostgreSQL (sin espacios ni símbolos)
+        # ⚡ CÁLCULO INTELIGENTE DE VENCIMIENTO
+        fecha_vencimiento = date.today() + relativedelta(months=meses_regalo)
+
         schema_limpio = re.sub(r'[^a-z0-9_]', '', nombre.lower().replace(' ', '_'))
         schema_name   = f"empresa_{schema_limpio}" 
 
-        # Encriptamos la contraseña del cliente antes de guardarla
         password_hash = bcrypt.hashpw(admin_password.encode(), bcrypt.gensalt()).decode()
 
         conn = conectar_bd("public")
-        # autocommit=True es necesario porque PostgreSQL no deja crear esquemas dentro de una "transacción" normal.
         conn.autocommit = True 
         cur  = conn.cursor()
 
-        # 3. Guardar en el directorio maestro de empresas
-        cur.execute(
-            "INSERT INTO empresas (nombre, schema_name) VALUES (%s, %s) RETURNING id",
-            (nombre, schema_name)
-        )
-        empresa_id = cur.fetchone()[0] # Obtenemos el ID que se le asignó
+        # ⚡ INSERT CON DATOS FINANCIEROS (Se guarda en la tabla vitaminada)
+        cur.execute("""
+            INSERT INTO empresas (nombre, schema_name, razon_social, nit, fecha_vencimiento, limite_usuarios, plan_nombre, estado_suscripcion) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s, 'activo') RETURNING id
+        """, (nombre, schema_name, razon_social, nit, fecha_vencimiento, limite, plan_nombre))
+        empresa_id = cur.fetchone()[0] 
 
-        # 4. Crear al Administrador principal de este nuevo cliente
         cur.execute("""
             INSERT INTO usuarios (empresa_id, nombre, email, password_hash, rol)
             VALUES (%s, %s, %s, %s, 'admin')
@@ -420,11 +425,7 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
         cur.close()
         conn.close()
 
-        return {
-            "mensaje": "Empresa aprovisionada correctamente", 
-            "empresa_id": empresa_id, 
-            "schema_name": schema_name
-        }
+        return {"mensaje": "Empresa SaaS aprovisionada correctamente", "empresa_id": empresa_id, "schema_name": schema_name}
 
     except psycopg2.errors.DuplicateSchema:
         raise HTTPException(status_code=400, detail="Ya existe una empresa con un nombre similar")
@@ -432,7 +433,7 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
 
-# ── LISTAR EMPRESAS ──
+# ── LISTAR EMPRESAS (CON MÉTRICAS EN VIVO) ──
 @app.get("/empresas")
 def ver_empresas(usuario = Depends(verificar_token)):
     if usuario["rol"] != "superadmin":
@@ -440,10 +441,23 @@ def ver_empresas(usuario = Depends(verificar_token)):
     
     conn = conectar_bd("public")
     cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT * FROM empresas ORDER BY creado_en DESC")
+    # Excluir la empresa ID 1 (Tu cuenta SuperAdmin)
+    cur.execute("SELECT * FROM empresas WHERE id != 1 ORDER BY creado_en DESC")
     empresas = cur.fetchall()
-    cur.close()
-    conn.close()
+    
+    # ⚡ EL CEREBRO EXTRAE EL CONTEO REAL DE EMPLEADOS DE CADA CLIENTE
+    for emp in empresas:
+        schema = emp["schema_name"]
+        try:
+            cur.execute(f"SELECT COUNT(id) as total FROM {schema}.empleados WHERE eliminado = FALSE AND activo = TRUE")
+            emp["total_empleados"] = cur.fetchone()["total"]
+        except:
+            emp["total_empleados"] = 0
+            
+        if emp.get("fecha_vencimiento"): emp["fecha_vencimiento"] = str(emp["fecha_vencimiento"])
+        if emp.get("creado_en"): emp["creado_en"] = str(emp["creado_en"])
+
+    cur.close(); conn.close()
     return list(empresas)
 
 
@@ -4326,7 +4340,68 @@ async def adms_propagar_huella(empleado_id: int, usuario = Depends(verificar_tok
     finally:
         cur.close(); conn.close()
 
+
+# ==============================================================================
+# 19. MÓDULO FINANCIERO Y DE PAGOS SaaS
+# ==============================================================================
+
+@app.get("/empresas/{empresa_id}/pagos")
+async def obtener_historial_pagos(empresa_id: int, usuario = Depends(verificar_token)):
+    if usuario["rol"] != "superadmin":
+        raise HTTPException(status_code=403, detail="Sin permisos.")
         
+    conn = conectar_bd("public")
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT id, monto, fecha_pago, tipo_pago, comprobante_ref 
+            FROM saas_pagos 
+            WHERE empresa_id = %s 
+            ORDER BY fecha_pago DESC
+        """, (empresa_id,))
+        pagos = cur.fetchall()
+        for p in pagos: p["fecha_pago"] = p["fecha_pago"].strftime("%Y-%m-%d %H:%M")
+        return list(pagos)
+    finally:
+        cur.close(); conn.close()
+
+@app.post("/empresas/{empresa_id}/pagos")
+async def registrar_pago_saas(empresa_id: int, request: Request, usuario = Depends(verificar_token)):
+    if usuario["rol"] != "superadmin":
+        raise HTTPException(status_code=403, detail="Sin permisos.")
+        
+    data = await request.json()
+    monto = float(data.get("monto", 0))
+    tipo_pago = data.get("tipo_pago", "Mensual")
+    referencia = data.get("referencia", "S/R")
+    
+    conn = conectar_bd("public")
+    cur = conn.cursor()
+    try:
+        # 1. Contabilidad
+        cur.execute("""
+            INSERT INTO saas_pagos (empresa_id, monto, tipo_pago, comprobante_ref)
+            VALUES (%s, %s, %s, %s)
+        """, (empresa_id, monto, tipo_pago, referencia))
+        
+        # 2. Extender fecha
+        meses_a_sumar = 1 if tipo_pago == "Mensual" else 12
+        cur.execute("SELECT fecha_vencimiento FROM empresas WHERE id = %s", (empresa_id,))
+        res_venc = cur.fetchone()
+        fecha_actual = res_venc[0] if res_venc else None
+        
+        base_fecha = date.today() if (not fecha_actual or fecha_actual < date.today()) else fecha_actual
+        nueva_fecha = base_fecha + relativedelta(months=meses_a_sumar)
+        
+        cur.execute("UPDATE empresas SET fecha_vencimiento = %s, estado_suscripcion = 'activo' WHERE id = %s", (nueva_fecha, empresa_id))
+        conn.commit()
+        return {"mensaje": f"Pago registrado. Vencimiento extendido al {nueva_fecha.strftime('%Y-%m-%d')}"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close(); conn.close()
+
 # ── RUTA DE ESTADO (Para saber si la API está viva) ──
 @app.get("/")
 def inicio():
