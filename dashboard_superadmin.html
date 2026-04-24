@@ -166,11 +166,33 @@
             </div>
         `;
 
-        const VISTA_CONSTRUCCION = `
-            <div class="flex flex-col items-center justify-center h-[70vh] text-slate-400">
-                <i class="fas fa-tools text-6xl mb-4 text-slate-300"></i>
-                <h2 class="text-xl font-bold text-slate-600">Módulo en Construcción</h2>
-                <p class="text-sm mt-2 text-center max-w-md">Esta sección del Centro de Comando se implementará en la siguiente fase táctica.</p>
+        const VISTA_HARDWARE = `
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                <div>
+                    <h1 class="text-2xl font-bold text-slate-800">Radar IoT (Hardware)</h1>
+                    <p class="text-sm text-slate-500">Monitor global de relojes ZKTeco conectados a tu red SaaS.</p>
+                </div>
+                <button onclick="cargarHardwareAPI()" class="w-full md:w-auto bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-md transition-colors flex items-center justify-center">
+                    <i class="fas fa-satellite-dish mr-2"></i> Escanear Red
+                </button>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse min-w-[800px]">
+                        <thead>
+                            <tr class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider border-b border-slate-200">
+                                <th class="p-4 font-bold w-1/4">Estado y Señal</th>
+                                <th class="p-4 font-bold">Identificador MAC (S/N)</th>
+                                <th class="p-4 font-bold">Cliente Asignado</th>
+                                <th class="p-4 font-bold text-right">Comandos Remotos</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaHardware" class="text-sm divide-y divide-slate-100">
+                            <tr><td colspan="4" class="p-8 text-center text-slate-500"><i class="fas fa-satellite-dish fa-spin mr-2"></i>Rastreando señales...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         `;
 
@@ -192,8 +214,9 @@
             } else if (vista === 'empresas') {
                 contenedor.innerHTML = VISTA_EMPRESAS;
                 cargarEmpresasAPI();
-            } else {
-                contenedor.innerHTML = VISTA_CONSTRUCCION;
+            } else if (vista === 'hardware') {
+                contenedor.innerHTML = VISTA_HARDWARE;
+                cargarHardwareAPI(); // ⚡ Iniciamos el escaneo
             }
 
             if(window.innerWidth < 768) toggleMenu();
@@ -584,6 +607,101 @@
                     cargarKPIsGlobales();
                 } catch (error) { Swal.fire('Error Crítico', error.message, 'error'); }
             }
+        }
+
+        // =========================================================
+        // 7. MÓDULO IOT (RADAR DE HARDWARE)
+        // =========================================================
+
+        async function cargarHardwareAPI() {
+            const tbody = document.getElementById('tablaHardware');
+            try {
+                const response = await fetch(`${API_URL}/superadmin/hardware`, { headers: { 'Authorization': `Bearer ${token}` } });
+                const relojes = await response.json(); 
+                
+                if (relojes.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-slate-500 font-medium">No se detectaron dispositivos ZKTeco en la red.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = ''; 
+                relojes.forEach(r => {
+                    // ⚡ Inteligencia: Calculamos si está online (Ping hace menos de 15 minutos)
+                    let estaOnline = false;
+                    let badgeEstado = '<span class="bg-slate-100 text-slate-500 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-circle text-[8px] mr-1"></i>Offline / Apagado</span>';
+                    
+                    if (r.ultima_conexion_str !== "Nunca") {
+                        const ultimoPing = new Date(r.ultima_conexion);
+                        const ahora = new Date();
+                        const diferenciaMinutos = (ahora - ultimoPing) / (1000 * 60);
+                        
+                        if (diferenciaMinutos < 15) {
+                            estaOnline = true;
+                            badgeEstado = '<span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-circle text-[8px] mr-1 text-emerald-500 animate-pulse"></i>Conectado</span>';
+                        } else if (diferenciaMinutos < 60) {
+                            badgeEstado = '<span class="bg-amber-100 text-amber-700 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-circle text-[8px] mr-1 text-amber-500"></i>Latencia Alta</span>';
+                        }
+                    }
+
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-slate-50 transition-colors">
+                            <td class="p-4">
+                                ${badgeEstado}
+                                <p class="text-[10px] text-slate-400 mt-1">Último Ping: ${r.ultima_conexion_str}</p>
+                            </td>
+                            <td class="p-4">
+                                <p class="font-mono font-bold text-slate-800 text-sm"><i class="fas fa-microchip text-slate-400 mr-2"></i>${r.numero_serie}</p>
+                            </td>
+                            <td class="p-4">
+                                <p class="font-bold text-slate-700">${r.empresa_nombre || '<span class="text-red-400">Sin Asignar</span>'}</p>
+                                <p class="text-[10px] text-blue-500 font-mono">${r.schema_name}</p>
+                            </td>
+                            <td class="p-4 text-right">
+                                <button onclick="enviarComandoRemoto('${r.numero_serie}')" class="bg-slate-800 hover:bg-slate-700 text-white p-2 px-3 rounded-lg transition-colors font-medium text-xs shadow-sm">
+                                    <i class="fas fa-terminal mr-1"></i> Consola
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            } catch (error) {
+                tbody.innerHTML = `<tr><td colspan="4" class="p-8 text-center text-red-500 font-bold"><i class="fas fa-wifi mr-2"></i>Fallo en la antena del radar.</td></tr>`;
+            }
+        }
+
+        function enviarComandoRemoto(sn) {
+            Swal.fire({
+                title: `Terminal IoT: ${sn}`,
+                html: `
+                    <p class="text-sm text-slate-500 mb-4 text-left">Selecciona un comando para enviar al reloj. Se ejecutará automáticamente la próxima vez que el dispositivo tenga acceso a internet.</p>
+                    <select id="swal_comando" class="w-full border border-slate-300 rounded-lg p-3 text-sm focus:border-blue-500 outline-none shadow-sm">
+                        <option value="REINICIAR">🔄 Reiniciar Dispositivo (Reboot)</option>
+                        <option value="BORRAR_ASISTENCIAS">🗑️ Borrar Historial de Asistencias (Mantiene Usuarios)</option>
+                        <option value="BORRAR_TODO">⚠️ Borrar TODO (Usuarios y Huellas) - PELIGROSO</option>
+                    </select>
+                `,
+                showCancelButton: true,
+                confirmButtonText: '<i class="fas fa-paper-plane mr-1"></i> Enviar Comando',
+                confirmButtonColor: '#1e293b',
+                cancelButtonText: 'Abortar'
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    const comando = document.getElementById('swal_comando').value;
+                    Swal.fire({ title: 'Transmitiendo...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                    try {
+                        const res = await fetch(`${API_URL}/superadmin/hardware/${sn}/comando`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                            body: JSON.stringify({ comando: comando })
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.detail);
+                        Swal.fire('Transmisión Exitosa', data.mensaje, 'success');
+                    } catch (e) {
+                        Swal.fire('Fallo de Transmisión', e.message, 'error');
+                    }
+                }
+            });
         }
 
         // 🚀 INICIALIZACIÓN

@@ -4478,6 +4478,73 @@ async def registrar_pago_saas(empresa_id: int, request: Request, usuario = Depen
         raise HTTPException(status_code=500, detail=str(e))
     finally: cur.close(); conn.close()
 
+# ==============================================================================
+# 20. MONITOR DE HARDWARE IOT (Radar SaaS Global)
+# ==============================================================================
+
+@app.get("/superadmin/hardware")
+async def obtener_monitor_hardware(usuario = Depends(verificar_token)):
+    """ Escanea todos los relojes registrados en todas las empresas """
+    if usuario["rol"] != "superadmin":
+        raise HTTPException(status_code=403, detail="Sin permisos.")
+        
+    conn = conectar_bd("public")
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        # Hacemos un JOIN para saber a qué empresa pertenece cada reloj
+        cur.execute("""
+            SELECT d.id, d.numero_serie, d.estado, d.ultima_conexion, d.schema_name, e.nombre as empresa_nombre 
+            FROM dispositivos d
+            LEFT JOIN empresas e ON d.schema_name = e.schema_name
+            ORDER BY d.ultima_conexion DESC NULLS LAST
+        """)
+        relojes = cur.fetchall()
+        
+        # Formatear las fechas para el Frontend
+        for r in relojes:
+            if r["ultima_conexion"]:
+                r["ultima_conexion_str"] = r["ultima_conexion"].strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                r["ultima_conexion_str"] = "Nunca"
+                
+        return list(relojes)
+    finally:
+        cur.close(); conn.close()
+
+
+@app.post("/superadmin/hardware/{sn}/comando")
+async def enviar_comando_iot_global(sn: str, request: Request, usuario = Depends(verificar_token)):
+    """ Permite al SuperAdmin enviar comandos directos a cualquier reloj (Reinicio, Borrado) """
+    if usuario["rol"] != "superadmin":
+        raise HTTPException(status_code=403, detail="Sin permisos.")
+        
+    data = await request.json()
+    comando_bruto = data.get("comando", "").upper()
+    
+    # Mapeo de comandos amigables a comandos nativos de ZKTeco
+    comandos_validos = {
+        "REINICIAR": "REBOOT",
+        "BORRAR_ASISTENCIAS": "CLEAR LOG",
+        "BORRAR_TODO": "CLEAR DATA"
+    }
+    
+    comando_final = comandos_validos.get(comando_bruto)
+    if not comando_final:
+        raise HTTPException(status_code=400, detail="Comando no reconocido por el sistema IoT.")
+    
+    conn = conectar_bd("public")
+    cur = conn.cursor()
+    try:
+        # Inyectamos el comando en la cola. La próxima vez que el reloj haga Ping, se ejecutará.
+        cur.execute("INSERT INTO comandos_adms (numero_serie, comando) VALUES (%s, %s)", (sn, comando_final))
+        conn.commit()
+        return {"mensaje": f"Comando '{comando_final}' encolado. Se ejecutará en el próximo Ping del reloj {sn}."}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close(); conn.close()
+
 # ── RUTA DE ESTADO (Para saber si la API está viva) ──
 @app.get("/")
 def inicio():
