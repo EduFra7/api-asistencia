@@ -4490,8 +4490,11 @@ async def obtener_monitor_hardware(usuario = Depends(verificar_token)):
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
+        # ⚡ CORRECCIÓN: Leemos 'marca_modelo' y usamos el 'nombre' del reloj como Ubicación
         cur.execute("""
-            SELECT d.id, d.numero_serie, d.estado, d.ultima_conexion, d.schema_name, e.nombre as empresa_nombre 
+            SELECT d.id, d.numero_serie, d.estado, d.ultima_conexion, d.schema_name, 
+                   d.marca_modelo, d.nombre as ubicacion_nombre,
+                   e.nombre as empresa_nombre 
             FROM dispositivos d
             LEFT JOIN empresas e ON d.schema_name = e.schema_name
             ORDER BY d.ultima_conexion DESC NULLS LAST

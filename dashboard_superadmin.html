@@ -109,18 +109,37 @@
                 <tbody id="tablaEmpresas" class="text-sm divide-y divide-slate-100"><tr><td colspan="4" class="p-8 text-center text-slate-500"><i class="fas fa-spinner fa-spin mr-2"></i>Cargando...</td></tr></tbody>
             </table></div></div>`;
 
-        // ⚡ VISTA_HARDWARE MEJORADA (Con Buscador)
+        // ⚡ VISTA_HARDWARE AHORA CON FILTROS DE MODELO Y UBICACIÓN
         const VISTA_HARDWARE = `
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
-                <div><h1 class="text-2xl font-bold text-slate-800">Radar IoT (Hardware)</h1><p class="text-sm text-slate-500">Monitor global de relojes ZKTeco conectados a tu red SaaS.</p></div>
+                <div><h1 class="text-2xl font-bold text-slate-800">Radar IoT (Hardware)</h1><p class="text-sm text-slate-500">Monitor global de activos físicos ZKTeco en tu red.</p></div>
                 <button onclick="cargarHardwareAPI()" class="bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-md"><i class="fas fa-satellite-dish mr-2"></i> Refrescar Red</button>
             </div>
-            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-4 flex flex-col md:flex-row gap-4 items-center">
-                <div class="relative w-full md:w-1/2"><i class="fas fa-search absolute left-3 top-3 text-slate-400"></i><input type="text" id="buscHw" onkeyup="pintarHardware()" placeholder="Buscar Número de Serie o Empresa..." class="w-full pl-10 pr-4 py-2 border rounded-lg text-sm outline-none"></div>
-                <div class="w-full md:w-1/4"><select id="filtHw" onchange="pintarHardware()" class="w-full px-4 py-2 border rounded-lg text-sm outline-none"><option value="ALL">Todos los Dispositivos</option><option value="ON">Solo Conectados</option><option value="OFF">Desconectados</option></select></div>
+            
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-4 grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
+                <div class="relative w-full">
+                    <i class="fas fa-search absolute left-3 top-3 text-slate-400"></i>
+                    <input type="text" id="buscHw" onkeyup="pintarHardware()" placeholder="Buscar Serie o Cliente..." class="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:border-blue-500 outline-none">
+                </div>
+                <div class="relative w-full">
+                    <i class="fas fa-microchip absolute left-3 top-3 text-slate-400"></i>
+                    <input type="text" id="filtMod" onkeyup="pintarHardware()" placeholder="Filtrar por Modelo..." class="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:border-blue-500 outline-none">
+                </div>
+                <div class="relative w-full">
+                    <i class="fas fa-map-marker-alt absolute left-3 top-3 text-slate-400"></i>
+                    <input type="text" id="filtUbi" onkeyup="pintarHardware()" placeholder="Filtrar por Ubicación..." class="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:border-blue-500 outline-none">
+                </div>
+                <div class="w-full">
+                    <select id="filtHw" onchange="pintarHardware()" class="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:border-blue-500 outline-none">
+                        <option value="ALL">Todos los Estados</option>
+                        <option value="ON">Solo Conectados</option>
+                        <option value="OFF">Desconectados</option>
+                    </select>
+                </div>
             </div>
-            <div class="bg-white rounded-xl shadow-sm border overflow-hidden flex flex-col"><div class="overflow-x-auto"><table class="w-full text-left border-collapse min-w-[800px]">
-                <thead><tr class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider border-b"><th class="p-4 font-bold w-1/4">Estado y Señal</th><th class="p-4 font-bold">Identificador MAC (S/N)</th><th class="p-4 font-bold">Cliente Asignado</th><th class="p-4 font-bold text-right">Comandos Remotos</th></tr></thead>
+
+            <div class="bg-white rounded-xl shadow-sm border overflow-hidden flex flex-col"><div class="overflow-x-auto"><table class="w-full text-left border-collapse min-w-[900px]">
+                <thead><tr class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider border-b"><th class="p-4 font-bold w-1/5">Estado y Señal</th><th class="p-4 font-bold">Hardware (S/N y Modelo)</th><th class="p-4 font-bold">Cliente y Ubicación</th><th class="p-4 font-bold text-right">Comandos Remotos</th></tr></thead>
                 <tbody id="tablaHardware" class="text-sm divide-y divide-slate-100"><tr><td colspan="4" class="p-8 text-center text-slate-500"><i class="fas fa-satellite-dish fa-spin mr-2"></i>Rastreando señales...</td></tr></tbody>
             </table></div></div>`;
 
@@ -255,20 +274,28 @@
         }
 
         function pintarHardware() {
+            // 1. Capturamos los 4 filtros de la vista
             const buscador = document.getElementById('buscHw')?.value.toLowerCase() || '';
+            const filtMod = document.getElementById('filtMod')?.value.toLowerCase() || '';
+            const filtUbi = document.getElementById('filtUbi')?.value.toLowerCase() || '';
             const filtro = document.getElementById('filtHw')?.value || 'ALL';
+            
             const tbody = document.getElementById('tablaHardware'); tbody.innerHTML = '';
 
+            // 2. El Frontend Tonto aplica los filtros usando los nombres de las columnas que vinieron del Backend
             let r = window.datosHardwareGlobal.filter(hw => {
                 const textoMatch = hw.numero_serie.toLowerCase().includes(buscador) || (hw.empresa_nombre && hw.empresa_nombre.toLowerCase().includes(buscador));
+                const modMatch = (hw.marca_modelo || '').toLowerCase().includes(filtMod);
+                const ubiMatch = (hw.ubicacion_nombre || '').toLowerCase().includes(filtUbi);
                 const filtroMatch = (filtro === 'ALL') || (filtro === 'ON' && hw.esta_online) || (filtro === 'OFF' && !hw.esta_online);
-                return textoMatch && filtroMatch;
+                
+                return textoMatch && modMatch && ubiMatch && filtroMatch;
             });
 
-            if (r.length === 0) { tbody.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-slate-500">No se encontraron dispositivos ZKTeco.</td></tr>'; return; }
+            if (r.length === 0) { tbody.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-slate-500">No se encontraron dispositivos con estos filtros.</td></tr>'; return; }
 
+            // 3. Dibujamos la tabla final
             r.forEach(hw => {
-                // ⚡ Frontend SÚPER tonto: Solo pregunta por booleanos calculados en Python
                 let badgeEstado = '<span class="bg-slate-100 text-slate-500 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-circle text-[8px] mr-1"></i>Offline</span>';
                 
                 if (hw.esta_online) {
@@ -280,9 +307,20 @@
                 tbody.innerHTML += `
                     <tr class="hover:bg-slate-50 transition-colors">
                         <td class="p-4">${badgeEstado}<p class="text-[10px] text-slate-400 mt-1">Ping: ${hw.ultima_conexion_str}</p></td>
-                        <td class="p-4"><p class="font-mono font-bold text-slate-800 text-sm"><i class="fas fa-microchip text-slate-400 mr-2"></i>${hw.numero_serie}</p></td>
-                        <td class="p-4"><p class="font-bold text-slate-700">${hw.empresa_nombre || '<span class="text-red-400">Sin Asignar (Desconectado del Tenant)</span>'}</p><p class="text-[10px] text-blue-500 font-mono">${hw.schema_name}</p></td>
-                        <td class="p-4 text-right"><button onclick="enviarComandoRemoto('${hw.numero_serie}')" class="bg-slate-800 hover:bg-slate-700 text-white p-2 px-3 rounded-lg transition-colors font-medium text-xs shadow-sm"><i class="fas fa-terminal mr-1"></i> Consola</button></td>
+                        <td class="p-4">
+                            <p class="font-mono font-bold text-slate-800 text-sm"><i class="fas fa-microchip text-slate-400 mr-2"></i>${hw.numero_serie}</p>
+                            <p class="text-[11px] text-slate-500 font-medium mt-0.5 ml-6">Mod: ${hw.marca_modelo || 'Desconocido'}</p>
+                        </td>
+                        <td class="p-4">
+                            <p class="font-bold text-slate-700">${hw.empresa_nombre || '<span class="text-red-400">Sin Asignar (Desconectado)</span>'}</p>
+                            <p class="text-[11px] text-slate-500 mt-0.5"><i class="fas fa-map-marker-alt text-red-400 mr-1"></i>${hw.ubicacion_nombre || 'Sin Nombre Asignado'}</p>
+                            <p class="text-[9px] text-blue-500 font-mono mt-0.5 hidden md:block">DB: ${hw.schema_name}</p>
+                        </td>
+                        <td class="p-4 text-right">
+                            <button onclick="enviarComandoRemoto('${hw.numero_serie}')" class="bg-slate-800 hover:bg-slate-700 text-white p-2 px-3 rounded-lg transition-colors font-medium text-xs shadow-sm">
+                                <i class="fas fa-terminal mr-1"></i> Consola
+                            </button>
+                        </td>
                     </tr>`;
             });
         }
