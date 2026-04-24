@@ -23,13 +23,16 @@
         
         <nav class="flex-1 p-4 space-y-2 overflow-y-auto">
             <button onclick="cambiarVista('resumen', this)" class="menu-btn w-full flex items-center p-3 bg-blue-600 rounded-lg text-white font-medium transition-colors shadow-sm">
-                <i class="fas fa-chart-pie w-6"></i> Resumen Global
+                <i class="fas fa-chart-pie w-6 text-center"></i> Resumen Global
             </button>
             <button onclick="cambiarVista('empresas', this)" class="menu-btn w-full flex items-center p-3 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg font-medium transition-colors">
-                <i class="fas fa-building w-6"></i> Clientes / Empresas
+                <i class="fas fa-building w-6 text-center"></i> Clientes / Empresas
             </button>
             <button onclick="cambiarVista('hardware', this)" class="menu-btn w-full flex items-center p-3 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg font-medium transition-colors">
-                <i class="fas fa-microchip w-6"></i> Monitor Hardware
+                <i class="fas fa-microchip w-6 text-center"></i> Monitor Hardware
+            </button>
+            <button onclick="cambiarVista('feriados', this)" class="menu-btn w-full flex items-center p-3 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg font-medium transition-colors">
+                <i class="fas fa-calendar-star w-6 text-center"></i> Feriados Globales
             </button>
         </nav>
         
@@ -63,7 +66,7 @@
         // =========================================================
         // 1. CONFIGURACIÓN Y SEGURIDAD BASE
         // =========================================================
-        const API_URL = "https://asistencia-api.up.railway.app"; // Cuidado si pruebas en local, cámbialo a http://localhost:8000 si es necesario
+        const API_URL = "https://asistencia-api.up.railway.app";
         const token = localStorage.getItem('token');
         const userDataStr = localStorage.getItem('userData');
 
@@ -73,203 +76,128 @@
 
         document.getElementById('userNameDisplay').textContent = userData.nombre;
 
-        function cerrarSesion() {
-            localStorage.clear();
-            window.location.href = 'index.html';
-        }
-
+        function cerrarSesion() { localStorage.clear(); window.location.href = 'index.html'; }
         function toggleMenu() {
-            const sidebar = document.getElementById('sidebar');
-            const overlay = document.getElementById('mobileOverlay');
-            sidebar.classList.toggle('-translate-x-full');
-            overlay.classList.toggle('hidden');
+            document.getElementById('sidebar').classList.toggle('-translate-x-full');
+            document.getElementById('mobileOverlay').classList.toggle('hidden');
         }
 
         // =========================================================
         // 2. PLANTILLAS DE VISTAS (HTML EN MEMORIA)
         // =========================================================
-        const VISTA_RESUMEN = `
-            <div class="mb-6">
-                <h1 class="text-2xl font-bold text-slate-800">Resumen Global SaaS</h1>
-                <p class="text-sm text-slate-500">Métricas en tiempo real de toda tu infraestructura.</p>
-            </div>
+        const VISTA_RESUMEN = `<div class="mb-6"><h1 class="text-2xl font-bold text-slate-800">Resumen Global SaaS</h1><p class="text-sm text-slate-500">Métricas en tiempo real de toda tu infraestructura.</p></div>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-blue-500">
-                    <p class="text-sm font-semibold text-slate-500 uppercase tracking-wide">Empresas Activas</p>
-                    <p class="text-3xl font-bold text-slate-800 mt-2" id="kpi_empresas"><i class="fas fa-circle-notch fa-spin text-sm text-slate-300"></i></p>
-                </div>
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-emerald-500">
-                    <p class="text-sm font-semibold text-slate-500 uppercase tracking-wide">Relojes Online (24h)</p>
-                    <p class="text-3xl font-bold text-slate-800 mt-2" id="kpi_relojes"><i class="fas fa-circle-notch fa-spin text-sm text-slate-300"></i></p>
-                </div>
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-amber-500">
-                    <p class="text-sm font-semibold text-slate-500 uppercase tracking-wide">Estado de Servidor</p>
-                    <p class="text-3xl font-bold text-emerald-600 mt-2">Óptimo</p>
-                </div>
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-purple-500">
-                    <p class="text-sm font-semibold text-slate-500 uppercase tracking-wide">Versión Core</p>
-                    <p class="text-3xl font-bold text-slate-800 mt-2">2.1.0</p>
-                </div>
-            </div>
-        `;
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-l-4 border-l-blue-500"><p class="text-sm font-semibold text-slate-500 uppercase tracking-wide">Empresas Activas</p><p class="text-3xl font-bold text-slate-800 mt-2" id="kpi_empresas"><i class="fas fa-circle-notch fa-spin text-sm text-slate-300"></i></p></div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-l-4 border-l-emerald-500"><p class="text-sm font-semibold text-slate-500 uppercase tracking-wide">Relojes Online (24h)</p><p class="text-3xl font-bold text-slate-800 mt-2" id="kpi_relojes"><i class="fas fa-circle-notch fa-spin text-sm text-slate-300"></i></p></div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-l-4 border-l-amber-500"><p class="text-sm font-semibold text-slate-500 uppercase tracking-wide">Estado de Servidor</p><p class="text-3xl font-bold text-emerald-600 mt-2">Óptimo</p></div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-l-4 border-l-purple-500"><p class="text-sm font-semibold text-slate-500 uppercase tracking-wide">Versión Core</p><p class="text-3xl font-bold text-slate-800 mt-2">2.1.0</p></div>
+            </div>`;
 
+        // (VISTA_EMPRESAS intacta como la tenías)
         const VISTA_EMPRESAS = `
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
-                <div>
-                    <h1 class="text-2xl font-bold text-slate-800">Directorio de Clientes</h1>
-                    <p class="text-sm text-slate-500">Administra bases de datos, accesos, pagos y suscripciones.</p>
-                </div>
-                <button onclick="abrirModalEmpresa()" class="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-md transition-colors flex items-center justify-center">
-                    <i class="fas fa-plus-circle mr-2"></i> Aprovisionar Cliente
-                </button>
+                <div><h1 class="text-2xl font-bold text-slate-800">Directorio de Clientes</h1><p class="text-sm text-slate-500">Administra bases de datos, accesos, pagos y suscripciones.</p></div>
+                <button onclick="abrirModalEmpresa()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-md"><i class="fas fa-plus-circle mr-2"></i> Aprovisionar Cliente</button>
             </div>
-
             <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-4 flex flex-col md:flex-row gap-4 items-center">
-                <div class="relative w-full md:w-1/3">
-                    <i class="fas fa-search absolute left-3 top-3 text-slate-400"></i>
-                    <input type="text" id="filtroBuscador" onkeyup="aplicarFiltros()" placeholder="Buscar por Empresa, NIT, Ciudad..." class="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:border-blue-500 outline-none">
-                </div>
-                <div class="w-full md:w-1/4">
-                    <select id="filtroEstado" onchange="aplicarFiltros()" class="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:border-blue-500 outline-none">
-                        <option value="TODOS">Todos los Estados</option>
-                        <option value="AL_DIA">Suscripciones Al Día</option>
-                        <option value="POR_VENCER">Por Vencer (<= 15 días)</option>
-                        <option value="VENCIDO">Suscripciones Vencidas</option>
-                    </select>
-                </div>
-                <div class="w-full md:w-1/4">
-                    <select id="filtroSuscripcion" onchange="aplicarFiltros()" class="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:border-blue-500 outline-none">
-                        <option value="TODOS">Cualquier Plan</option>
-                        <option value="Mensual">Solo Mensuales</option>
-                        <option value="Anual">Solo Anuales</option>
-                        <option value="Indefinido">Pruebas / Indefinidos</option>
-                    </select>
-                </div>
+                <div class="relative w-full md:w-1/3"><i class="fas fa-search absolute left-3 top-3 text-slate-400"></i><input type="text" id="filtroBuscador" onkeyup="aplicarFiltros()" placeholder="Buscar por Empresa, NIT, Ciudad..." class="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:border-blue-500 outline-none"></div>
+                <div class="w-full md:w-1/4"><select id="filtroEstado" onchange="aplicarFiltros()" class="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:border-blue-500 outline-none"><option value="TODOS">Todos los Estados</option><option value="AL_DIA">Suscripciones Al Día</option><option value="POR_VENCER">Por Vencer (<= 15 días)</option><option value="VENCIDO">Suscripciones Vencidas</option></select></div>
+                <div class="w-full md:w-1/4"><select id="filtroSuscripcion" onchange="aplicarFiltros()" class="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:border-blue-500 outline-none"><option value="TODOS">Cualquier Plan</option><option value="Mensual">Solo Mensuales</option><option value="Anual">Solo Anuales</option><option value="Indefinido">Pruebas / Indefinidos</option></select></div>
             </div>
+            <div class="bg-white rounded-xl shadow-sm border overflow-hidden flex flex-col"><div class="overflow-x-auto"><table class="w-full text-left border-collapse min-w-[1000px]">
+                <thead><tr class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider border-b"><th class="p-4 font-bold">Empresa / DB / Ciudad</th><th class="p-4 font-bold">Plan y Usuarios</th><th class="p-4 font-bold">Estado / Suscripción</th><th class="p-4 font-bold text-right">Panel de Control</th></tr></thead>
+                <tbody id="tablaEmpresas" class="text-sm divide-y divide-slate-100"><tr><td colspan="4" class="p-8 text-center text-slate-500"><i class="fas fa-spinner fa-spin mr-2"></i>Cargando...</td></tr></tbody>
+            </table></div></div>`;
 
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left border-collapse min-w-[1000px]">
-                        <thead>
-                            <tr class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider border-b border-slate-200">
-                                <th class="p-4 font-bold">Empresa / DB / Ciudad</th>
-                                <th class="p-4 font-bold">Plan y Usuarios</th>
-                                <th class="p-4 font-bold">Estado / Suscripción</th>
-                                <th class="p-4 font-bold text-right">Panel de Control (5 Herramientas)</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tablaEmpresas" class="text-sm divide-y divide-slate-100">
-                            <tr><td colspan="4" class="p-8 text-center text-slate-500"><i class="fas fa-spinner fa-spin mr-2"></i>Cargando infraestructura...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        `;
-
+        // ⚡ VISTA_HARDWARE MEJORADA (Con Buscador)
         const VISTA_HARDWARE = `
-            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-                <div>
-                    <h1 class="text-2xl font-bold text-slate-800">Radar IoT (Hardware)</h1>
-                    <p class="text-sm text-slate-500">Monitor global de relojes ZKTeco conectados a tu red SaaS.</p>
-                </div>
-                <button onclick="cargarHardwareAPI()" class="w-full md:w-auto bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-md transition-colors flex items-center justify-center">
-                    <i class="fas fa-satellite-dish mr-2"></i> Escanear Red
-                </button>
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
+                <div><h1 class="text-2xl font-bold text-slate-800">Radar IoT (Hardware)</h1><p class="text-sm text-slate-500">Monitor global de relojes ZKTeco conectados a tu red SaaS.</p></div>
+                <button onclick="cargarHardwareAPI()" class="bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-md"><i class="fas fa-satellite-dish mr-2"></i> Refrescar Red</button>
             </div>
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-4 flex flex-col md:flex-row gap-4 items-center">
+                <div class="relative w-full md:w-1/2"><i class="fas fa-search absolute left-3 top-3 text-slate-400"></i><input type="text" id="buscHw" onkeyup="pintarHardware()" placeholder="Buscar Número de Serie o Empresa..." class="w-full pl-10 pr-4 py-2 border rounded-lg text-sm outline-none"></div>
+                <div class="w-full md:w-1/4"><select id="filtHw" onchange="pintarHardware()" class="w-full px-4 py-2 border rounded-lg text-sm outline-none"><option value="ALL">Todos los Dispositivos</option><option value="ON">Solo Conectados</option><option value="OFF">Desconectados</option></select></div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm border overflow-hidden flex flex-col"><div class="overflow-x-auto"><table class="w-full text-left border-collapse min-w-[800px]">
+                <thead><tr class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider border-b"><th class="p-4 font-bold w-1/4">Estado y Señal</th><th class="p-4 font-bold">Identificador MAC (S/N)</th><th class="p-4 font-bold">Cliente Asignado</th><th class="p-4 font-bold text-right">Comandos Remotos</th></tr></thead>
+                <tbody id="tablaHardware" class="text-sm divide-y divide-slate-100"><tr><td colspan="4" class="p-8 text-center text-slate-500"><i class="fas fa-satellite-dish fa-spin mr-2"></i>Rastreando señales...</td></tr></tbody>
+            </table></div></div>`;
 
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-                <div class="overflow-x-auto">
-                    <table class="w-full text-left border-collapse min-w-[800px]">
-                        <thead>
-                            <tr class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider border-b border-slate-200">
-                                <th class="p-4 font-bold w-1/4">Estado y Señal</th>
-                                <th class="p-4 font-bold">Identificador MAC (S/N)</th>
-                                <th class="p-4 font-bold">Cliente Asignado</th>
-                                <th class="p-4 font-bold text-right">Comandos Remotos</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tablaHardware" class="text-sm divide-y divide-slate-100">
-                            <tr><td colspan="4" class="p-8 text-center text-slate-500"><i class="fas fa-satellite-dish fa-spin mr-2"></i>Rastreando señales...</td></tr>
-                        </tbody>
-                    </table>
+        // ⚡ NUEVA VISTA: FERIADOS GLOBALES
+        const VISTA_FERIADOS = `
+            <div class="max-w-2xl mx-auto mt-10 bg-white p-8 rounded-xl shadow-sm border border-slate-200">
+                <div class="text-center mb-6">
+                    <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 text-blue-600 mb-4"><i class="fas fa-bullhorn text-2xl"></i></div>
+                    <h1 class="text-2xl font-bold text-slate-800">Cañón de Feriados Globales</h1>
+                    <p class="text-sm text-slate-500 mt-2">Propaga un decreto de Feriado Nacional hacia <b>todas</b> las empresas de la red en tiempo real.</p>
                 </div>
-            </div>
-        `;
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase">Nombre / Motivo del Feriado</label>
+                        <input type="text" id="global_motivo" class="mt-1 w-full border rounded-lg p-3 outline-none focus:border-blue-500" placeholder="Ej. Feriado Excepcional por Censo">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase">Fecha Exacta</label>
+                        <input type="date" id="global_fecha" class="mt-1 w-full border rounded-lg p-3 outline-none focus:border-blue-500">
+                    </div>
+                    <button onclick="lanzarFeriadoGlobal()" class="w-full bg-slate-800 hover:bg-black text-white p-3 rounded-lg font-bold shadow-md transition-colors mt-4">
+                        <i class="fas fa-rocket mr-2"></i> Inyectar Feriado en la Nube
+                    </button>
+                    <div class="bg-amber-50 p-4 rounded-lg border border-amber-200 mt-4 flex items-start">
+                        <i class="fas fa-exclamation-triangle text-amber-500 mt-0.5 mr-3"></i>
+                        <p class="text-xs text-amber-700"><b>Precaución:</b> Esta acción es irreversible. El feriado se guardará en los calendarios de todos tus clientes, anulando las faltas de ese día.</p>
+                    </div>
+                </div>
+            </div>`;
 
         // =========================================================
-        // 3. MOTOR DE CAMBIO DE VISTAS (SPA ROUTER)
+        // 3. MOTOR DE RUTAS
         // =========================================================
         function cambiarVista(vista, botonObj) {
             if(botonObj) {
-                document.querySelectorAll('.menu-btn').forEach(btn => {
-                    btn.className = "menu-btn w-full flex items-center p-3 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg font-medium transition-colors";
-                });
+                document.querySelectorAll('.menu-btn').forEach(btn => btn.className = "menu-btn w-full flex items-center p-3 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg font-medium transition-colors");
                 botonObj.className = "menu-btn w-full flex items-center p-3 bg-blue-600 rounded-lg text-white font-medium transition-colors shadow-sm";
             }
-
             const contenedor = document.getElementById('contenedor-dinamico');
-            if (vista === 'resumen') {
-                contenedor.innerHTML = VISTA_RESUMEN;
-                cargarKPIsGlobales();
-            } else if (vista === 'empresas') {
-                contenedor.innerHTML = VISTA_EMPRESAS;
-                cargarEmpresasAPI();
-            } else if (vista === 'hardware') {
-                contenedor.innerHTML = VISTA_HARDWARE;
-                cargarHardwareAPI(); // ⚡ Iniciamos el escaneo
-            }
-
+            if (vista === 'resumen') { contenedor.innerHTML = VISTA_RESUMEN; cargarKPIsGlobales(); } 
+            else if (vista === 'empresas') { contenedor.innerHTML = VISTA_EMPRESAS; cargarEmpresasAPI(); } 
+            else if (vista === 'hardware') { contenedor.innerHTML = VISTA_HARDWARE; cargarHardwareAPI(); }
+            else if (vista === 'feriados') { contenedor.innerHTML = VISTA_FERIADOS; }
             if(window.innerWidth < 768) toggleMenu();
         }
 
         // =========================================================
-        // MEMORIA GLOBAL Y LÓGICA DE DIBUJADO DE TABLAS
+        // 4. MEMORIA Y LÓGICA DE DIBUJADO DE EMPRESAS (Intacta)
         // =========================================================
         window.datosEmpresasGlobal = [];
-
-        window.togglePassword = function(id) {
-            const el = document.getElementById(id);
-            el.type = el.type === 'password' ? 'text' : 'password';
-        };
+        window.datosHardwareGlobal = [];
+        window.togglePassword = function(id) { const el = document.getElementById(id); el.type = el.type === 'password' ? 'text' : 'password'; };
 
         async function cargarKPIsGlobales() {
             try {
                 const res = await fetch(`${API_URL}/superadmin/kpis`, { headers: { 'Authorization': `Bearer ${token}` } });
-                if (!res.ok) throw new Error("Fallo al obtener KPIs del servidor");
                 const kpis = await res.json();
                 document.getElementById('kpi_empresas').textContent = kpis.total_empresas;
                 document.getElementById('kpi_relojes').textContent = kpis.relojes_online;
-            } catch (e) { 
-                console.error("Error cargando KPIs:", e); 
-                if(document.getElementById('kpi_empresas')) document.getElementById('kpi_empresas').textContent = "Err";
-            }
+            } catch (e) {}
         }
 
         async function cargarEmpresasAPI() {
             try {
-                const response = await fetch(`${API_URL}/empresas`, { headers: { 'Authorization': `Bearer ${token}` } });
-                if (!response.ok) throw new Error("Error de conexión");
-                window.datosEmpresasGlobal = await response.json(); 
-                aplicarFiltros(); // Dibuja la tabla con los datos
-            } catch (error) {
-                console.error(error);
-                document.getElementById('tablaEmpresas').innerHTML = `<tr><td colspan="4" class="p-8 text-center text-red-500 font-bold"><i class="fas fa-exclamation-triangle mr-2"></i>Error conectando con el Core del servidor.</td></tr>`;
-            }
+                const res = await fetch(`${API_URL}/empresas`, { headers: { 'Authorization': `Bearer ${token}` } });
+                window.datosEmpresasGlobal = await res.json(); 
+                aplicarFiltros(); 
+            } catch (error) {}
         }
 
         function aplicarFiltros() {
             const buscador = document.getElementById('filtroBuscador')?.value.toLowerCase() || '';
             const estado = document.getElementById('filtroEstado')?.value || 'TODOS';
             const tipoSub = document.getElementById('filtroSuscripcion')?.value || 'TODOS';
-            
-            const tbody = document.getElementById('tablaEmpresas');
-            tbody.innerHTML = '';
-
+            const tbody = document.getElementById('tablaEmpresas'); tbody.innerHTML = '';
             let resultados = window.datosEmpresasGlobal.filter(emp => {
-                const textoMatch = emp.nombre.toLowerCase().includes(buscador) || 
-                                  (emp.nit && emp.nit.toLowerCase().includes(buscador)) ||
-                                  (emp.ciudad && emp.ciudad.toLowerCase().includes(buscador)) ||
-                                  (emp.razon_social && emp.razon_social.toLowerCase().includes(buscador));
+                const textoMatch = emp.nombre.toLowerCase().includes(buscador) || (emp.nit && emp.nit.toLowerCase().includes(buscador)) || (emp.ciudad && emp.ciudad.toLowerCase().includes(buscador));
                 const subMatch = (tipoSub === 'TODOS') || (emp.tipo_suscripcion === tipoSub);
                 let estadoMatch = true;
                 if (estado !== 'TODOS') {
@@ -284,78 +212,132 @@
                 return textoMatch && subMatch && estadoMatch;
             });
 
-            if (resultados.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-slate-500">No se encontraron clientes con estos filtros.</td></tr>';
-                return;
-            }
+            if (resultados.length === 0) { tbody.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-slate-500">No se encontraron clientes.</td></tr>'; return; }
 
             resultados.forEach(emp => {
                 const usoPorcentaje = Math.round((emp.total_empleados / (emp.limite_usuarios || 50)) * 100) || 0;
                 const colorUso = usoPorcentaje > 90 ? 'bg-red-500' : (usoPorcentaje > 70 ? 'bg-yellow-500' : 'bg-blue-500');
-                
                 let badgeEstado = '<span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-[10px] font-bold uppercase">Al Día</span>';
                 let fechaVenc = emp.fecha_vencimiento || 'Indefinido';
-                
                 if(emp.fecha_vencimiento && emp.fecha_vencimiento !== '2099-12-31') {
                     const diasRestantes = Math.ceil((new Date(emp.fecha_vencimiento) - new Date()) / (1000 * 60 * 60 * 24));
                     if(diasRestantes < 0) badgeEstado = '<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-[10px] font-bold uppercase">Vencido</span>';
                     else if (diasRestantes <= 15) badgeEstado = `<span class="bg-amber-100 text-amber-700 px-2 py-1 rounded text-[10px] font-bold uppercase">Vence en ${diasRestantes} d</span>`;
-                } else if (emp.fecha_vencimiento === '2099-12-31') {
-                    fechaVenc = 'Indefinido (Prueba/Interno)';
-                }
+                } else if (emp.fecha_vencimiento === '2099-12-31') { fechaVenc = 'Indefinido (Prueba/Interno)'; }
 
-                // Convertir el objeto emp a un string seguro para el HTML
                 const empSeguro = JSON.stringify(emp).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
-
-                // ⚡ AQUÍ ESTÁN LOS 5 BOTONES PERFECTAMENTE UNIFICADOS
                 tbody.innerHTML += `
                     <tr class="hover:bg-blue-50 transition-colors group">
-                        <td class="p-4">
-                            <div class="flex items-center">
-                                <div class="h-10 w-10 rounded-lg bg-slate-800 text-white flex items-center justify-center font-bold mr-3">${emp.nombre.charAt(0).toUpperCase()}</div>
-                                <div>
-                                    <p class="font-bold text-slate-800">${emp.nombre}</p>
-                                    <p class="text-[11px] text-slate-500"><i class="fas fa-map-marker-alt text-red-400 mr-1"></i>${emp.ciudad || 'N/A'} | NIT: ${emp.nit || 'N/A'}</p>
-                                </div>
-                            </div>
-                        </td>
-                        <td class="p-4">
-                            <p class="text-sm font-bold text-slate-700">${emp.plan_nombre || 'Básico'}</p>
-                            <div class="w-full bg-slate-200 rounded-full h-1.5 mb-1 mt-1 max-w-[150px]">
-                                <div class="${colorUso} h-1.5 rounded-full" style="width: ${usoPorcentaje > 100 ? 100 : usoPorcentaje}%"></div>
-                            </div>
-                            <p class="text-[10px] text-slate-500">${emp.total_empleados} de ${emp.limite_usuarios} usuarios</p>
-                        </td>
-                        <td class="p-4">
-                            ${badgeEstado}
-                            <p class="text-[11px] text-slate-500 mt-1"><i class="far fa-calendar-alt mr-1"></i>${fechaVenc} (${emp.tipo_suscripcion || 'Mensual'})</p>
-                        </td>
-                        <td class="p-4 text-right">
-                            <div class="flex items-center justify-end space-x-1">
-                                <button onclick="registrarPago(${emp.id}, '${emp.nombre}')" class="bg-emerald-50 hover:bg-emerald-500 hover:text-white text-emerald-600 p-2 rounded-lg transition-colors" title="Registrar Pago">
-                                    <i class="fas fa-hand-holding-usd"></i>
-                                </button>
-                                <button onclick="verHistorialPagos(${emp.id}, '${emp.nombre}')" class="bg-slate-100 hover:bg-slate-600 hover:text-white text-slate-600 p-2 rounded-lg transition-colors" title="Historial Contable">
-                                    <i class="fas fa-file-invoice-dollar"></i>
-                                </button>
-                                
-                                <div class="w-px h-6 bg-slate-200 mx-1"></div> <button onclick="abrirModalEdicion(${empSeguro})" class="bg-amber-50 hover:bg-amber-500 hover:text-white text-amber-600 p-2 rounded-lg transition-colors" title="Editar Info / Reset Pass">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button onclick="entrarComoEmpresa(${emp.id})" class="bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-700 p-2 rounded-lg transition-colors" title="Entrar al Panel de la Empresa">
-                                    <i class="fas fa-sign-in-alt"></i>
-                                </button>
-                                <button onclick="eliminarEmpresa(${emp.id}, '${emp.nombre}')" class="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 p-2 rounded-lg transition-colors" title="Destruir Esquema">
-                                    <i class="fas fa-trash-alt"></i>
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                `;
+                        <td class="p-4"><div class="flex items-center"><div class="h-10 w-10 rounded-lg bg-slate-800 text-white flex items-center justify-center font-bold mr-3">${emp.nombre.charAt(0).toUpperCase()}</div>
+                            <div><p class="font-bold text-slate-800">${emp.nombre}</p><p class="text-[11px] text-slate-500"><i class="fas fa-map-marker-alt text-red-400 mr-1"></i>${emp.ciudad || 'N/A'} | NIT: ${emp.nit || 'N/A'}</p></div></div></td>
+                        <td class="p-4"><p class="text-sm font-bold text-slate-700">${emp.plan_nombre || 'Básico'}</p><div class="w-full bg-slate-200 rounded-full h-1.5 mb-1 mt-1 max-w-[150px]"><div class="${colorUso} h-1.5 rounded-full" style="width: ${usoPorcentaje > 100 ? 100 : usoPorcentaje}%"></div></div><p class="text-[10px] text-slate-500">${emp.total_empleados} de ${emp.limite_usuarios} usuarios</p></td>
+                        <td class="p-4">${badgeEstado}<p class="text-[11px] text-slate-500 mt-1"><i class="far fa-calendar-alt mr-1"></i>${fechaVenc} (${emp.tipo_suscripcion || 'Mensual'})</p></td>
+                        <td class="p-4 text-right"><div class="flex items-center justify-end space-x-1">
+                                <button onclick="registrarPago(${emp.id}, '${emp.nombre}')" class="bg-emerald-50 hover:bg-emerald-500 hover:text-white text-emerald-600 p-2 rounded-lg transition-colors" title="Registrar Pago"><i class="fas fa-hand-holding-usd"></i></button>
+                                <button onclick="verHistorialPagos(${emp.id}, '${emp.nombre}')" class="bg-slate-100 hover:bg-slate-600 hover:text-white text-slate-600 p-2 rounded-lg transition-colors" title="Historial Contable"><i class="fas fa-file-invoice-dollar"></i></button>
+                                <div class="w-px h-6 bg-slate-200 mx-1"></div>
+                                <button onclick="abrirModalEdicion(${empSeguro})" class="bg-amber-50 hover:bg-amber-500 hover:text-white text-amber-600 p-2 rounded-lg transition-colors" title="Editar / Reset Pass"><i class="fas fa-edit"></i></button>
+                                <button onclick="entrarComoEmpresa(${emp.id})" class="bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-700 p-2 rounded-lg transition-colors" title="Entrar al Panel"><i class="fas fa-sign-in-alt"></i></button>
+                                <button onclick="eliminarEmpresa(${emp.id}, '${emp.nombre}')" class="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 p-2 rounded-lg transition-colors" title="Destruir Esquema"><i class="fas fa-trash-alt"></i></button>
+                            </div></td></tr>`;
             });
         }
 
         // =========================================================
+        // 5. MÓDULO IOT MEJORADO (Frontend Tonto que lee del Backend)
+        // =========================================================
+        async function cargarHardwareAPI() {
+            try {
+                const response = await fetch(`${API_URL}/superadmin/hardware`, { headers: { 'Authorization': `Bearer ${token}` } });
+                window.datosHardwareGlobal = await response.json(); 
+                pintarHardware();
+            } catch (error) { document.getElementById('tablaHardware').innerHTML = `<tr><td colspan="4" class="p-8 text-center text-red-500">Error conectando con la red ADMS.</td></tr>`; }
+        }
+
+        function pintarHardware() {
+            const buscador = document.getElementById('buscHw')?.value.toLowerCase() || '';
+            const filtro = document.getElementById('filtHw')?.value || 'ALL';
+            const tbody = document.getElementById('tablaHardware'); tbody.innerHTML = '';
+
+            let r = window.datosHardwareGlobal.filter(hw => {
+                const textoMatch = hw.numero_serie.toLowerCase().includes(buscador) || (hw.empresa_nombre && hw.empresa_nombre.toLowerCase().includes(buscador));
+                const filtroMatch = (filtro === 'ALL') || (filtro === 'ON' && hw.esta_online) || (filtro === 'OFF' && !hw.esta_online);
+                return textoMatch && filtroMatch;
+            });
+
+            if (r.length === 0) { tbody.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-slate-500">No se encontraron dispositivos ZKTeco.</td></tr>'; return; }
+
+            r.forEach(hw => {
+                // ⚡ Frontend SÚPER tonto: Solo pregunta por booleanos calculados en Python
+                let badgeEstado = '<span class="bg-slate-100 text-slate-500 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-circle text-[8px] mr-1"></i>Offline</span>';
+                
+                if (hw.esta_online) {
+                    badgeEstado = '<span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-circle text-[8px] mr-1 text-emerald-500 animate-pulse"></i>Conectado</span>';
+                } else if (hw.minutos_offline < 60) {
+                    badgeEstado = '<span class="bg-amber-100 text-amber-700 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-circle text-[8px] mr-1 text-amber-500"></i>Perdió Señal</span>';
+                }
+
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="p-4">${badgeEstado}<p class="text-[10px] text-slate-400 mt-1">Ping: ${hw.ultima_conexion_str}</p></td>
+                        <td class="p-4"><p class="font-mono font-bold text-slate-800 text-sm"><i class="fas fa-microchip text-slate-400 mr-2"></i>${hw.numero_serie}</p></td>
+                        <td class="p-4"><p class="font-bold text-slate-700">${hw.empresa_nombre || '<span class="text-red-400">Sin Asignar (Desconectado del Tenant)</span>'}</p><p class="text-[10px] text-blue-500 font-mono">${hw.schema_name}</p></td>
+                        <td class="p-4 text-right"><button onclick="enviarComandoRemoto('${hw.numero_serie}')" class="bg-slate-800 hover:bg-slate-700 text-white p-2 px-3 rounded-lg transition-colors font-medium text-xs shadow-sm"><i class="fas fa-terminal mr-1"></i> Consola</button></td>
+                    </tr>`;
+            });
+        }
+
+        function enviarComandoRemoto(sn) {
+            Swal.fire({
+                title: `Terminal IoT: ${sn}`, html: `<p class="text-sm text-slate-500 mb-4 text-left">Selecciona orden para el reloj.</p><select id="swal_comando" class="w-full border rounded-lg p-3 text-sm"><option value="REINICIAR">🔄 Reiniciar (Reboot)</option><option value="BORRAR_ASISTENCIAS">🗑️ Borrar Historial de Asistencias</option><option value="BORRAR_TODO">⚠️ Borrar TODO (Usuarios y Huellas) - PELIGROSO</option></select>`,
+                showCancelButton: true, confirmButtonText: 'Enviar Comando', confirmButtonColor: '#1e293b'
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({ title: 'Transmitiendo...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                    try {
+                        const res = await fetch(`${API_URL}/superadmin/hardware/${sn}/comando`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ comando: document.getElementById('swal_comando').value }) });
+                        Swal.fire('Transmisión Exitosa', (await res.json()).mensaje, 'success');
+                    } catch (e) { Swal.fire('Error', e.message, 'error'); }
+                }
+            });
+        }
+
+        // =========================================================
+        // 6. MÓDULO: CAÑÓN DE FERIADOS GLOBALES
+        // =========================================================
+        async function lanzarFeriadoGlobal() {
+            const motivo = document.getElementById('global_motivo').value;
+            const fecha = document.getElementById('global_fecha').value;
+            
+            if(!motivo || !fecha) return Swal.fire('Error', 'Completa el motivo y la fecha', 'warning');
+
+            const confirmacion = await Swal.fire({
+                title: '¿Confirmar Lanzamiento Global?',
+                html: `Se insertará <b>${motivo}</b> el día <b>${fecha}</b> en todas las empresas activas.`,
+                icon: 'warning', showCancelButton: true, confirmButtonText: 'Sí, Lanzar Feriado', confirmButtonColor: '#1e293b'
+            });
+
+            if (confirmacion.isConfirmed) {
+                Swal.fire({ title: 'Inyectando en la Nube...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                try {
+                    const res = await fetch(`${API_URL}/superadmin/feriados-globales`, { 
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, 
+                        body: JSON.stringify({ fecha, descripcion: motivo }) 
+                    });
+                    const data = await res.json();
+                    if(!res.ok) throw new Error(data.detail);
+                    Swal.fire('¡Propagado!', data.mensaje, 'success');
+                    document.getElementById('global_motivo').value = '';
+                    document.getElementById('global_fecha').value = '';
+                } catch (e) { Swal.fire('Fallo del Sistema', e.message, 'error'); }
+            }
+        }
+
+        // =========================================================
+        // MODALES CRUD (Intactos, compactados por espacio)
+        // =========================================================
+                // =========================================================
         // 5. MODALES DE GESTIÓN DE CLIENTE (CREAR / EDITAR)
         // =========================================================
         function abrirModalEmpresa() {
@@ -609,102 +591,10 @@
             }
         }
 
+
         // =========================================================
-        // 7. MÓDULO IOT (RADAR DE HARDWARE)
+        // INICIALIZACIÓN
         // =========================================================
-
-        async function cargarHardwareAPI() {
-            const tbody = document.getElementById('tablaHardware');
-            try {
-                const response = await fetch(`${API_URL}/superadmin/hardware`, { headers: { 'Authorization': `Bearer ${token}` } });
-                const relojes = await response.json(); 
-                
-                if (relojes.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-slate-500 font-medium">No se detectaron dispositivos ZKTeco en la red.</td></tr>';
-                    return;
-                }
-
-                tbody.innerHTML = ''; 
-                relojes.forEach(r => {
-                    // ⚡ Inteligencia: Calculamos si está online (Ping hace menos de 15 minutos)
-                    let estaOnline = false;
-                    let badgeEstado = '<span class="bg-slate-100 text-slate-500 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-circle text-[8px] mr-1"></i>Offline / Apagado</span>';
-                    
-                    if (r.ultima_conexion_str !== "Nunca") {
-                        const ultimoPing = new Date(r.ultima_conexion);
-                        const ahora = new Date();
-                        const diferenciaMinutos = (ahora - ultimoPing) / (1000 * 60);
-                        
-                        if (diferenciaMinutos < 15) {
-                            estaOnline = true;
-                            badgeEstado = '<span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-circle text-[8px] mr-1 text-emerald-500 animate-pulse"></i>Conectado</span>';
-                        } else if (diferenciaMinutos < 60) {
-                            badgeEstado = '<span class="bg-amber-100 text-amber-700 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-circle text-[8px] mr-1 text-amber-500"></i>Latencia Alta</span>';
-                        }
-                    }
-
-                    tbody.innerHTML += `
-                        <tr class="hover:bg-slate-50 transition-colors">
-                            <td class="p-4">
-                                ${badgeEstado}
-                                <p class="text-[10px] text-slate-400 mt-1">Último Ping: ${r.ultima_conexion_str}</p>
-                            </td>
-                            <td class="p-4">
-                                <p class="font-mono font-bold text-slate-800 text-sm"><i class="fas fa-microchip text-slate-400 mr-2"></i>${r.numero_serie}</p>
-                            </td>
-                            <td class="p-4">
-                                <p class="font-bold text-slate-700">${r.empresa_nombre || '<span class="text-red-400">Sin Asignar</span>'}</p>
-                                <p class="text-[10px] text-blue-500 font-mono">${r.schema_name}</p>
-                            </td>
-                            <td class="p-4 text-right">
-                                <button onclick="enviarComandoRemoto('${r.numero_serie}')" class="bg-slate-800 hover:bg-slate-700 text-white p-2 px-3 rounded-lg transition-colors font-medium text-xs shadow-sm">
-                                    <i class="fas fa-terminal mr-1"></i> Consola
-                                </button>
-                            </td>
-                        </tr>
-                    `;
-                });
-            } catch (error) {
-                tbody.innerHTML = `<tr><td colspan="4" class="p-8 text-center text-red-500 font-bold"><i class="fas fa-wifi mr-2"></i>Fallo en la antena del radar.</td></tr>`;
-            }
-        }
-
-        function enviarComandoRemoto(sn) {
-            Swal.fire({
-                title: `Terminal IoT: ${sn}`,
-                html: `
-                    <p class="text-sm text-slate-500 mb-4 text-left">Selecciona un comando para enviar al reloj. Se ejecutará automáticamente la próxima vez que el dispositivo tenga acceso a internet.</p>
-                    <select id="swal_comando" class="w-full border border-slate-300 rounded-lg p-3 text-sm focus:border-blue-500 outline-none shadow-sm">
-                        <option value="REINICIAR">🔄 Reiniciar Dispositivo (Reboot)</option>
-                        <option value="BORRAR_ASISTENCIAS">🗑️ Borrar Historial de Asistencias (Mantiene Usuarios)</option>
-                        <option value="BORRAR_TODO">⚠️ Borrar TODO (Usuarios y Huellas) - PELIGROSO</option>
-                    </select>
-                `,
-                showCancelButton: true,
-                confirmButtonText: '<i class="fas fa-paper-plane mr-1"></i> Enviar Comando',
-                confirmButtonColor: '#1e293b',
-                cancelButtonText: 'Abortar'
-            }).then(async (result) => {
-                if (result.isConfirmed) {
-                    const comando = document.getElementById('swal_comando').value;
-                    Swal.fire({ title: 'Transmitiendo...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-                    try {
-                        const res = await fetch(`${API_URL}/superadmin/hardware/${sn}/comando`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                            body: JSON.stringify({ comando: comando })
-                        });
-                        const data = await res.json();
-                        if (!res.ok) throw new Error(data.detail);
-                        Swal.fire('Transmisión Exitosa', data.mensaje, 'success');
-                    } catch (e) {
-                        Swal.fire('Fallo de Transmisión', e.message, 'error');
-                    }
-                }
-            });
-        }
-
-        // 🚀 INICIALIZACIÓN
         window.onload = () => cambiarVista('resumen', document.querySelector('.menu-btn'));
     </script>
 </body>

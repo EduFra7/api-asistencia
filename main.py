@@ -4484,14 +4484,12 @@ async def registrar_pago_saas(empresa_id: int, request: Request, usuario = Depen
 
 @app.get("/superadmin/hardware")
 async def obtener_monitor_hardware(usuario = Depends(verificar_token)):
-    """ Escanea todos los relojes registrados en todas las empresas """
-    if usuario["rol"] != "superadmin":
-        raise HTTPException(status_code=403, detail="Sin permisos.")
+    """ Escanea todos los relojes y calcula su estado real desde el servidor """
+    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403, detail="Sin permisos.")
         
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        # Hacemos un JOIN para saber a qué empresa pertenece cada reloj
         cur.execute("""
             SELECT d.id, d.numero_serie, d.estado, d.ultima_conexion, d.schema_name, e.nombre as empresa_nombre 
             FROM dispositivos d
@@ -4499,53 +4497,88 @@ async def obtener_monitor_hardware(usuario = Depends(verificar_token)):
             ORDER BY d.ultima_conexion DESC NULLS LAST
         """)
         relojes = cur.fetchall()
+        hoy_srv = datetime.now()
         
-        # Formatear las fechas para el Frontend
+        # ⚡ EL BACKEND HACE EL TRABAJO MATEMÁTICO (Frontend Tonto)
         for r in relojes:
             if r["ultima_conexion"]:
                 r["ultima_conexion_str"] = r["ultima_conexion"].strftime("%Y-%m-%d %H:%M:%S")
+                dif_minutos = (hoy_srv - r["ultima_conexion"]).total_seconds() / 60
+                r["esta_online"] = dif_minutos < 15
+                r["minutos_offline"] = int(dif_minutos)
             else:
                 r["ultima_conexion_str"] = "Nunca"
+                r["esta_online"] = False
+                r["minutos_offline"] = 999999
                 
         return list(relojes)
-    finally:
-        cur.close(); conn.close()
+    finally: cur.close(); conn.close()
 
 
 @app.post("/superadmin/hardware/{sn}/comando")
 async def enviar_comando_iot_global(sn: str, request: Request, usuario = Depends(verificar_token)):
     """ Permite al SuperAdmin enviar comandos directos a cualquier reloj (Reinicio, Borrado) """
-    if usuario["rol"] != "superadmin":
-        raise HTTPException(status_code=403, detail="Sin permisos.")
+    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403, detail="Sin permisos.")
         
     data = await request.json()
     comando_bruto = data.get("comando", "").upper()
-    
-    # Mapeo de comandos amigables a comandos nativos de ZKTeco
-    comandos_validos = {
-        "REINICIAR": "REBOOT",
-        "BORRAR_ASISTENCIAS": "CLEAR LOG",
-        "BORRAR_TODO": "CLEAR DATA"
-    }
+    comandos_validos = { "REINICIAR": "REBOOT", "BORRAR_ASISTENCIAS": "CLEAR LOG", "BORRAR_TODO": "CLEAR DATA" }
     
     comando_final = comandos_validos.get(comando_bruto)
-    if not comando_final:
-        raise HTTPException(status_code=400, detail="Comando no reconocido por el sistema IoT.")
+    if not comando_final: raise HTTPException(status_code=400, detail="Comando no reconocido.")
     
     conn = conectar_bd("public")
     cur = conn.cursor()
     try:
-        # Inyectamos el comando en la cola. La próxima vez que el reloj haga Ping, se ejecutará.
         cur.execute("INSERT INTO comandos_adms (numero_serie, comando) VALUES (%s, %s)", (sn, comando_final))
         conn.commit()
-        return {"mensaje": f"Comando '{comando_final}' encolado. Se ejecutará en el próximo Ping del reloj {sn}."}
+        return {"mensaje": f"Comando '{comando_final}' encolado para el reloj {sn}."}
+    finally: cur.close(); conn.close()
+
+
+# ==============================================================================
+# 21. CAÑÓN DE FERIADOS GLOBALES (SaaS)
+# ==============================================================================
+
+@app.post("/superadmin/feriados-globales")
+async def propagar_feriado_global(request: Request, usuario = Depends(verificar_token)):
+    """ Inyecta un feriado sorpresa en TODAS las bases de datos de los clientes activos """
+    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403, detail="Solo SuperAdmin.")
+        
+    data = await request.json()
+    fecha = data.get("fecha")
+    descripcion = data.get("descripcion")
+    
+    if not fecha or not descripcion:
+        raise HTTPException(status_code=400, detail="Fecha y descripción obligatorias.")
+        
+    conn = conectar_bd("public")
+    cur = conn.cursor()
+    try:
+        # Obtenemos todas las empresas reales (excluyendo tu cuenta SuperAdmin ID 1)
+        cur.execute("SELECT schema_name, nombre FROM empresas WHERE id != 1 AND activo = TRUE")
+        empresas = cur.fetchall()
+        
+        afectadas = 0
+        for emp in empresas:
+            schema = emp[0]
+            # ⚡ Escudo: Verificamos si el cliente ya tenía ese feriado para no duplicarlo
+            cur.execute(f"SELECT id FROM {schema}.feriados WHERE fecha = %s AND eliminado = FALSE", (fecha,))
+            if not cur.fetchone():
+                cur.execute(f"""
+                    INSERT INTO {schema}.feriados (fecha, descripcion, tipo, recurrente) 
+                    VALUES (%s, %s, 'nacional', FALSE)
+                """, (fecha, descripcion))
+                afectadas += 1
+                
+        conn.commit()
+        return {"mensaje": f"Propagación exitosa. Feriado inyectado en {afectadas} empresas de la red."}
     except Exception as e:
         conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cur.close(); conn.close()
+        raise HTTPException(status_code=500, detail=f"Error en propagación: {str(e)}")
+    finally: cur.close(); conn.close()
 
 # ── RUTA DE ESTADO (Para saber si la API está viva) ──
 @app.get("/")
 def inicio():
-    return {"estado": "API funcionando", "version": "2.0 (Multitenant Base)"}
+    return {"estado": "API funcionando", "version": "2.1 (SaaS Global)"}
