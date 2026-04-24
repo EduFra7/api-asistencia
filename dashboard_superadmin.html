@@ -448,6 +448,15 @@
                         <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Límite Usuarios</label><input type="number" id="edit_limite" value="${emp.limite_usuarios || 50}" class="mt-1 w-full border rounded p-2 text-sm outline-none focus:border-amber-500"></div>
                         
                         <div class="col-span-2 md:col-span-1">
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase">Tipo Suscripción</label>
+                            <select id="edit_tipo_sub" class="mt-1 w-full border rounded p-2 text-sm outline-none focus:border-amber-500">
+                                <option value="Mensual" ${emp.tipo_suscripcion === 'Mensual' ? 'selected' : ''}>Mensual</option>
+                                <option value="Anual" ${emp.tipo_suscripcion === 'Anual' ? 'selected' : ''}>Anual</option>
+                                <option value="Indefinido" ${emp.tipo_suscripcion === 'Indefinido' ? 'selected' : ''}>Indefinido (Prueba/Interno)</option>
+                            </select>
+                        </div>
+
+                        <div class="col-span-2 md:col-span-1">
                             <label class="block text-[10px] font-bold text-red-500 uppercase">Prórroga / Vencimiento Manual</label>
                             <input type="date" id="edit_vencimiento" value="${emp.fecha_vencimiento || ''}" class="mt-1 w-full border border-red-200 rounded p-2 text-sm outline-none focus:border-amber-500" title="Usa esto para dar días gratis sin registrar un pago">
                         </div>
@@ -472,6 +481,7 @@
                             ciudad: document.getElementById('edit_ciudad').value,
                             plan_nombre: document.getElementById('edit_plan').value,
                             limite_usuarios: document.getElementById('edit_limite').value,
+                            tipo_suscripcion: document.getElementById('edit_tipo_sub').value, // ⚡ Lo capturamos para el backend
                             fecha_vencimiento: document.getElementById('edit_vencimiento').value
                         },
                         credenciales: {

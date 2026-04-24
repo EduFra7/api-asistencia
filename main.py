@@ -444,35 +444,38 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
 
 @app.put("/empresas/{empresa_id}/info")
 async def editar_info_empresa(empresa_id: int, request: Request, usuario = Depends(verificar_token)):
-    """Edita la info comercial y permite dar Prórrogas manuales (fecha_vencimiento)"""
+    """Edita la info comercial, permite dar Prórrogas manuales y cambiar Tipo de Suscripción"""
     if usuario["rol"] != "superadmin": raise HTTPException(status_code=403, detail="Solo SuperAdmin.")
     data = await request.json()
     
     conn = conectar_bd("public")
     cur = conn.cursor()
     try:
-        # ⚡ FIX: Prevenir que los campos vacíos rompan PostgreSQL
+        # Prevenir que los campos vacíos rompan PostgreSQL
         fecha_venc_str = data.get("fecha_vencimiento")
         fecha_venc_final = fecha_venc_str if fecha_venc_str and str(fecha_venc_str).strip() != "" else None
         
         limite_str = data.get("limite_usuarios")
         limite_final = int(limite_str) if limite_str and str(limite_str).strip() != "" else 50
 
+        # ⚡ AHORA TAMBIÉN ACTUALIZAMOS EL TIPO DE SUSCRIPCIÓN
         cur.execute("""
             UPDATE empresas 
-            SET nombre = %s, razon_social = %s, nit = %s, ciudad = %s, plan_nombre = %s, limite_usuarios = %s, fecha_vencimiento = %s
+            SET nombre = %s, razon_social = %s, nit = %s, ciudad = %s, 
+                plan_nombre = %s, limite_usuarios = %s, fecha_vencimiento = %s,
+                tipo_suscripcion = %s
             WHERE id = %s
         """, (
             data.get("nombre"), data.get("razon_social"), data.get("nit"), 
             data.get("ciudad"), data.get("plan_nombre"), limite_final, 
             fecha_venc_final, 
+            data.get("tipo_suscripcion", "Mensual"), # ⚡ Nuevo campo
             empresa_id
         ))
         conn.commit()
-        return {"mensaje": "Información de la empresa y vencimiento actualizados."}
+        return {"mensaje": "Información de la empresa actualizada."}
     except Exception as e:
         conn.rollback()
-        # Imprimimos el error real en Railway por si acaso
         print(f"❌ Error DB al editar empresa: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally: 
