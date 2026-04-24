@@ -1006,18 +1006,23 @@ async def obtener_kpis_saas(usuario = Depends(verificar_token)):
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        # 1. Contamos empresas (exceptuando al propio sistema/superadmin)
-        cur.execute("SELECT COUNT(id) as total FROM empresas WHERE id != 1")
-        total_empresas = cur.fetchone()['total']
+        # 1. Contamos empresas usando la ruta absoluta 'public.empresas'
+        cur.execute("SELECT COUNT(id) as total FROM public.empresas WHERE id != 1")
+        res_emp = cur.fetchone()
+        total_empresas = res_emp['total'] if res_emp else 0
         
-        # 2. Contamos cuántos relojes en todo el mundo se comunicaron en las últimas 24 horas
-        cur.execute("SELECT COUNT(id) as online FROM dispositivos WHERE estado = 'online' AND ultima_conexion >= NOW() - INTERVAL '24 hours'")
-        relojes_online = cur.fetchone()['online']
+        # 2. Contamos relojes usando la ruta absoluta 'public.dispositivos'
+        cur.execute("SELECT COUNT(id) as online FROM public.dispositivos WHERE estado = 'online' AND ultima_conexion >= NOW() - INTERVAL '24 hours'")
+        res_disp = cur.fetchone()
+        relojes_online = res_disp['online'] if res_disp else 0
         
         return {
             "total_empresas": total_empresas,
             "relojes_online": relojes_online
         }
+    except Exception as e:
+        print(f"❌ Error en KPIs: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         cur.close()
         conn.close()
