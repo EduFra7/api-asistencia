@@ -115,14 +115,37 @@
         `;
 
         const VISTA_EMPRESAS = `
-            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
                 <div>
-                    <h1 class="text-2xl font-bold text-slate-800">Gestión de Clientes (SaaS)</h1>
-                    <p class="text-sm text-slate-500">Administra bases de datos, límites de usuarios y vencimientos.</p>
+                    <h1 class="text-2xl font-bold text-slate-800">Directorio de Clientes</h1>
+                    <p class="text-sm text-slate-500">Administra bases de datos, accesos y suscripciones.</p>
                 </div>
                 <button onclick="abrirModalEmpresa()" class="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-md transition-colors flex items-center justify-center">
-                    <i class="fas fa-plus-circle mr-2"></i> Nuevo Cliente
+                    <i class="fas fa-plus-circle mr-2"></i> Aprovisionar Cliente
                 </button>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-4 flex flex-col md:flex-row gap-4 items-center">
+                <div class="relative w-full md:w-1/3">
+                    <i class="fas fa-search absolute left-3 top-3 text-slate-400"></i>
+                    <input type="text" id="filtroBuscador" onkeyup="aplicarFiltros()" placeholder="Buscar por Empresa, NIT, Ciudad..." class="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:border-blue-500 outline-none">
+                </div>
+                <div class="w-full md:w-1/4">
+                    <select id="filtroEstado" onchange="aplicarFiltros()" class="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:border-blue-500 outline-none">
+                        <option value="TODOS">Todos los Estados</option>
+                        <option value="AL_DIA">Suscripciones Al Día</option>
+                        <option value="POR_VENCER">Por Vencer (<= 15 días)</option>
+                        <option value="VENCIDO">Suscripciones Vencidas</option>
+                    </select>
+                </div>
+                <div class="w-full md:w-1/4">
+                    <select id="filtroSuscripcion" onchange="aplicarFiltros()" class="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:border-blue-500 outline-none">
+                        <option value="TODOS">Cualquier Plan</option>
+                        <option value="Mensual">Solo Mensuales</option>
+                        <option value="Anual">Solo Anuales</option>
+                        <option value="Indefinido">Pruebas / Indefinidos</option>
+                    </select>
+                </div>
             </div>
 
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
@@ -130,10 +153,10 @@
                     <table class="w-full text-left border-collapse min-w-[1000px]">
                         <thead>
                             <tr class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider border-b border-slate-200">
-                                <th class="p-4 font-bold">Empresa / DB</th>
+                                <th class="p-4 font-bold">Empresa / DB / Ciudad</th>
                                 <th class="p-4 font-bold">Plan y Usuarios</th>
-                                <th class="p-4 font-bold">Estado / Vencimiento</th>
-                                <th class="p-4 font-bold text-right">Panel de Control</th>
+                                <th class="p-4 font-bold">Estado / Suscripción</th>
+                                <th class="p-4 font-bold text-right">Herramientas</th>
                             </tr>
                         </thead>
                         <tbody id="tablaEmpresas" class="text-sm divide-y divide-slate-100">
@@ -151,6 +174,117 @@
                 <p class="text-sm mt-2 text-center max-w-md">Esta sección del Centro de Comando se implementará en la siguiente fase táctica.</p>
             </div>
         `;
+        
+        // =========================================================
+        // MEMORIA GLOBAL Y FILTROS
+        // =========================================================
+        window.datosEmpresasGlobal = [];
+
+        window.togglePassword = function(id) {
+            const el = document.getElementById(id);
+            el.type = el.type === 'password' ? 'text' : 'password';
+        };
+
+        async function cargarEmpresasAPI() {
+            try {
+                const response = await fetch(`${API_URL}/empresas`, { headers: { 'Authorization': `Bearer ${token}` } });
+                window.datosEmpresasGlobal = await response.json(); 
+                aplicarFiltros(); // Dibuja la tabla con los datos
+            } catch (error) {
+                document.getElementById('tablaEmpresas').innerHTML = `<tr><td colspan="4" class="p-8 text-center text-red-500 font-bold"><i class="fas fa-exclamation-triangle mr-2"></i>Error conectando con el Core del servidor.</td></tr>`;
+            }
+        }
+
+        function aplicarFiltros() {
+            const buscador = document.getElementById('filtroBuscador')?.value.toLowerCase() || '';
+            const estado = document.getElementById('filtroEstado')?.value || 'TODOS';
+            const tipoSub = document.getElementById('filtroSuscripcion')?.value || 'TODOS';
+            
+            const tbody = document.getElementById('tablaEmpresas');
+            tbody.innerHTML = '';
+
+            let resultados = window.datosEmpresasGlobal.filter(emp => {
+                // Filtro Texto (Buscador)
+                const textoMatch = emp.nombre.toLowerCase().includes(buscador) || 
+                                  (emp.nit && emp.nit.toLowerCase().includes(buscador)) ||
+                                  (emp.ciudad && emp.ciudad.toLowerCase().includes(buscador)) ||
+                                  (emp.razon_social && emp.razon_social.toLowerCase().includes(buscador));
+                
+                // Filtro Suscripcion
+                const subMatch = (tipoSub === 'TODOS') || (emp.tipo_suscripcion === tipoSub);
+
+                // Filtro Estado (Cálculo de días)
+                let estadoMatch = true;
+                if (estado !== 'TODOS') {
+                    if (!emp.fecha_vencimiento) {
+                        estadoMatch = (estado === 'AL_DIA'); // Sin vencimiento = Al día
+                    } else {
+                        const diasRestantes = Math.ceil((new Date(emp.fecha_vencimiento) - new Date()) / (1000 * 60 * 60 * 24));
+                        if (estado === 'VENCIDO') estadoMatch = diasRestantes < 0;
+                        if (estado === 'POR_VENCER') estadoMatch = diasRestantes >= 0 && diasRestantes <= 15;
+                        if (estado === 'AL_DIA') estadoMatch = diasRestantes > 15;
+                    }
+                }
+
+                return textoMatch && subMatch && estadoMatch;
+            });
+
+            if (resultados.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-slate-500">No se encontraron clientes con estos filtros.</td></tr>';
+                return;
+            }
+
+            resultados.forEach(emp => {
+                const usoPorcentaje = Math.round((emp.total_empleados / (emp.limite_usuarios || 50)) * 100) || 0;
+                const colorUso = usoPorcentaje > 90 ? 'bg-red-500' : (usoPorcentaje > 70 ? 'bg-yellow-500' : 'bg-blue-500');
+                
+                let badgeEstado = '<span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-[10px] font-bold uppercase">Al Día</span>';
+                let fechaVenc = emp.fecha_vencimiento || 'Indefinido';
+                
+                if(emp.fecha_vencimiento && emp.fecha_vencimiento !== '2099-12-31') {
+                    const diasRestantes = Math.ceil((new Date(emp.fecha_vencimiento) - new Date()) / (1000 * 60 * 60 * 24));
+                    if(diasRestantes < 0) badgeEstado = '<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-[10px] font-bold uppercase">Vencido</span>';
+                    else if (diasRestantes <= 15) badgeEstado = `<span class="bg-amber-100 text-amber-700 px-2 py-1 rounded text-[10px] font-bold uppercase">Vence en ${diasRestantes} d</span>`;
+                } else if (emp.fecha_vencimiento === '2099-12-31') {
+                    fechaVenc = 'Indefinido (Prueba)';
+                }
+
+                tbody.innerHTML += `
+                    <tr class="hover:bg-blue-50 transition-colors group">
+                        <td class="p-4">
+                            <div class="flex items-center">
+                                <div class="h-10 w-10 rounded-lg bg-slate-800 text-white flex items-center justify-center font-bold mr-3">${emp.nombre.charAt(0).toUpperCase()}</div>
+                                <div>
+                                    <p class="font-bold text-slate-800">${emp.nombre}</p>
+                                    <p class="text-[11px] text-slate-500"><i class="fas fa-map-marker-alt text-red-400 mr-1"></i>${emp.ciudad || 'N/A'} | NIT: ${emp.nit || 'N/A'}</p>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="p-4">
+                            <p class="text-sm font-bold text-slate-700">${emp.plan_nombre}</p>
+                            <div class="w-full bg-slate-200 rounded-full h-1.5 mb-1 mt-1 max-w-[150px]">
+                                <div class="${colorUso} h-1.5 rounded-full" style="width: ${usoPorcentaje > 100 ? 100 : usoPorcentaje}%"></div>
+                            </div>
+                            <p class="text-[10px] text-slate-500">${emp.total_empleados} de ${emp.limite_usuarios} usuarios</p>
+                        </td>
+                        <td class="p-4">
+                            ${badgeEstado}
+                            <p class="text-[11px] text-slate-500 mt-1"><i class="far fa-calendar-alt mr-1"></i>${fechaVenc} (${emp.tipo_suscripcion})</p>
+                        </td>
+                        <td class="p-4 text-right">
+                            <div class="flex items-center justify-end space-x-1">
+                                <button onclick='abrirModalEdicion(${JSON.stringify(emp).replace(/'/g, "&#39;")})' class="bg-amber-50 hover:bg-amber-500 hover:text-white text-amber-600 p-2 rounded-lg transition-colors" title="Editar Info">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button onclick="entrarComoEmpresa(${emp.id})" class="bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-700 p-2 rounded-lg transition-colors" title="Entrar al Panel">
+                                    <i class="fas fa-sign-in-alt"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
 
         // =========================================================
         // 3. MOTOR DE CAMBIO DE VISTAS (SPA ROUTER)
@@ -458,6 +592,150 @@
                     confirmButtonText: 'Cerrar', confirmButtonColor: '#334155'
                 });
             } catch (e) { Swal.fire('Error', 'No se pudo cargar el historial contable.', 'error'); }
+        }
+
+        // =========================================================
+        // 5. MODALES (CREAR Y EDITAR)
+        // =========================================================
+
+        function abrirModalEmpresa() {
+            Swal.fire({
+                title: 'Aprovisionar Nuevo Cliente',
+                width: '650px',
+                html: `
+                    <div class="grid grid-cols-2 gap-4 text-left mt-2">
+                        <div class="col-span-2"><h4 class="text-xs font-bold text-blue-600 uppercase border-b pb-1">1. Datos de la Empresa</h4></div>
+                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Nombre Comercial</label><input type="text" id="swal_emp_nombre" class="mt-1 w-full border rounded p-2 text-sm"></div>
+                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">NIT</label><input type="text" id="swal_emp_nit" class="mt-1 w-full border rounded p-2 text-sm"></div>
+                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Razón Social</label><input type="text" id="swal_emp_razon" class="mt-1 w-full border rounded p-2 text-sm"></div>
+                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Ciudad / Ubicación</label><input type="text" id="swal_emp_ciudad" class="mt-1 w-full border rounded p-2 text-sm" placeholder="Ej. La Paz"></div>
+
+                        <div class="col-span-2 mt-2"><h4 class="text-xs font-bold text-blue-600 uppercase border-b pb-1">2. Acceso RRHH (Admin)</h4></div>
+                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Nombre Encargado</label><input type="text" id="swal_admin_nombre" class="mt-1 w-full border rounded p-2 text-sm"></div>
+                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Correo (Login)</label><input type="email" id="swal_admin_email" class="mt-1 w-full border rounded p-2 text-sm"></div>
+                        <div class="col-span-2 relative">
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase">Contraseña Inicial</label>
+                            <input type="password" id="swal_admin_pass" class="mt-1 w-full border rounded p-2 text-sm pr-10">
+                            <i class="fas fa-eye absolute right-3 top-7 cursor-pointer text-slate-400 hover:text-blue-500" onclick="togglePassword('swal_admin_pass')"></i>
+                        </div>
+
+                        <div class="col-span-2 mt-2"><h4 class="text-xs font-bold text-blue-600 uppercase border-b pb-1">3. Suscripción Financiera</h4></div>
+                        <div class="col-span-2 md:col-span-1">
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase">Tipo de Suscripción</label>
+                            <select id="swal_tipo_sub" class="mt-1 w-full border rounded p-2 text-sm bg-slate-50">
+                                <option value="Mensual">Mensual (Facturación recurrente)</option>
+                                <option value="Anual">Anual (Facturación recurrente)</option>
+                                <option value="Indefinido">Indefinido (Uso interno / Vitalicio)</option>
+                            </select>
+                        </div>
+                        <div class="col-span-2 md:col-span-1">
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase">Meses de Gracia / Regalo</label>
+                            <select id="swal_meses" class="mt-1 w-full border rounded p-2 text-sm">
+                                <option value="0">Ninguno (Cobro Inmediato)</option>
+                                <option value="1">1 Mes (Trial)</option>
+                                <option value="6">6 Meses</option>
+                            </select>
+                        </div>
+                        <div class="col-span-2 md:col-span-1">
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase">Plan y Límites</label>
+                            <select id="swal_plan" onchange="document.getElementById('swal_limite').value = this.options[this.selectedIndex].dataset.lim" class="mt-1 w-full border rounded p-2 text-sm">
+                                <option value="Básico" data-lim="50">Básico (50 usuarios)</option>
+                                <option value="Pro" data-lim="200">Pro (200 usuarios)</option>
+                                <option value="Industrial" data-lim="1000">Industrial (1000 usuarios)</option>
+                            </select>
+                        </div>
+                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Límite Real</label><input type="number" id="swal_limite" value="50" class="mt-1 w-full border rounded p-2 text-sm bg-slate-100"></div>
+                    </div>
+                `,
+                showCancelButton: true, confirmButtonText: 'Crear Infraestructura', confirmButtonColor: '#2563eb',
+                preConfirm: () => {
+                    const d = {
+                        nombre: document.getElementById('swal_emp_nombre').value,
+                        nit: document.getElementById('swal_emp_nit').value,
+                        razon_social: document.getElementById('swal_emp_razon').value,
+                        ciudad: document.getElementById('swal_emp_ciudad').value,
+                        admin_nombre: document.getElementById('swal_admin_nombre').value,
+                        admin_email: document.getElementById('swal_admin_email').value,
+                        admin_password: document.getElementById('swal_admin_pass').value,
+                        tipo_suscripcion: document.getElementById('swal_tipo_sub').value,
+                        plan_nombre: document.getElementById('swal_plan').value,
+                        limite_usuarios: document.getElementById('swal_limite').value,
+                        meses_regalo: document.getElementById('swal_meses').value
+                    };
+                    if(!d.nombre || !d.admin_email || !d.admin_password) {
+                        Swal.showValidationMessage('Nombre, Correo y Contraseña son obligatorios.'); return false;
+                    }
+                    return d;
+                }
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({ title: 'Aprovisionando...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                    try {
+                        const res = await fetch(`${API_URL}/empresas`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(result.value) });
+                        if(!res.ok) throw new Error((await res.json()).detail);
+                        Swal.fire('¡Éxito!', 'Empresa creada con éxito', 'success');
+                        cargarEmpresasAPI();
+                    } catch (e) { Swal.fire('Error', e.message, 'error'); }
+                }
+            });
+        }
+
+        function abrirModalEdicion(emp) {
+            Swal.fire({
+                title: `Editar: ${emp.nombre}`,
+                width: '650px',
+                html: `
+                    <div class="grid grid-cols-2 gap-4 text-left mt-2">
+                        <div class="col-span-2"><h4 class="text-xs font-bold text-amber-600 uppercase border-b pb-1">1. Datos Comerciales</h4></div>
+                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Nombre</label><input type="text" id="edit_nombre" value="${emp.nombre}" class="mt-1 w-full border rounded p-2 text-sm"></div>
+                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">NIT</label><input type="text" id="edit_nit" value="${emp.nit || ''}" class="mt-1 w-full border rounded p-2 text-sm"></div>
+                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Razón Social</label><input type="text" id="edit_razon" value="${emp.razon_social || ''}" class="mt-1 w-full border rounded p-2 text-sm"></div>
+                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Ciudad</label><input type="text" id="edit_ciudad" value="${emp.ciudad || ''}" class="mt-1 w-full border rounded p-2 text-sm"></div>
+                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Plan</label><input type="text" id="edit_plan" value="${emp.plan_nombre || ''}" class="mt-1 w-full border rounded p-2 text-sm"></div>
+                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Límite Usuarios</label><input type="number" id="edit_limite" value="${emp.limite_usuarios}" class="mt-1 w-full border rounded p-2 text-sm"></div>
+
+                        <div class="col-span-2 mt-4"><h4 class="text-xs font-bold text-amber-600 uppercase border-b pb-1">2. Soporte Técnico (Reset de Credenciales)</h4></div>
+                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Nombre Admin</label><input type="text" id="edit_admin_nombre" value="${emp.admin_nombre || ''}" class="mt-1 w-full border rounded p-2 text-sm bg-amber-50"></div>
+                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Correo Admin</label><input type="email" id="edit_admin_email" value="${emp.admin_email || ''}" class="mt-1 w-full border rounded p-2 text-sm bg-amber-50"></div>
+                        <div class="col-span-2 relative">
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase text-red-500">Nueva Contraseña (Dejar en blanco para no cambiar)</label>
+                            <input type="password" id="edit_admin_pass" class="mt-1 w-full border border-red-300 rounded p-2 text-sm pr-10">
+                            <i class="fas fa-eye absolute right-3 top-7 cursor-pointer text-slate-400" onclick="togglePassword('edit_admin_pass')"></i>
+                        </div>
+                    </div>
+                `,
+                showCancelButton: true, confirmButtonText: 'Guardar Cambios', confirmButtonColor: '#d97706',
+                preConfirm: () => {
+                    return {
+                        info: {
+                            nombre: document.getElementById('edit_nombre').value,
+                            nit: document.getElementById('edit_nit').value,
+                            razon_social: document.getElementById('edit_razon').value,
+                            ciudad: document.getElementById('edit_ciudad').value,
+                            plan_nombre: document.getElementById('edit_plan').value,
+                            limite_usuarios: document.getElementById('edit_limite').value
+                        },
+                        credenciales: {
+                            admin_nombre: document.getElementById('edit_admin_nombre').value,
+                            admin_email: document.getElementById('edit_admin_email').value,
+                            admin_password: document.getElementById('edit_admin_pass').value
+                        }
+                    }
+                }
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({ title: 'Actualizando...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                    try {
+                        // 1. Guardar Info Comercial
+                        await fetch(`${API_URL}/empresas/${emp.id}/info`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(result.value.info) });
+                        // 2. Guardar Credenciales
+                        await fetch(`${API_URL}/empresas/${emp.id}/credenciales`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(result.value.credenciales) });
+                        
+                        Swal.fire('¡Actualizado!', 'Datos guardados correctamente.', 'success');
+                        cargarEmpresasAPI();
+                    } catch (e) { Swal.fire('Error', e.message, 'error'); }
+                }
+            });
         }
 
         async function entrarComoEmpresa(empresa_id) {

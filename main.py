@@ -194,8 +194,7 @@ def mi_perfil(usuario = Depends(verificar_token)):
 # ── MOTOR DE APROVISIONAMIENTO (CREAR EMPRESAS NUEVAS SaaS) ──
 @app.post("/empresas")
 async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
-    if usuario["rol"] != "superadmin":
-        raise HTTPException(status_code=403, detail="Sin permisos. Solo SuperAdmin.")
+    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403, detail="Solo SuperAdmin.")
     
     try:
         data = await request.json()
@@ -204,15 +203,19 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
         admin_email    = data.get("admin_email")
         admin_password = data.get("admin_password")
         
-        # ⚡ NUEVOS DATOS SaaS EXTRAÍDOS DEL FRONTEND
-        razon_social   = data.get("razon_social", "")
-        nit            = data.get("nit", "")
-        plan_nombre    = data.get("plan_nombre", "Básico")
-        limite         = int(data.get("limite_usuarios", 50))
-        meses_regalo   = int(data.get("meses_regalo", 1))
+        razon_social     = data.get("razon_social", "")
+        nit              = data.get("nit", "")
+        ciudad           = data.get("ciudad", "No especificada")
+        plan_nombre      = data.get("plan_nombre", "Básico")
+        limite           = int(data.get("limite_usuarios", 50))
+        meses_regalo     = int(data.get("meses_regalo", 0))
+        tipo_suscripcion = data.get("tipo_suscripcion", "Mensual")
 
-        # ⚡ CÁLCULO INTELIGENTE DE VENCIMIENTO
-        fecha_vencimiento = date.today() + relativedelta(months=meses_regalo)
+        # ⚡ LÓGICA DE VENCIMIENTO INTELIGENTE
+        if tipo_suscripcion == "Indefinido":
+            fecha_vencimiento = date(2099, 12, 31)
+        else:
+            fecha_vencimiento = date.today() + relativedelta(months=meses_regalo)
 
         schema_limpio = re.sub(r'[^a-z0-9_]', '', nombre.lower().replace(' ', '_'))
         schema_name   = f"empresa_{schema_limpio}" 
@@ -223,11 +226,10 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
         conn.autocommit = True 
         cur  = conn.cursor()
 
-        # ⚡ INSERT CON DATOS FINANCIEROS (Se guarda en la tabla vitaminada)
         cur.execute("""
-            INSERT INTO empresas (nombre, schema_name, razon_social, nit, fecha_vencimiento, limite_usuarios, plan_nombre, estado_suscripcion) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s, 'activo') RETURNING id
-        """, (nombre, schema_name, razon_social, nit, fecha_vencimiento, limite, plan_nombre))
+            INSERT INTO empresas (nombre, schema_name, razon_social, nit, ciudad, tipo_suscripcion, fecha_vencimiento, limite_usuarios, plan_nombre, estado_suscripcion) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'activo') RETURNING id
+        """, (nombre, schema_name, razon_social, nit, ciudad, tipo_suscripcion, fecha_vencimiento, limite, plan_nombre))
         empresa_id = cur.fetchone()[0] 
 
         cur.execute("""
@@ -432,34 +434,73 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error interno: {str(e)}")
 
+@app.put("/empresas/{empresa_id}/info")
+async def editar_info_empresa(empresa_id: int, request: Request, usuario = Depends(verificar_token)):
+    """Edita la información comercial de la empresa sin tocar sus tablas."""
+    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403, detail="Solo SuperAdmin.")
+    data = await request.json()
+    
+    conn = conectar_bd("public")
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            UPDATE empresas 
+            SET nombre = %s, razon_social = %s, nit = %s, ciudad = %s, plan_nombre = %s, limite_usuarios = %s
+            WHERE id = %s
+        """, (data.get("nombre"), data.get("razon_social"), data.get("nit"), data.get("ciudad"), data.get("plan_nombre"), data.get("limite_usuarios"), empresa_id))
+        conn.commit()
+        return {"mensaje": "Información de la empresa actualizada."}
+    finally: cur.close(); conn.close()
 
-# ── LISTAR EMPRESAS (CON MÉTRICAS EN VIVO) ──
+@app.put("/empresas/{empresa_id}/credenciales")
+async def editar_credenciales_admin(empresa_id: int, request: Request, usuario = Depends(verificar_token)):
+    """Permite resetear el correo o la contraseña del Administrador de RRHH del cliente."""
+    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403, detail="Solo SuperAdmin.")
+    data = await request.json()
+    
+    conn = conectar_bd("public")
+    cur = conn.cursor()
+    try:
+        # Actualizamos correo y nombre siempre
+        cur.execute("UPDATE usuarios SET nombre = %s, email = %s WHERE empresa_id = %s AND rol = 'admin'", 
+                    (data.get("admin_nombre"), data.get("admin_email"), empresa_id))
+        
+        # Si mandó una nueva contraseña, la encriptamos y la actualizamos
+        nueva_pass = data.get("admin_password")
+        if nueva_pass and len(nueva_pass) > 0:
+            password_hash = bcrypt.hashpw(nueva_pass.encode(), bcrypt.gensalt()).decode()
+            cur.execute("UPDATE usuarios SET password_hash = %s WHERE empresa_id = %s AND rol = 'admin'", (password_hash, empresa_id))
+            
+        conn.commit()
+        return {"mensaje": "Credenciales de acceso del cliente actualizadas."}
+    finally: cur.close(); conn.close()
+
 @app.get("/empresas")
 def ver_empresas(usuario = Depends(verificar_token)):
-    if usuario["rol"] != "superadmin":
-        raise HTTPException(status_code=403, detail="Sin permisos")
+    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403, detail="Sin permisos")
     
     conn = conectar_bd("public")
     cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    # Excluir la empresa ID 1 (Tu cuenta SuperAdmin)
-    cur.execute("SELECT * FROM empresas WHERE id != 1 ORDER BY creado_en DESC")
+    cur.execute("""
+        SELECT e.*, u.nombre as admin_nombre, u.email as admin_email 
+        FROM empresas e
+        LEFT JOIN usuarios u ON e.id = u.empresa_id AND u.rol = 'admin'
+        WHERE e.id != 1 ORDER BY e.creado_en DESC
+    """)
     empresas = cur.fetchall()
     
-    # ⚡ EL CEREBRO EXTRAE EL CONTEO REAL DE EMPLEADOS DE CADA CLIENTE
     for emp in empresas:
         schema = emp["schema_name"]
         try:
             cur.execute(f"SELECT COUNT(id) as total FROM {schema}.empleados WHERE eliminado = FALSE AND activo = TRUE")
             emp["total_empleados"] = cur.fetchone()["total"]
-        except:
-            emp["total_empleados"] = 0
+        except: emp["total_empleados"] = 0
             
         if emp.get("fecha_vencimiento"): emp["fecha_vencimiento"] = str(emp["fecha_vencimiento"])
         if emp.get("creado_en"): emp["creado_en"] = str(emp["creado_en"])
 
     cur.close(); conn.close()
     return list(empresas)
-
 
 # ── SETUP INICIAL (CREAR TU CUENTA) ──
 @app.get("/setup/superadmin")
