@@ -358,6 +358,10 @@
 
                         <div class="col-span-2 mt-2"><h4 class="text-xs font-bold text-blue-600 uppercase border-b pb-1">3. Suscripción y Límites</h4></div>
                         <div class="col-span-2 md:col-span-1">
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase">Inicio del Contrato</label>
+                            <input type="date" id="swal_fecha_inicio" value="${new Date().toISOString().split('T')[0]}" class="mt-1 w-full border rounded p-2 text-sm focus:border-blue-500 outline-none">
+                        </div>
+                        <div class="col-span-2 md:col-span-1">
                             <label class="block text-[10px] font-bold text-slate-500 uppercase">Tipo Suscripción</label>
                             <select id="swal_tipo_sub" class="mt-1 w-full border rounded p-2 text-sm bg-slate-50 focus:border-blue-500 outline-none">
                                 <option value="Mensual">Mensual</option>
@@ -397,7 +401,8 @@
                         tipo_suscripcion: document.getElementById('swal_tipo_sub').value,
                         plan_nombre: document.getElementById('swal_plan').value,
                         limite_usuarios: document.getElementById('swal_limite').value,
-                        meses_regalo: document.getElementById('swal_meses').value
+                        meses_regalo: document.getElementById('swal_meses').value,
+                        fecha_inicio: document.getElementById('swal_fecha_inicio').value
                     };
                     if(!d.nombre || !d.admin_email || !d.admin_password) {
                         Swal.showValidationMessage('Nombre, Correo y Contraseña son obligatorios.'); return false;
@@ -419,19 +424,35 @@
 
         function abrirModalEdicion(emp) {
             Swal.fire({
-                title: `Editar Cliente`,
-                width: '650px',
+                title: `Editar: ${emp.nombre}`,
+                width: '700px',
                 html: `
                     <div class="grid grid-cols-2 gap-4 text-left mt-2">
                         <div class="col-span-2"><h4 class="text-xs font-bold text-amber-600 uppercase border-b pb-1">1. Datos Comerciales</h4></div>
-                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Nombre</label><input type="text" id="edit_nombre" value="${emp.nombre}" class="mt-1 w-full border rounded p-2 text-sm outline-none focus:border-amber-500"></div>
+                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Nombre Comercial</label><input type="text" id="edit_nombre" value="${emp.nombre}" class="mt-1 w-full border rounded p-2 text-sm outline-none focus:border-amber-500"></div>
                         <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">NIT</label><input type="text" id="edit_nit" value="${emp.nit || ''}" class="mt-1 w-full border rounded p-2 text-sm outline-none focus:border-amber-500"></div>
                         <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Razón Social</label><input type="text" id="edit_razon" value="${emp.razon_social || ''}" class="mt-1 w-full border rounded p-2 text-sm outline-none focus:border-amber-500"></div>
                         <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Ciudad</label><input type="text" id="edit_ciudad" value="${emp.ciudad || ''}" class="mt-1 w-full border rounded p-2 text-sm outline-none focus:border-amber-500"></div>
-                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Plan Actual</label><input type="text" id="edit_plan" value="${emp.plan_nombre || ''}" class="mt-1 w-full border rounded p-2 text-sm outline-none focus:border-amber-500"></div>
+                        
+                        <div class="col-span-2 mt-4"><h4 class="text-xs font-bold text-amber-600 uppercase border-b pb-1">2. Suscripción y Prórrogas</h4></div>
+                        
+                        <div class="col-span-2 md:col-span-1">
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase">Plan Contratado</label>
+                            <select id="edit_plan" class="mt-1 w-full border rounded p-2 text-sm outline-none focus:border-amber-500">
+                                <option value="Básico" ${emp.plan_nombre === 'Básico' ? 'selected' : ''}>Básico (50 usuarios)</option>
+                                <option value="Pro" ${emp.plan_nombre === 'Pro' ? 'selected' : ''}>Pro (200 usuarios)</option>
+                                <option value="Industrial" ${emp.plan_nombre === 'Industrial' ? 'selected' : ''}>Industrial (1000 usuarios)</option>
+                                <option value="Infinito" ${emp.plan_nombre === 'Infinito' ? 'selected' : ''}>Infinito (SuperAdmin)</option>
+                            </select>
+                        </div>
                         <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Límite Usuarios</label><input type="number" id="edit_limite" value="${emp.limite_usuarios || 50}" class="mt-1 w-full border rounded p-2 text-sm outline-none focus:border-amber-500"></div>
+                        
+                        <div class="col-span-2 md:col-span-1">
+                            <label class="block text-[10px] font-bold text-red-500 uppercase">Prórroga / Vencimiento Manual</label>
+                            <input type="date" id="edit_vencimiento" value="${emp.fecha_vencimiento || ''}" class="mt-1 w-full border border-red-200 rounded p-2 text-sm outline-none focus:border-amber-500" title="Usa esto para dar días gratis sin registrar un pago">
+                        </div>
 
-                        <div class="col-span-2 mt-4"><h4 class="text-xs font-bold text-amber-600 uppercase border-b pb-1">2. Soporte Técnico (Reset de Credenciales)</h4></div>
+                        <div class="col-span-2 mt-4"><h4 class="text-xs font-bold text-amber-600 uppercase border-b pb-1">3. Soporte Técnico (Reset de Credenciales)</h4></div>
                         <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Nombre Admin</label><input type="text" id="edit_admin_nombre" value="${emp.admin_nombre || ''}" class="mt-1 w-full border rounded p-2 text-sm bg-amber-50 outline-none focus:border-amber-500"></div>
                         <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Correo Admin</label><input type="email" id="edit_admin_email" value="${emp.admin_email || ''}" class="mt-1 w-full border rounded p-2 text-sm bg-amber-50 outline-none focus:border-amber-500"></div>
                         <div class="col-span-2 relative">
@@ -450,7 +471,8 @@
                             razon_social: document.getElementById('edit_razon').value,
                             ciudad: document.getElementById('edit_ciudad').value,
                             plan_nombre: document.getElementById('edit_plan').value,
-                            limite_usuarios: document.getElementById('edit_limite').value
+                            limite_usuarios: document.getElementById('edit_limite').value,
+                            fecha_vencimiento: document.getElementById('edit_vencimiento').value
                         },
                         credenciales: {
                             admin_nombre: document.getElementById('edit_admin_nombre').value,
@@ -461,7 +483,7 @@
                 }
             }).then(async (result) => {
                 if (result.isConfirmed) {
-                    Swal.fire({ title: 'Actualizando Base de Datos...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                    Swal.fire({ title: 'Actualizando Sistema...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
                     try {
                         await fetch(`${API_URL}/empresas/${emp.id}/info`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(result.value.info) });
                         await fetch(`${API_URL}/empresas/${emp.id}/credenciales`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(result.value.credenciales) });
@@ -531,7 +553,7 @@
                 if(!res.ok) throw new Error(data.detail);
                 localStorage.setItem('token', data.token);
                 localStorage.setItem('userData', JSON.stringify({ nombre: "Soporte (SuperAdmin)", rol: "admin", empresa: data.empresa_nombre, schema_name: data.schema_name }));
-                window.location.href = 'planilla.html';
+                window.location.href = 'dashboard_cliente.html';
             } catch (error) { Swal.fire('Error de Acceso', error.message, 'error'); }
         }
 

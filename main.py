@@ -211,6 +211,13 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
         meses_regalo     = int(data.get("meses_regalo", 0))
         tipo_suscripcion = data.get("tipo_suscripcion", "Mensual")
 
+        # ⚡ NUEVO: Capturamos la fecha de inicio enviada desde el frontend
+        fecha_inicio_str = data.get("fecha_inicio")
+        if fecha_inicio_str:
+            fecha_inicio = datetime.strptime(fecha_inicio_str, "%Y-%m-%d").date()
+        else:
+            fecha_inicio = date.today()
+
         # ⚡ LÓGICA DE VENCIMIENTO INTELIGENTE
         if tipo_suscripcion == "Indefinido":
             fecha_vencimiento = date(2099, 12, 31)
@@ -226,11 +233,12 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
         conn.autocommit = True 
         cur  = conn.cursor()
 
+        # ⚡ Insertamos incluyendo la fecha_inicio
         cur.execute("""
-            INSERT INTO empresas (nombre, schema_name, razon_social, nit, ciudad, tipo_suscripcion, fecha_vencimiento, limite_usuarios, plan_nombre, estado_suscripcion) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'activo') RETURNING id
-        """, (nombre, schema_name, razon_social, nit, ciudad, tipo_suscripcion, fecha_vencimiento, limite, plan_nombre))
-        empresa_id = cur.fetchone()[0] 
+            INSERT INTO empresas (nombre, schema_name, razon_social, nit, ciudad, tipo_suscripcion, fecha_inicio, fecha_vencimiento, limite_usuarios, plan_nombre, estado_suscripcion) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'activo') RETURNING id
+        """, (nombre, schema_name, razon_social, nit, ciudad, tipo_suscripcion, fecha_inicio, fecha_vencimiento, limite, plan_nombre))
+        empresa_id = cur.fetchone()[0]
 
         cur.execute("""
             INSERT INTO usuarios (empresa_id, nombre, email, password_hash, rol)
@@ -436,7 +444,7 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
 
 @app.put("/empresas/{empresa_id}/info")
 async def editar_info_empresa(empresa_id: int, request: Request, usuario = Depends(verificar_token)):
-    """Edita la información comercial de la empresa sin tocar sus tablas."""
+    """Edita la info comercial y permite dar Prórrogas manuales (fecha_vencimiento)"""
     if usuario["rol"] != "superadmin": raise HTTPException(status_code=403, detail="Solo SuperAdmin.")
     data = await request.json()
     
@@ -445,11 +453,16 @@ async def editar_info_empresa(empresa_id: int, request: Request, usuario = Depen
     try:
         cur.execute("""
             UPDATE empresas 
-            SET nombre = %s, razon_social = %s, nit = %s, ciudad = %s, plan_nombre = %s, limite_usuarios = %s
+            SET nombre = %s, razon_social = %s, nit = %s, ciudad = %s, plan_nombre = %s, limite_usuarios = %s, fecha_vencimiento = %s
             WHERE id = %s
-        """, (data.get("nombre"), data.get("razon_social"), data.get("nit"), data.get("ciudad"), data.get("plan_nombre"), data.get("limite_usuarios"), empresa_id))
+        """, (
+            data.get("nombre"), data.get("razon_social"), data.get("nit"), 
+            data.get("ciudad"), data.get("plan_nombre"), data.get("limite_usuarios"), 
+            data.get("fecha_vencimiento"), # ⚡ NUEVA HABILIDAD: Prórroga manual
+            empresa_id
+        ))
         conn.commit()
-        return {"mensaje": "Información de la empresa actualizada."}
+        return {"mensaje": "Información de la empresa y vencimiento actualizados."}
     finally: cur.close(); conn.close()
 
 @app.put("/empresas/{empresa_id}/credenciales")
@@ -4413,8 +4426,8 @@ async def obtener_historial_pagos(empresa_id: int, usuario = Depends(verificar_t
 
 @app.post("/empresas/{empresa_id}/pagos")
 async def registrar_pago_saas(empresa_id: int, request: Request, usuario = Depends(verificar_token)):
-    if usuario["rol"] != "superadmin":
-        raise HTTPException(status_code=403, detail="Sin permisos.")
+    """Registra el pago y respeta el ciclo de facturación (Billing Anchor)"""
+    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403, detail="Sin permisos.")
         
     data = await request.json()
     monto = float(data.get("monto", 0))
@@ -4425,28 +4438,28 @@ async def registrar_pago_saas(empresa_id: int, request: Request, usuario = Depen
     cur = conn.cursor()
     try:
         # 1. Contabilidad
-        cur.execute("""
-            INSERT INTO saas_pagos (empresa_id, monto, tipo_pago, comprobante_ref)
-            VALUES (%s, %s, %s, %s)
-        """, (empresa_id, monto, tipo_pago, referencia))
+        cur.execute("INSERT INTO saas_pagos (empresa_id, monto, tipo_pago, comprobante_ref) VALUES (%s, %s, %s, %s)", 
+                    (empresa_id, monto, tipo_pago, referencia))
         
-        # 2. Extender fecha
+        # 2. ⚡ LÓGICA DE ANCLA DE FACTURACIÓN ESTRICTA
         meses_a_sumar = 1 if tipo_pago == "Mensual" else 12
         cur.execute("SELECT fecha_vencimiento FROM empresas WHERE id = %s", (empresa_id,))
         res_venc = cur.fetchone()
         fecha_actual = res_venc[0] if res_venc else None
         
-        base_fecha = date.today() if (not fecha_actual or fecha_actual < date.today()) else fecha_actual
-        nueva_fecha = base_fecha + relativedelta(months=meses_a_sumar)
+        # Si la empresa ya tenía fecha, le sumamos el mes EXACTAMENTE a esa fecha (aunque pague tarde)
+        if fecha_actual and fecha_actual != date(2099, 12, 31):
+            nueva_fecha = fecha_actual + relativedelta(months=meses_a_sumar)
+        else:
+            nueva_fecha = date.today() + relativedelta(months=meses_a_sumar)
         
         cur.execute("UPDATE empresas SET fecha_vencimiento = %s, estado_suscripcion = 'activo' WHERE id = %s", (nueva_fecha, empresa_id))
         conn.commit()
-        return {"mensaje": f"Pago registrado. Vencimiento extendido al {nueva_fecha.strftime('%Y-%m-%d')}"}
+        return {"mensaje": f"Pago registrado. Próximo vencimiento será el {nueva_fecha.strftime('%d/%m/%Y')}"}
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cur.close(); conn.close()
+    finally: cur.close(); conn.close()
 
 # ── RUTA DE ESTADO (Para saber si la API está viva) ──
 @app.get("/")
