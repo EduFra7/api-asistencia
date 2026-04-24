@@ -939,6 +939,74 @@ def eliminar_empresa(empresa_id: int, usuario = Depends(verificar_token)):
         conn.close()
 
 # ==============================================================================
+# 6.5. RUTAS EXCLUSIVAS DEL SUPER ADMIN (SaaS Management)
+# ==============================================================================
+
+@app.get("/superadmin/kpis")
+async def obtener_kpis_saas(usuario = Depends(verificar_token)):
+    """ Extrae los datos vitales del sistema para el Dashboard del dueño. """
+    if usuario.get("rol") != "superadmin":
+        raise HTTPException(status_code=403, detail="Acceso denegado.")
+        
+    conn = conectar_bd("public")
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        # 1. Contamos empresas (exceptuando al propio sistema/superadmin)
+        cur.execute("SELECT COUNT(id) as total FROM empresas WHERE id != 1")
+        total_empresas = cur.fetchone()['total']
+        
+        # 2. Contamos cuántos relojes en todo el mundo se comunicaron en las últimas 24 horas
+        cur.execute("SELECT COUNT(id) as online FROM dispositivos WHERE estado = 'online' AND ultima_conexion >= NOW() - INTERVAL '24 hours'")
+        relojes_online = cur.fetchone()['online']
+        
+        return {
+            "total_empresas": total_empresas,
+            "relojes_online": relojes_online
+        }
+    finally:
+        cur.close()
+        conn.close()
+
+@app.post("/superadmin/impersonate/{empresa_id}")
+async def impersonate_empresa(empresa_id: int, usuario = Depends(verificar_token)):
+    """ 
+    Genera un Token JWT 'Falso' que le permite al SuperAdmin entrar al sistema
+    de un cliente específico para darle soporte técnico.
+    """
+    if usuario.get("rol") != "superadmin":
+        raise HTTPException(status_code=403, detail="Acceso denegado.")
+        
+    conn = conectar_bd("public")
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("SELECT nombre, schema_name FROM empresas WHERE id = %s", (empresa_id,))
+        empresa = cur.fetchone()
+        
+        if not empresa:
+            raise HTTPException(status_code=404, detail="La empresa no existe.")
+            
+        # Creamos un token disfrazado de Admin para ESA empresa específica
+        token_falso = jwt.encode({
+            "id": 0, # ID genérico de soporte
+            "email": "soporte@tu-sistema.com",
+            "rol": "admin", # ⚡ Entramos con poder total sobre ESA empresa
+            "empresa_id": empresa_id,
+            "schema_name": empresa["schema_name"], 
+            "empresa_nombre": empresa["nombre"],
+            "exp": datetime.utcnow() + timedelta(hours=1) # El pase VIP dura solo 1 hora por seguridad
+        }, SECRET_KEY, algorithm="HS256")
+        
+        return {
+            "token": token_falso,
+            "schema_name": empresa["schema_name"],
+            "empresa_nombre": empresa["nombre"],
+            "mensaje": f"Acceso concedido a {empresa['nombre']}"
+        }
+    finally:
+        cur.close()
+        conn.close()
+
+# ==============================================================================
 # 7. RUTAS DE CATÁLOGOS (ESTRUCTURA ORGANIZACIONAL Y TIEMPO)
 # ==============================================================================
 

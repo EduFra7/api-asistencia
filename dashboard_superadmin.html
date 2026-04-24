@@ -3,269 +3,386 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SuperAdmin - C.A Lector</title>
-    
+    <title>SuperAdmin - Centro de Comando</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
+<body class="bg-slate-50 font-sans flex h-screen overflow-hidden text-slate-800">
 
-<body class="bg-gray-100 font-sans flex h-screen overflow-hidden">
+    <div id="mobileOverlay" class="fixed inset-0 bg-slate-900 bg-opacity-50 z-20 hidden md:hidden transition-opacity" onclick="toggleMenu()"></div>
 
-    <aside class="w-64 bg-slate-900 text-white flex flex-col">
-        <div class="p-6 border-b border-slate-800">
-            <h2 class="text-2xl font-bold text-blue-400"><i class="fas fa-fingerprint mr-2"></i>C.A Lector</h2>
-            <p class="text-xs text-slate-400 mt-1">Panel de SuperAdmin</p>
+    <aside id="sidebar" class="fixed md:static inset-y-0 left-0 w-64 bg-slate-900 text-white flex flex-col h-full shadow-2xl z-30 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out">
+        <div class="p-6 border-b border-slate-800 flex justify-between items-center">
+            <div>
+                <h2 class="text-2xl font-bold text-blue-400"><i class="fas fa-satellite-dish mr-2"></i>C.A Lector</h2>
+                <p class="text-xs text-slate-400 mt-1 tracking-widest uppercase">Centro de Comando</p>
+            </div>
+            <button onclick="toggleMenu()" class="md:hidden text-slate-400 hover:text-white text-xl"><i class="fas fa-times"></i></button>
         </div>
         
-        <nav class="flex-1 p-4 space-y-2">
-            <a href="#" class="flex items-center p-3 bg-blue-600 rounded-lg text-white transition-colors">
-                <i class="fas fa-building w-6"></i> Clientes (Empresas)
-            </a>
+        <nav class="flex-1 p-4 space-y-2 overflow-y-auto">
+            <button onclick="cambiarVista('resumen', this)" class="menu-btn w-full flex items-center p-3 bg-blue-600 rounded-lg text-white font-medium transition-colors shadow-sm">
+                <i class="fas fa-chart-pie w-6"></i> Resumen Global
+            </button>
+            <button onclick="cambiarVista('empresas', this)" class="menu-btn w-full flex items-center p-3 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg font-medium transition-colors">
+                <i class="fas fa-building w-6"></i> Clientes / Empresas
+            </button>
+            <button onclick="cambiarVista('pagos', this)" class="menu-btn w-full flex items-center p-3 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg font-medium transition-colors">
+                <i class="fas fa-wallet w-6"></i> Pagos y Planes
+            </button>
+            <button onclick="cambiarVista('hardware', this)" class="menu-btn w-full flex items-center p-3 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg font-medium transition-colors">
+                <i class="fas fa-microchip w-6"></i> Monitor Hardware
+            </button>
         </nav>
         
         <div class="p-4 border-t border-slate-800">
-            <button onclick="cerrarSesion()" class="flex items-center w-full p-3 text-red-400 hover:bg-slate-800 rounded-lg transition-colors">
-                <i class="fas fa-sign-out-alt w-6"></i> Cerrar Sesión
+            <div class="mb-4 px-3">
+                <p class="text-xs text-slate-400">Sesión Activa:</p>
+                <p class="text-sm font-bold text-white truncate" id="userNameDisplay">Cargando...</p>
+            </div>
+            <button onclick="cerrarSesion()" class="flex items-center justify-center w-full p-3 text-red-400 hover:bg-red-500 hover:text-white border border-red-900 hover:border-red-500 rounded-lg transition-all text-sm font-bold">
+                <i class="fas fa-power-off mr-2"></i> Cerrar Sesión
             </button>
         </div>
     </aside>
 
-    <main class="flex-1 flex flex-col h-screen overflow-y-auto">
-        
-        <header class="bg-white shadow-sm p-4 flex justify-between items-center">
-            <h1 class="text-xl font-semibold text-gray-800">Gestión de Clientes</h1>
-            <div class="flex items-center space-x-3">
-                <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium" id="userNameDisplay">
-                    Cargando...
-                </div>
-            </div>
+    <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
+        <header class="bg-white shadow-sm border-b border-slate-200 p-4 flex justify-between items-center md:hidden z-10">
+            <h1 class="text-lg font-bold text-slate-800"><i class="fas fa-satellite-dish text-blue-600 mr-2"></i>C.A Lector</h1>
+            <button onclick="toggleMenu()" class="text-slate-600 hover:text-blue-600 focus:outline-none text-2xl">
+                <i class="fas fa-bars"></i>
+            </button>
         </header>
 
-        <div class="p-8">
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                
-                <div class="lg:col-span-1">
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                        <h3 class="text-lg font-bold text-gray-800 mb-4 border-b pb-2">Registrar Nuevo Cliente</h3>
-                        
-                        <form id="crearEmpresaForm" class="space-y-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Nombre de la Empresa</label>
-                                <input type="text" id="empresa_nombre" required class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Nombre del Administrador</label>
-                                <input type="text" id="admin_nombre" required class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Email del Administrador</label>
-                                <input type="email" id="admin_email" required class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700">Contraseña Temporal</label>
-                                <input type="password" id="admin_password" required class="mt-1 w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm">
-                            </div>
-                            
-                            <div id="formMsg" class="hidden text-sm p-2 rounded"></div>
-
-                            <button type="submit" id="submitBtn" class="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 transition font-medium text-sm">
-                                Crear y Aprovisionar BD
-                            </button>
-                        </form>
-                    </div>
-                </div>
-
-                <div class="lg:col-span-2">
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                        <div class="p-6 border-b border-gray-200 flex justify-between items-center">
-                            <h3 class="text-lg font-bold text-gray-800">Clientes Activos</h3>
-                            <button onclick="cargarEmpresas()" class="text-blue-600 hover:text-blue-800"><i class="fas fa-sync-alt"></i></button>
-                        </div>
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-left border-collapse">
-                                <thead>
-                                    <tr class="bg-gray-50 text-gray-600 text-sm border-b">
-                                        <th class="p-4 font-semibold">ID</th>
-                                        <th class="p-4 font-semibold">Empresa</th>
-                                        <th class="p-4 font-semibold">Esquema BD</th>
-                                        <th class="p-4 font-semibold">Estado</th>
-                                        <!-- NUEVA COLUMNA AÑADIDA -->
-                                        <th class="p-4 font-semibold text-right">Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tablaEmpresas" class="text-sm divide-y divide-gray-100">
-                                    <tr>
-                                        <td colspan="5" class="p-4 text-center text-gray-500">Cargando clientes...</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
+        <div id="contenedor-dinamico" class="flex-1 overflow-y-auto p-4 md:p-8">
+            <div class="flex items-center justify-center h-full text-slate-400">
+                <i class="fas fa-spinner fa-spin text-4xl"></i>
             </div>
         </div>
     </main>
 
     <script>
-        // Tu API en la nube
-        const API_URL = "https://asistencia-api.up.railway.app"; 
-        
-        // ── A. SEGURIDAD DEL FRONTEND ──
+        // =========================================================
+        // 1. CONFIGURACIÓN Y SEGURIDAD BASE
+        // =========================================================
+        const API_URL = "https://asistencia-api.up.railway.app";
         const token = localStorage.getItem('token');
         const userDataStr = localStorage.getItem('userData');
 
-        if (!token || !userDataStr) {
-            window.location.href = 'index.html'; 
-        }
-
+        if (!token || !userDataStr) window.location.href = 'index.html';
         const userData = JSON.parse(userDataStr);
-        if (userData.rol !== 'superadmin') {
-            alert("Acceso denegado. Solo SuperAdmin.");
+        if (userData.rol !== 'superadmin') window.location.href = 'index.html';
+
+        document.getElementById('userNameDisplay').textContent = userData.nombre;
+
+        function cerrarSesion() {
+            localStorage.clear();
             window.location.href = 'index.html';
         }
 
-        document.getElementById('userNameDisplay').textContent = `👋 Hola, ${userData.nombre}`;
-
-        // ── B. CERRAR SESIÓN ──
-        function cerrarSesion() {
-            localStorage.removeItem('token');    
-            localStorage.removeItem('userData'); 
-            window.location.href = 'index.html'; 
+        function toggleMenu() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('mobileOverlay');
+            sidebar.classList.toggle('-translate-x-full');
+            overlay.classList.toggle('hidden');
         }
 
-        // ── C. OBTENER Y DIBUJAR LA TABLA (ACTUALIZADO) ──
-        async function cargarEmpresas() {
-            const tbody = document.getElementById('tablaEmpresas');
-            tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Cargando...</td></tr>';
-            
-            try {
-                const response = await fetch(`${API_URL}/empresas`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
+        // =========================================================
+        // 2. PLANTILLAS DE VISTAS (HTML EN MEMORIA)
+        // =========================================================
+        
+        const VISTA_RESUMEN = `
+            <div class="mb-6">
+                <h1 class="text-2xl font-bold text-slate-800">Resumen Global SaaS</h1>
+                <p class="text-sm text-slate-500">Métricas en tiempo real de toda tu infraestructura.</p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-blue-500">
+                    <p class="text-sm font-semibold text-slate-500 uppercase tracking-wide">Empresas Activas</p>
+                    <p class="text-3xl font-bold text-slate-800 mt-2" id="kpi_empresas"><i class="fas fa-circle-notch fa-spin text-sm text-slate-300"></i></p>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-emerald-500">
+                    <p class="text-sm font-semibold text-slate-500 uppercase tracking-wide">Relojes Conectados</p>
+                    <p class="text-3xl font-bold text-slate-800 mt-2" id="kpi_relojes"><i class="fas fa-circle-notch fa-spin text-sm text-slate-300"></i></p>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-amber-500">
+                    <p class="text-sm font-semibold text-slate-500 uppercase tracking-wide">Pagos Pendientes</p>
+                    <p class="text-3xl font-bold text-slate-800 mt-2">3 <span class="text-sm text-red-500 font-normal">Alertas</span></p>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 border-l-4 border-l-purple-500">
+                    <p class="text-sm font-semibold text-slate-500 uppercase tracking-wide">MRR Estimado</p>
+                    <p class="text-3xl font-bold text-slate-800 mt-2">Bs. 4,500</p>
+                </div>
+            </div>
+        `;
+
+        const VISTA_EMPRESAS = `
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                <div>
+                    <h1 class="text-2xl font-bold text-slate-800">Gestión de Clientes</h1>
+                    <p class="text-sm text-slate-500">Administra las bases de datos y accesos de las empresas.</p>
+                </div>
+                <button onclick="abrirModalEmpresa()" class="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-md transition-colors flex items-center justify-center">
+                    <i class="fas fa-plus-circle mr-2"></i> Crear Empresa
+                </button>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse min-w-[800px]">
+                        <thead>
+                            <tr class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider border-b border-slate-200">
+                                <th class="p-4 font-bold">Empresa / DB</th>
+                                <th class="p-4 font-bold">Administrador</th>
+                                <th class="p-4 font-bold">Creación</th>
+                                <th class="p-4 font-bold text-center">Estado</th>
+                                <th class="p-4 font-bold text-right">Panel de Control</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaEmpresas" class="text-sm divide-y divide-slate-100">
+                            <tr><td colspan="5" class="p-8 text-center text-slate-500"><i class="fas fa-spinner fa-spin mr-2"></i>Cargando infraestructura...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        const VISTA_CONSTRUCCION = `
+            <div class="flex flex-col items-center justify-center h-[70vh] text-slate-400">
+                <i class="fas fa-tools text-6xl mb-4 text-slate-300"></i>
+                <h2 class="text-xl font-bold text-slate-600">Módulo en Construcción</h2>
+                <p class="text-sm mt-2 text-center max-w-md">Esta sección del Centro de Comando se implementará en la siguiente fase táctica.</p>
+            </div>
+        `;
+
+        // =========================================================
+        // 3. MOTOR DE CAMBIO DE VISTAS (SPA ROUTER)
+        // =========================================================
+        
+        function cambiarVista(vista, botonObj) {
+            // A. Cambiar estilos del menú
+            if(botonObj) {
+                document.querySelectorAll('.menu-btn').forEach(btn => {
+                    btn.className = "menu-btn w-full flex items-center p-3 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg font-medium transition-colors";
                 });
-                
-                if (!response.ok) throw new Error("Error al obtener datos");
+                botonObj.className = "menu-btn w-full flex items-center p-3 bg-blue-600 rounded-lg text-white font-medium transition-colors shadow-sm";
+            }
+
+            // B. Inyectar HTML
+            const contenedor = document.getElementById('contenedor-dinamico');
+            if (vista === 'resumen') {
+                contenedor.innerHTML = VISTA_RESUMEN;
+                cargarKPIsGlobales(); // Llamada al backend
+            } else if (vista === 'empresas') {
+                contenedor.innerHTML = VISTA_EMPRESAS;
+                cargarEmpresasAPI(); // Llamada al backend
+            } else {
+                contenedor.innerHTML = VISTA_CONSTRUCCION;
+            }
+
+            // C. Cerrar menú en móvil automáticamente
+            if(window.innerWidth < 768) toggleMenu();
+        }
+
+
+        // =========================================================
+        // 4. LÓGICA DE NEGOCIO: EMPRESAS
+        // =========================================================
+
+        async function cargarKPIsGlobales() {
+            try {
+                // Haremos un nuevo endpoint en python para esto
+                const res = await fetch(`${API_URL}/superadmin/kpis`, { headers: { 'Authorization': `Bearer ${token}` } });
+                const kpis = await res.json();
+                document.getElementById('kpi_empresas').textContent = kpis.total_empresas;
+                document.getElementById('kpi_relojes').textContent = kpis.relojes_online;
+            } catch (e) {
+                console.error("Error cargando KPIs");
+            }
+        }
+
+        async function cargarEmpresasAPI() {
+            const tbody = document.getElementById('tablaEmpresas');
+            try {
+                const response = await fetch(`${API_URL}/empresas`, { headers: { 'Authorization': `Bearer ${token}` } });
                 const empresas = await response.json(); 
                 
-                tbody.innerHTML = ''; 
-                
                 if (empresas.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-500">No hay clientes registrados aún.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-slate-500 font-medium">No hay clientes SaaS aprovisionados.</td></tr>';
                     return;
                 }
 
+                tbody.innerHTML = ''; 
                 empresas.forEach(emp => {
-                    const tr = document.createElement('tr');
-                    tr.className = "hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-0";
+                    // Extraemos fecha corta
+                    const fechaAlta = emp.creado_en ? emp.creado_en.split('T')[0] : 'Desconocida';
                     
-                    tr.innerHTML = `
-                        <td class="p-4 text-gray-500 font-mono text-xs">#${emp.id}</td>
-                        <td class="p-4 font-medium text-gray-800">
-                            <i class="fas fa-building text-blue-500 mr-2 bg-blue-50 p-2 rounded-lg"></i>${emp.nombre}
-                        </td>
-                        <td class="p-4 text-blue-600 font-mono text-xs">${emp.schema_name || 'N/A'}</td>
-                        <td class="p-4">
-                            <span class="bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-semibold border border-green-200">Activo</span>
-                        </td>
-                        <td class="p-4 text-right">
-                            <button onclick="eliminarEmpresa(${emp.id}, '${emp.nombre}')" class="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 p-2 rounded-lg transition-colors shadow-sm" title="Eliminar Cliente de raíz">
-                                <i class="fas fa-trash-alt"></i>
-                            </button>
-                        </td>
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-blue-50 transition-colors group">
+                            <td class="p-4">
+                                <div class="flex items-center">
+                                    <div class="h-10 w-10 rounded-lg bg-slate-800 text-white flex items-center justify-center font-bold mr-3 shadow-inner">
+                                        ${emp.nombre.charAt(0).toUpperCase()}
+                                    </div>
+                                    <div>
+                                        <p class="font-bold text-slate-800">${emp.nombre}</p>
+                                        <p class="text-xs font-mono text-blue-600 mt-0.5"><i class="fas fa-database mr-1"></i>${emp.schema_name}</p>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="p-4">
+                                <p class="text-sm font-bold text-slate-700">Admin</p>
+                                <p class="text-xs text-slate-500">Registrado en BD</p>
+                            </td>
+                            <td class="p-4 text-slate-600 text-sm">${fechaAlta}</td>
+                            <td class="p-4 text-center">
+                                <span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-[10px] font-bold border border-emerald-200 uppercase">Activo</span>
+                            </td>
+                            <td class="p-4 text-right">
+                                <div class="flex items-center justify-end space-x-2">
+                                    <button onclick="entrarComoEmpresa(${emp.id})" class="bg-blue-100 hover:bg-blue-600 hover:text-white text-blue-700 p-2 rounded-lg transition-colors font-medium text-xs flex items-center" title="Entrar al Panel de la Empresa">
+                                        <i class="fas fa-sign-in-alt mr-1"></i> Acceder
+                                    </button>
+                                    <button onclick="eliminarEmpresa(${emp.id}, '${emp.nombre}')" class="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 p-2 rounded-lg transition-colors" title="Destruir Esquema">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
                     `;
-                    tbody.appendChild(tr); 
                 });
             } catch (error) {
-                tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-red-500"><i class="fas fa-exclamation-triangle mr-2"></i>Error de conexión con el servidor</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-red-500 font-bold"><i class="fas fa-exclamation-triangle mr-2"></i>Error conectando con el Core del servidor.</td></tr>`;
             }
         }
 
-        // ── D. CREAR UNA NUEVA EMPRESA ──
-        document.getElementById('crearEmpresaForm').addEventListener('submit', async (e) => {
-            e.preventDefault(); 
-            
-            const btn = document.getElementById('submitBtn');
-            const msg = document.getElementById('formMsg');
-            
-            const payload = {
-                nombre: document.getElementById('empresa_nombre').value,
-                admin_nombre: document.getElementById('admin_nombre').value,
-                admin_email: document.getElementById('admin_email').value,
-                admin_password: document.getElementById('admin_password').value
-            };
+        // =========================================================
+        // 5. ACCIONES NUCLEARES DEL SUPER ADMIN
+        // =========================================================
 
-            btn.disabled = true;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Procesando BD...';
-            msg.className = 'hidden';
-
+        async function entrarComoEmpresa(empresa_id) {
+            Swal.fire({ title: 'Generando Pasaporte Seguro...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
             try {
-                const response = await fetch(`${API_URL}/empresas`, {
-                    method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}` 
-                    },
-                    body: JSON.stringify(payload)
+                // Pedimos un token temporal al backend
+                const res = await fetch(`${API_URL}/superadmin/impersonate/${empresa_id}`, { 
+                    method: 'POST', 
+                    headers: { 'Authorization': `Bearer ${token}` } 
                 });
+                const data = await res.json();
+                if(!res.ok) throw new Error(data.detail);
 
-                const data = await response.json();
+                // Guardamos el token falso y redirigimos
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('userData', JSON.stringify({
+                    nombre: "Soporte (SuperAdmin)",
+                    rol: "admin", // Nos disfrazamos de admin
+                    empresa: data.empresa_nombre,
+                    schema_name: data.schema_name
+                }));
 
-                if (!response.ok) throw new Error(data.detail || "Error desconocido");
-
-                msg.textContent = "¡Empresa y Base de Datos creadas con éxito!";
-                msg.className = 'text-sm p-3 rounded bg-green-50 text-green-700 border border-green-200 mt-3';
-                
-                document.getElementById('crearEmpresaForm').reset(); 
-                
-                cargarEmpresas(); 
+                window.location.href = 'planilla.html'; // ⚡ ¡Entramos por la puerta grande!
 
             } catch (error) {
-                msg.textContent = error.message;
-                msg.className = 'text-sm p-3 rounded bg-red-50 text-red-700 border border-red-200 mt-3';
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = 'Crear y Aprovisionar BD';
+                Swal.fire('Error de Acceso', error.message, 'error');
             }
-        });
+        }
 
-        // ── E. BOTÓN ROJO: ELIMINAR EMPRESA (NUEVA FUNCIÓN) ──
         async function eliminarEmpresa(id_empresa, nombre_empresa) {
-            // Medida de seguridad UX: Obligamos al usuario a escribir una palabra clave
-            const confirmacion = prompt(`⚠️ ¡ALERTA CRÍTICA!\n\nEstás a punto de destruir la base de datos completa de "${nombre_empresa}". Se borrarán empleados, turnos y toda la asistencia registrada.\n\nPara confirmar esta acción irreversible, escribe la palabra ELIMINAR en mayúsculas:`);
-            
-            if (confirmacion !== "ELIMINAR") {
-                alert("Operación cancelada de forma segura.");
-                return; // Cortamos el proceso
-            }
-
-            try {
-                document.body.style.cursor = 'wait';
-
-                const response = await fetch(`${API_URL}/empresas/${id_empresa}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-
-                const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(data.detail || "Error al eliminar la empresa del sistema");
+            const result = await Swal.fire({
+                title: 'Destrucción de Infraestructura',
+                html: `Estás a punto de ejecutar un <b>DROP SCHEMA CASCADE</b> sobre <b class="text-red-600">${nombre_empresa}</b>.<br><br>Escribe <b>DESTRUIR</b> para confirmar:`,
+                input: 'text',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#ef4444',
+                confirmButtonText: 'Ejecutar Eliminación',
+                cancelButtonText: 'Abortar',
+                inputValidator: (value) => {
+                    if (value !== 'DESTRUIR') return 'Debe escribir la palabra exacta para confirmar.'
                 }
+            });
 
-                alert(`✅ Destrucción completada: ${data.mensaje}`);
-                
-                // Recargamos la tabla para que la empresa desaparezca
-                cargarEmpresas();
-
-            } catch (error) {
-                alert(`❌ Fallo en el servidor: ${error.message}`);
-            } finally {
-                document.body.style.cursor = 'default';
+            if (result.isConfirmed) {
+                Swal.fire({ title: 'Destruyendo Base de Datos...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                try {
+                    const res = await fetch(`${API_URL}/empresas/${id_empresa}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.detail);
+                    
+                    Swal.fire('Eliminado', data.mensaje, 'success');
+                    cargarEmpresasAPI(); // Recargar tabla
+                } catch (error) {
+                    Swal.fire('Error Crítico', error.message, 'error');
+                }
             }
         }
 
-        // ── F. INICIO AUTOMÁTICO ──
-        cargarEmpresas();
+        function abrirModalEmpresa() {
+            Swal.fire({
+                title: 'Aprovisionar Nueva Empresa',
+                html: `
+                    <div class="space-y-4 text-left">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 uppercase">Nombre Comercial / Razón Social</label>
+                            <input type="text" id="swal_emp_nombre" class="mt-1 w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ej. Industrias Acme">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 uppercase">Nombre de RRHH (Admin)</label>
+                            <input type="text" id="swal_admin_nombre" class="mt-1 w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ej. Carlos Perez">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 uppercase">Correo de Acceso</label>
+                            <input type="email" id="swal_admin_email" class="mt-1 w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="rrhh@acme.com">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 uppercase">Contraseña Temporal</label>
+                            <input type="password" id="swal_admin_pass" class="mt-1 w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none" value="123456">
+                        </div>
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'Compilar Base de Datos',
+                confirmButtonColor: '#2563eb',
+                preConfirm: () => {
+                    const nombre = document.getElementById('swal_emp_nombre').value;
+                    const admin_nombre = document.getElementById('swal_admin_nombre').value;
+                    const email = document.getElementById('swal_admin_email').value;
+                    const pass = document.getElementById('swal_admin_pass').value;
+                    if(!nombre || !admin_nombre || !email || !pass) {
+                        Swal.showValidationMessage('Todos los campos son estrictamente obligatorios');
+                        return false;
+                    }
+                    return { nombre, admin_nombre, admin_email: email, admin_password: pass };
+                }
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({ title: 'Construyendo Arquitectura SQL...', html: 'Creando esquema, tablas e insertando feriados base.', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                    try {
+                        const res = await fetch(`${API_URL}/empresas`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                            body: JSON.stringify(result.value)
+                        });
+                        const data = await res.json();
+                        if(!res.ok) throw new Error(data.detail);
+                        
+                        Swal.fire('¡Infraestructura Creada!', data.mensaje, 'success');
+                        cargarEmpresasAPI();
+                        cargarKPIsGlobales(); // Actualizamos los contadores
+                    } catch (e) {
+                        Swal.fire('Error de Aprovisionamiento', e.message, 'error');
+                    }
+                }
+            });
+        }
+
+        // 🚀 INICIALIZACIÓN
+        window.onload = () => {
+            // Simulamos click en el primer botón del menú para arrancar
+            cambiarVista('resumen', document.querySelector('.menu-btn'));
+        };
+
     </script>
 </body>
 </html>
