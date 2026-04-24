@@ -451,19 +451,33 @@ async def editar_info_empresa(empresa_id: int, request: Request, usuario = Depen
     conn = conectar_bd("public")
     cur = conn.cursor()
     try:
+        # ⚡ FIX: Prevenir que los campos vacíos rompan PostgreSQL
+        fecha_venc_str = data.get("fecha_vencimiento")
+        fecha_venc_final = fecha_venc_str if fecha_venc_str and str(fecha_venc_str).strip() != "" else None
+        
+        limite_str = data.get("limite_usuarios")
+        limite_final = int(limite_str) if limite_str and str(limite_str).strip() != "" else 50
+
         cur.execute("""
             UPDATE empresas 
             SET nombre = %s, razon_social = %s, nit = %s, ciudad = %s, plan_nombre = %s, limite_usuarios = %s, fecha_vencimiento = %s
             WHERE id = %s
         """, (
             data.get("nombre"), data.get("razon_social"), data.get("nit"), 
-            data.get("ciudad"), data.get("plan_nombre"), data.get("limite_usuarios"), 
-            data.get("fecha_vencimiento"), # ⚡ NUEVA HABILIDAD: Prórroga manual
+            data.get("ciudad"), data.get("plan_nombre"), limite_final, 
+            fecha_venc_final, 
             empresa_id
         ))
         conn.commit()
         return {"mensaje": "Información de la empresa y vencimiento actualizados."}
-    finally: cur.close(); conn.close()
+    except Exception as e:
+        conn.rollback()
+        # Imprimimos el error real en Railway por si acaso
+        print(f"❌ Error DB al editar empresa: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally: 
+        cur.close()
+        conn.close()
 
 @app.put("/empresas/{empresa_id}/credenciales")
 async def editar_credenciales_admin(empresa_id: int, request: Request, usuario = Depends(verificar_token)):
