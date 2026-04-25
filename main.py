@@ -445,7 +445,7 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
             "INFO", 
             f"Aprovisionó infraestructura para: {nombre} ({schema_name})"
         )
-        
+
         # Cerramos la conexión de forma segura
         cur.close()
         conn.close()
@@ -459,21 +459,20 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
 
 @app.put("/empresas/{empresa_id}/info")
 async def editar_info_empresa(empresa_id: int, request: Request, usuario = Depends(verificar_token)):
-    """Edita la info comercial, permite dar Prórrogas manuales y cambiar Tipo de Suscripción"""
     if usuario["rol"] != "superadmin": raise HTTPException(status_code=403, detail="Solo SuperAdmin.")
     data = await request.json()
-    
     conn = conectar_bd("public")
     cur = conn.cursor()
     try:
-        # Prevenir que los campos vacíos rompan PostgreSQL
+        # ⚡ INTELIGENCIA: Buscamos el nombre real de la empresa
+        cur.execute("SELECT nombre FROM empresas WHERE id = %s", (empresa_id,))
+        emp_nombre = cur.fetchone()[0]
+
         fecha_venc_str = data.get("fecha_vencimiento")
         fecha_venc_final = fecha_venc_str if fecha_venc_str and str(fecha_venc_str).strip() != "" else None
-        
         limite_str = data.get("limite_usuarios")
         limite_final = int(limite_str) if limite_str and str(limite_str).strip() != "" else 50
 
-        # ⚡ AHORA TAMBIÉN ACTUALIZAMOS EL TIPO DE SUSCRIPCIÓN
         cur.execute("""
             UPDATE empresas 
             SET nombre = %s, razon_social = %s, nit = %s, ciudad = %s, 
@@ -483,45 +482,44 @@ async def editar_info_empresa(empresa_id: int, request: Request, usuario = Depen
         """, (
             data.get("nombre"), data.get("razon_social"), data.get("nit"), 
             data.get("ciudad"), data.get("plan_nombre"), limite_final, 
-            fecha_venc_final, 
-            data.get("tipo_suscripcion", "Mensual"), # ⚡ Nuevo campo
-            empresa_id
+            fecha_venc_final, data.get("tipo_suscripcion", "Mensual"), empresa_id
         ))
-        # ⚡ CAJA NEGRA
-        registrar_auditoria(cur, usuario.get("email"), "WARNING", f"Modificó perfil comercial o vencimiento del cliente ID {empresa_id}")
+        
+        # ⚡ CAJA NEGRA CORREGIDA
+        registrar_auditoria(cur, usuario.get("email"), "WARNING", f"Modificó perfil comercial o vencimiento de la empresa: {emp_nombre}")
         conn.commit()
         return {"mensaje": "Información de la empresa actualizada."}
     except Exception as e:
         conn.rollback()
-        print(f"❌ Error DB al editar empresa: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    finally: 
-        cur.close()
-        conn.close()
+    finally: cur.close(); conn.close()
 
 @app.put("/empresas/{empresa_id}/credenciales")
 async def editar_credenciales_admin(empresa_id: int, request: Request, usuario = Depends(verificar_token)):
-    """Permite resetear el correo o la contraseña del Administrador de RRHH del cliente."""
     if usuario["rol"] != "superadmin": raise HTTPException(status_code=403, detail="Solo SuperAdmin.")
     data = await request.json()
-    
     conn = conectar_bd("public")
     cur = conn.cursor()
     try:
-        # Actualizamos correo y nombre siempre
+        # ⚡ INTELIGENCIA: Buscamos el nombre real de la empresa
+        cur.execute("SELECT nombre FROM empresas WHERE id = %s", (empresa_id,))
+        emp_nombre = cur.fetchone()[0]
+
         cur.execute("UPDATE usuarios SET nombre = %s, email = %s WHERE empresa_id = %s AND rol = 'admin'", 
                     (data.get("admin_nombre"), data.get("admin_email"), empresa_id))
         
-        # Si mandó una nueva contraseña, la encriptamos y la actualizamos
         nueva_pass = data.get("admin_password")
-        if nueva_pass and len(nueva_pass) > 0:
+        # ⚡ LÓGICA CORREGIDA: Solo disparamos CRITICAL si realmente escribió una contraseña
+        if nueva_pass and len(nueva_pass.strip()) > 0:
             password_hash = bcrypt.hashpw(nueva_pass.encode(), bcrypt.gensalt()).decode()
             cur.execute("UPDATE usuarios SET password_hash = %s WHERE empresa_id = %s AND rol = 'admin'", (password_hash, empresa_id))
+            registrar_auditoria(cur, usuario.get("email"), "CRITICAL", f"Restableció la CONTRASEÑA de acceso (RRHH) de la empresa: {emp_nombre}")
+        else:
+            # Si solo actualizó el correo, es un INFO
+            registrar_auditoria(cur, usuario.get("email"), "INFO", f"Actualizó datos de contacto del Admin (RRHH) de la empresa: {emp_nombre}")
             
-        # ⚡ CAJA NEGRA
-        registrar_auditoria(cur, usuario.get("email"), "CRITICAL", f"Alteró las llaves de acceso (RRHH) del cliente ID {empresa_id}")
         conn.commit()
-        return {"mensaje": "Credenciales de acceso del cliente actualizadas."}
+        return {"mensaje": "Credenciales actualizadas."}
     finally: cur.close(); conn.close()
 
 @app.get("/empresas")
@@ -4458,38 +4456,33 @@ async def obtener_historial_pagos(empresa_id: int, usuario = Depends(verificar_t
 
 @app.post("/empresas/{empresa_id}/pagos")
 async def registrar_pago_saas(empresa_id: int, request: Request, usuario = Depends(verificar_token)):
-    """Registra el pago y respeta el ciclo de facturación (Billing Anchor)"""
     if usuario["rol"] != "superadmin": raise HTTPException(status_code=403, detail="Sin permisos.")
-        
     data = await request.json()
     monto = float(data.get("monto", 0))
     tipo_pago = data.get("tipo_pago", "Mensual")
-    referencia = data.get("referencia", "S/R")
-    
     conn = conectar_bd("public")
     cur = conn.cursor()
     try:
-        # 1. Contabilidad
+        cur.execute("SELECT nombre, fecha_vencimiento FROM empresas WHERE id = %s", (empresa_id,))
+        emp = cur.fetchone()
+        emp_nombre = emp[0]
+        fecha_actual = emp[1]
+        
         cur.execute("INSERT INTO saas_pagos (empresa_id, monto, tipo_pago, comprobante_ref) VALUES (%s, %s, %s, %s)", 
-                    (empresa_id, monto, tipo_pago, referencia))
+                    (empresa_id, monto, tipo_pago, data.get("referencia", "S/R")))
         
-        # 2. ⚡ LÓGICA DE ANCLA DE FACTURACIÓN ESTRICTA
         meses_a_sumar = 1 if tipo_pago == "Mensual" else 12
-        cur.execute("SELECT fecha_vencimiento FROM empresas WHERE id = %s", (empresa_id,))
-        res_venc = cur.fetchone()
-        fecha_actual = res_venc[0] if res_venc else None
-        
-        # Si la empresa ya tenía fecha, le sumamos el mes EXACTAMENTE a esa fecha (aunque pague tarde)
         if fecha_actual and fecha_actual != date(2099, 12, 31):
             nueva_fecha = fecha_actual + relativedelta(months=meses_a_sumar)
         else:
             nueva_fecha = date.today() + relativedelta(months=meses_a_sumar)
         
         cur.execute("UPDATE empresas SET fecha_vencimiento = %s, estado_suscripcion = 'activo' WHERE id = %s", (nueva_fecha, empresa_id))
-        # ⚡ CAJA NEGRA
-        registrar_auditoria(cur, usuario.get("email"), "INFO", f"Acreditó pago de {monto} Bs y extendió ciclo al cliente ID {empresa_id}")
+        
+        # ⚡ CAJA NEGRA CORREGIDA
+        registrar_auditoria(cur, usuario.get("email"), "INFO", f"Acreditó pago de {monto} Bs y extendió ciclo a la empresa: {emp_nombre}")
         conn.commit()
-        return {"mensaje": f"Pago registrado. Próximo vencimiento será el {nueva_fecha.strftime('%d/%m/%Y')}"}
+        return {"mensaje": f"Pago registrado. Próximo vencimiento: {nueva_fecha.strftime('%d/%m/%Y')}"}
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -4616,6 +4609,96 @@ async def obtener_auditoria(usuario = Depends(verificar_token)):
         for log in logs:
             log["fecha"] = log["fecha"].strftime("%Y-%m-%d %H:%M:%S")
         return list(logs)
+    finally: cur.close(); conn.close()
+
+@app.get("/superadmin/auditoria/exportar/excel")
+async def exportar_auditoria_excel(nivel: str = "TODOS", q: str = "", fecha_inicio: str = "", fecha_fin: str = "", usuario = Depends(verificar_token)):
+    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403)
+    conn = conectar_bd("public")
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        query = "SELECT fecha, nivel, usuario, accion FROM saas_auditoria WHERE 1=1"
+        params = []
+        if nivel != "TODOS": query += " AND nivel = %s"; params.append(nivel)
+        if q: query += " AND (usuario ILIKE %s OR accion ILIKE %s)"; params.extend([f"%{q}%", f"%{q}%"])
+        if fecha_inicio: query += " AND DATE(fecha) >= %s"; params.append(fecha_inicio)
+        if fecha_fin: query += " AND DATE(fecha) <= %s"; params.append(fecha_fin)
+        query += " ORDER BY fecha DESC LIMIT 1000"
+        
+        cur.execute(query, tuple(params))
+        logs = cur.fetchall()
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Caja Negra"
+        headers = ["Fecha y Hora", "Nivel de Riesgo", "Usuario Operador", "Acción Ejecutada"]
+        ws.append(headers)
+        for cell in ws[1]:
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid")
+            
+        for log in logs:
+            ws.append([str(log['fecha'])[:19], log['nivel'], log['usuario'], log['accion']])
+            
+        ws.column_dimensions['A'].width = 20
+        ws.column_dimensions['B'].width = 15
+        ws.column_dimensions['C'].width = 30
+        ws.column_dimensions['D'].width = 100
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=Auditoria_SaaS.xlsx"})
+    finally: cur.close(); conn.close()
+
+@app.get("/superadmin/auditoria/exportar/pdf")
+async def exportar_auditoria_pdf(nivel: str = "TODOS", q: str = "", fecha_inicio: str = "", fecha_fin: str = "", usuario = Depends(verificar_token)):
+    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403)
+    conn = conectar_bd("public")
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        query = "SELECT fecha, nivel, usuario, accion FROM saas_auditoria WHERE 1=1"
+        params = []
+        if nivel != "TODOS": query += " AND nivel = %s"; params.append(nivel)
+        if q: query += " AND (usuario ILIKE %s OR accion ILIKE %s)"; params.extend([f"%{q}%", f"%{q}%"])
+        if fecha_inicio: query += " AND DATE(fecha) >= %s"; params.append(fecha_inicio)
+        if fecha_fin: query += " AND DATE(fecha) <= %s"; params.append(fecha_fin)
+        query += " ORDER BY fecha DESC LIMIT 500"
+        
+        cur.execute(query, tuple(params))
+        logs = cur.fetchall()
+
+        output = io.BytesIO()
+        doc = SimpleDocTemplate(output, pagesize=landscape(letter), leftMargin=30, rightMargin=30, topMargin=30, bottomMargin=30)
+        elements = []
+        styles = getSampleStyleSheet()
+
+        elements.append(Paragraph("<b>CAJA NEGRA - REPORTE DE SEGURIDAD</b>", styles['Title']))
+        elements.append(Spacer(1, 10))
+
+        data = [["FECHA / HORA", "NIVEL", "USUARIO", "ACCIÓN REGISTRADA"]]
+        for log in logs:
+            data.append([
+                str(log['fecha'])[:19], 
+                log['nivel'], 
+                log['usuario'], 
+                Paragraph(log['accion'], styles['Normal'])
+            ])
+
+        t = Table(data, colWidths=[100, 60, 150, 400])
+        t.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0F172A")),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE')
+        ]))
+        
+        elements.append(t)
+        doc.build(elements)
+        output.seek(0)
+        return StreamingResponse(output, media_type="application/pdf", headers={"Content-Disposition": "attachment; filename=Auditoria_SaaS.pdf"})
     finally: cur.close(); conn.close()
 
 # ── RUTA DE ESTADO (Para saber si la API está viva) ──

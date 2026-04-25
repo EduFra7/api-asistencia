@@ -75,6 +75,8 @@
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-l-4 border-l-blue-500"><p class="text-sm font-semibold text-slate-500 uppercase tracking-wide">Empresas Activas</p><p class="text-3xl font-bold text-slate-800 mt-2" id="kpi_empresas"><i class="fas fa-circle-notch fa-spin text-sm text-slate-300"></i></p></div>
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-l-4 border-l-emerald-500"><p class="text-sm font-semibold text-slate-500 uppercase tracking-wide">Relojes Online (24h)</p><p class="text-3xl font-bold text-slate-800 mt-2" id="kpi_relojes"><i class="fas fa-circle-notch fa-spin text-sm text-slate-300"></i></p></div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-l-4 border-l-amber-500"><p class="text-sm font-semibold text-slate-500 uppercase tracking-wide">Estado de Servidor</p><p class="text-3xl font-bold text-emerald-600 mt-2">Óptimo</p></div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-l-4 border-l-purple-500"><p class="text-sm font-semibold text-slate-500 uppercase tracking-wide">Versión Core</p><p class="text-3xl font-bold text-slate-800 mt-2">2.1.0</p></div>
             </div>`;
 
         // ⚡ VISTA EMPRESAS LIMPIA (Un solo botón de Gestionar)
@@ -153,10 +155,38 @@
                 </div>
             </div>`;
         
+        // ⚡ VISTA DE AUDITORÍA REDISEÑADA (Filtros + Exportación)
         const VISTA_AUDITORIA = `
-            <div class="mb-6">
-                <h1 class="text-2xl font-bold text-slate-800">Caja Negra (Log de Auditoría)</h1>
-                <p class="text-sm text-slate-500">Registro inmutable de seguridad de todas las acciones del equipo SuperAdmin.</p>
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                <div>
+                    <h1 class="text-2xl font-bold text-slate-800">Caja Negra (Log de Auditoría)</h1>
+                    <p class="text-sm text-slate-500">Registro inmutable de seguridad de todas las acciones del equipo SuperAdmin.</p>
+                </div>
+                <div class="flex gap-2 w-full md:w-auto">
+                    <button onclick="exportarAuditoria('excel')" class="flex-1 md:flex-none bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-colors"><i class="fas fa-file-excel mr-2"></i> Excel</button>
+                    <button onclick="exportarAuditoria('pdf')" class="flex-1 md:flex-none bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-colors"><i class="fas fa-file-pdf mr-2"></i> PDF</button>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-4 grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
+                <div class="relative w-full">
+                    <i class="fas fa-search absolute left-3 top-3 text-slate-400"></i>
+                    <input type="text" id="filtroAudBuscar" onkeyup="pintarAuditoria()" placeholder="Buscar empresa o usuario..." class="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:border-slate-800 outline-none">
+                </div>
+                <div class="w-full">
+                    <select id="filtroAudNivel" onchange="pintarAuditoria()" class="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm focus:border-slate-800 outline-none">
+                        <option value="TODOS">Todos los Niveles</option>
+                        <option value="INFO">INFO (Operativo/Verde)</option>
+                        <option value="WARNING">WARNING (Accesos/Amarillo)</option>
+                        <option value="CRITICAL">CRITICAL (Destructivo/Rojo)</option>
+                    </select>
+                </div>
+                <div class="w-full">
+                    <input type="date" id="filtroAudDesde" onchange="pintarAuditoria()" class="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm text-slate-600 focus:border-slate-800 outline-none" title="Desde Fecha">
+                </div>
+                <div class="w-full">
+                    <input type="date" id="filtroAudHasta" onchange="pintarAuditoria()" class="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm text-slate-600 focus:border-slate-800 outline-none" title="Hasta Fecha">
+                </div>
             </div>
 
             <div class="bg-slate-900 rounded-xl shadow-lg border border-slate-700 overflow-hidden flex flex-col">
@@ -165,7 +195,7 @@
                     <button onclick="cargarAuditoriaAPI()" class="text-slate-400 hover:text-white transition-colors" title="Refrescar Logs"><i class="fas fa-sync-alt"></i></button>
                 </div>
                 <div class="overflow-x-auto">
-                    <table class="w-full text-left border-collapse min-w-[800px]">
+                    <table class="w-full text-left border-collapse min-w-[900px]">
                         <thead>
                             <tr class="bg-slate-900 text-slate-400 text-[10px] uppercase tracking-wider border-b border-slate-700">
                                 <th class="p-4 font-bold">Fecha / Hora</th>
@@ -226,52 +256,32 @@
         function aplicarFiltros() {
             const buscador = document.getElementById('filtroBuscador')?.value.toLowerCase() || '';
             const estado = document.getElementById('filtroEstado')?.value || 'TODOS';
-            const tipoSub = document.getElementById('filtroSuscripcion')?.value || 'TODOS';
             const tbody = document.getElementById('tablaEmpresas'); tbody.innerHTML = '';
-            let resultados = window.datosEmpresasGlobal.filter(emp => {
-                const textoMatch = emp.nombre.toLowerCase().includes(buscador) || (emp.nit && emp.nit.toLowerCase().includes(buscador)) || (emp.ciudad && emp.ciudad.toLowerCase().includes(buscador));
-                const subMatch = (tipoSub === 'TODOS') || (emp.tipo_suscripcion === tipoSub);
-                let estadoMatch = true;
-                if (estado !== 'TODOS') {
-                    if (!emp.fecha_vencimiento) { estadoMatch = (estado === 'AL_DIA'); } 
-                    else {
-                        const diasRestantes = Math.ceil((new Date(emp.fecha_vencimiento) - new Date()) / (1000 * 60 * 60 * 24));
-                        if (estado === 'VENCIDO') estadoMatch = diasRestantes < 0;
-                        if (estado === 'POR_VENCER') estadoMatch = diasRestantes >= 0 && diasRestantes <= 15;
-                        if (estado === 'AL_DIA') estadoMatch = diasRestantes > 15;
-                    }
-                }
-                return textoMatch && subMatch && estadoMatch;
-            });
-
-            if (resultados.length === 0) { tbody.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-slate-500">No se encontraron clientes.</td></tr>'; return; }
+            
+            let resultados = window.datosEmpresasGlobal.filter(emp => emp.nombre.toLowerCase().includes(buscador));
 
             resultados.forEach(emp => {
                 const usoPorcentaje = Math.round((emp.total_empleados / (emp.limite_usuarios || 50)) * 100) || 0;
                 const colorUso = usoPorcentaje > 90 ? 'bg-red-500' : (usoPorcentaje > 70 ? 'bg-yellow-500' : 'bg-blue-500');
                 let badgeEstado = '<span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-[10px] font-bold uppercase">Al Día</span>';
                 let fechaVenc = emp.fecha_vencimiento || 'Indefinido';
-                if(emp.fecha_vencimiento && emp.fecha_vencimiento !== '2099-12-31') {
-                    const diasRestantes = Math.ceil((new Date(emp.fecha_vencimiento) - new Date()) / (1000 * 60 * 60 * 24));
-                    if(diasRestantes < 0) badgeEstado = '<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-[10px] font-bold uppercase">Vencido</span>';
-                    else if (diasRestantes <= 15) badgeEstado = `<span class="bg-amber-100 text-amber-700 px-2 py-1 rounded text-[10px] font-bold uppercase">Vence en ${diasRestantes} d</span>`;
-                } else if (emp.fecha_vencimiento === '2099-12-31') { fechaVenc = 'Indefinido (Prueba/Interno)'; }
+                if(emp.fecha_vencimiento && emp.fecha_vencimiento !== '2099-12-31' && new Date(emp.fecha_vencimiento) < new Date()) { badgeEstado = '<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-[10px] font-bold uppercase">Vencido</span>'; }
 
                 const empSeguro = JSON.stringify(emp).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                
+                // ⚡ LA TABLA AHORA SOLO TIENE UN BOTÓN MAESTRO
                 tbody.innerHTML += `
-                    <tr class="hover:bg-blue-50 transition-colors group">
+                    <tr class="hover:bg-blue-50 transition-colors group cursor-pointer" onclick='abrirDrawer(${empSeguro})'>
                         <td class="p-4"><div class="flex items-center"><div class="h-10 w-10 rounded-lg bg-slate-800 text-white flex items-center justify-center font-bold mr-3">${emp.nombre.charAt(0).toUpperCase()}</div>
-                            <div><p class="font-bold text-slate-800">${emp.nombre}</p><p class="text-[11px] text-slate-500"><i class="fas fa-map-marker-alt text-red-400 mr-1"></i>${emp.ciudad || 'N/A'} | NIT: ${emp.nit || 'N/A'}</p></div></div></td>
+                            <div><p class="font-bold text-slate-800 group-hover:text-blue-600 transition-colors">${emp.nombre}</p><p class="text-[11px] text-slate-500"><i class="fas fa-map-marker-alt text-red-400 mr-1"></i>${emp.ciudad || 'N/A'}</p></div></div></td>
                         <td class="p-4"><p class="text-sm font-bold text-slate-700">${emp.plan_nombre || 'Básico'}</p><div class="w-full bg-slate-200 rounded-full h-1.5 mb-1 mt-1 max-w-[150px]"><div class="${colorUso} h-1.5 rounded-full" style="width: ${usoPorcentaje > 100 ? 100 : usoPorcentaje}%"></div></div><p class="text-[10px] text-slate-500">${emp.total_empleados} de ${emp.limite_usuarios} usuarios</p></td>
-                        <td class="p-4">${badgeEstado}<p class="text-[11px] text-slate-500 mt-1"><i class="far fa-calendar-alt mr-1"></i>${fechaVenc} (${emp.tipo_suscripcion || 'Mensual'})</p></td>
-                        <td class="p-4 text-right"><div class="flex items-center justify-end space-x-1">
-                                <button onclick="registrarPago(${emp.id}, '${emp.nombre}')" class="bg-emerald-50 hover:bg-emerald-500 hover:text-white text-emerald-600 p-2 rounded-lg transition-colors" title="Registrar Pago"><i class="fas fa-hand-holding-usd"></i></button>
-                                <button onclick="verHistorialPagos(${emp.id}, '${emp.nombre}')" class="bg-slate-100 hover:bg-slate-600 hover:text-white text-slate-600 p-2 rounded-lg transition-colors" title="Historial Contable"><i class="fas fa-file-invoice-dollar"></i></button>
-                                <div class="w-px h-6 bg-slate-200 mx-1"></div>
-                                <button onclick="abrirModalEdicion(${empSeguro})" class="bg-amber-50 hover:bg-amber-500 hover:text-white text-amber-600 p-2 rounded-lg transition-colors" title="Editar / Reset Pass"><i class="fas fa-edit"></i></button>
-                                <button onclick="entrarComoEmpresa(${emp.id})" class="bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-700 p-2 rounded-lg transition-colors" title="Entrar al Panel"><i class="fas fa-sign-in-alt"></i></button>
-                                <button onclick="eliminarEmpresa(${emp.id}, '${emp.nombre}')" class="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 p-2 rounded-lg transition-colors" title="Destruir Esquema"><i class="fas fa-trash-alt"></i></button>
-                            </div></td></tr>`;
+                        <td class="p-4">${badgeEstado}<p class="text-[11px] text-slate-500 mt-1">${fechaVenc}</p></td>
+                        <td class="p-4 text-right">
+                            <button class="bg-white border border-slate-200 text-slate-600 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600 px-4 py-2 rounded-lg font-bold transition-all text-xs shadow-sm">
+                                Gestionar <i class="fas fa-chevron-right ml-1"></i>
+                            </button>
+                        </td>
+                    </tr>`;
             });
         }
 
@@ -711,35 +721,74 @@
             }
         }
 
+        // ⚡ MEMORIA Y LÓGICA DE AUDITORÍA
+        window.datosAuditoriaGlobal = [];
+
         async function cargarAuditoriaAPI() {
-            const tbody = document.getElementById('tablaAuditoria');
             try {
                 const res = await fetch(`${API_URL}/superadmin/auditoria`, { headers: { 'Authorization': `Bearer ${token}` } });
-                const logs = await res.json();
-                
-                if(logs.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-slate-500">No hay registros de auditoría almacenados.</td></tr>';
-                    return;
-                }
-                
-                tbody.innerHTML = '';
-                logs.forEach(log => {
-                    let colorBadge = 'bg-blue-900 text-blue-300 border-blue-500';
-                    if(log.nivel === 'WARNING') colorBadge = 'bg-amber-900 text-amber-300 border-amber-500';
-                    if(log.nivel === 'CRITICAL') colorBadge = 'bg-red-900 text-red-300 border-red-500';
-
-                    tbody.innerHTML += `
-                        <tr class="hover:bg-slate-800 transition-colors">
-                            <td class="p-4 text-xs text-slate-400">${log.fecha}</td>
-                            <td class="p-4"><span class="${colorBadge} px-2 py-1 rounded text-[10px] font-bold border border-opacity-30 uppercase">${log.nivel}</span></td>
-                            <td class="p-4 text-emerald-400 text-xs">${log.usuario}</td>
-                            <td class="p-4 text-[13px] text-slate-200">${log.accion}</td>
-                        </tr>
-                    `;
-                });
+                window.datosAuditoriaGlobal = await res.json();
+                pintarAuditoria();
             } catch(e) {
-                tbody.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-red-500">Error conectando con la base de datos de seguridad.</td></tr>';
+                document.getElementById('tablaAuditoria').innerHTML = '<tr><td colspan="4" class="p-8 text-center text-red-500">Error conectando con la base de datos de seguridad.</td></tr>';
             }
+        }
+
+        function pintarAuditoria() {
+            const buscador = document.getElementById('filtroAudBuscar')?.value.toLowerCase() || '';
+            const nivel = document.getElementById('filtroAudNivel')?.value || 'TODOS';
+            const desde = document.getElementById('filtroAudDesde')?.value;
+            const hasta = document.getElementById('filtroAudHasta')?.value;
+            
+            const tbody = document.getElementById('tablaAuditoria'); 
+            tbody.innerHTML = '';
+
+            let resultados = window.datosAuditoriaGlobal.filter(log => {
+                const textoMatch = log.accion.toLowerCase().includes(buscador) || log.usuario.toLowerCase().includes(buscador);
+                const nivelMatch = (nivel === 'TODOS') || (log.nivel === nivel);
+                
+                let fechaMatch = true;
+                const fechaLog = log.fecha.split(" ")[0]; // "YYYY-MM-DD"
+                if (desde && fechaLog < desde) fechaMatch = false;
+                if (hasta && fechaLog > hasta) fechaMatch = false;
+
+                return textoMatch && nivelMatch && fechaMatch;
+            });
+
+            if(resultados.length === 0) { 
+                tbody.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-slate-500">No hay registros con estos filtros.</td></tr>'; 
+                return; 
+            }
+            
+            resultados.forEach(log => {
+                // ⚡ FIX DE COLOR: INFO = EMERALD (Verde)
+                let colorBadge = 'bg-emerald-900 text-emerald-400 border-emerald-600';
+                if(log.nivel === 'WARNING') colorBadge = 'bg-amber-900 text-amber-400 border-amber-600';
+                if(log.nivel === 'CRITICAL') colorBadge = 'bg-red-900 text-red-400 border-red-600';
+
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-800 transition-colors">
+                        <td class="p-4 text-xs text-slate-400 whitespace-nowrap">${log.fecha}</td>
+                        <td class="p-4"><span class="${colorBadge} px-2 py-1 rounded text-[10px] font-bold border border-opacity-50 uppercase">${log.nivel}</span></td>
+                        <td class="p-4 text-emerald-400 text-xs">${log.usuario}</td>
+                        <td class="p-4 text-[13px] text-slate-200">${log.accion}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        // ⚡ FUNCIÓN DE EXPORTACIÓN DE CAJA NEGRA
+        function exportarAuditoria(formato) {
+            const buscador = document.getElementById('filtroAudBuscar')?.value || '';
+            const nivel = document.getElementById('filtroAudNivel')?.value || 'TODOS';
+            const desde = document.getElementById('filtroAudDesde')?.value || '';
+            const hasta = document.getElementById('filtroAudHasta')?.value || '';
+            
+            const params = new URLSearchParams({
+                nivel: nivel, q: buscador, fecha_inicio: desde, fecha_fin: hasta
+            });
+            
+            window.open(`${API_URL}/superadmin/auditoria/exportar/${formato}?${params.toString()}&token=${token}`, '_blank');
         }
 
 
