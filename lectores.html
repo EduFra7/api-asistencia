@@ -133,7 +133,8 @@
             }
 
             tbody.innerHTML = dataLectores.map(l => {
-                const online = l.estado === 'online';
+                // ⚡ EL FRONTEND TONTO OBEDECE A LA MATEMÁTICA DEL BACKEND
+                const online = l.esta_online; 
                 const color = online ? 'text-emerald-500' : 'text-red-500';
                 const icono = online ? 'fa-check-circle' : 'fa-times-circle';
                 const estadoText = online ? 'En Línea' : 'Desconectado';
@@ -147,7 +148,7 @@
                     </td>
                     <td class="px-6 py-4"><span class="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-bold border border-gray-200"><i class="fas fa-building text-gray-400 mr-1"></i>${l.sucursal_nombre || 'Global'}</span></td>
                     <td class="px-6 py-4 font-mono text-xs text-blue-700 bg-blue-50 rounded px-2">${l.numero_serie}</td>
-                    <td class="px-6 py-4 text-xs text-gray-500"><i class="far fa-clock mr-1"></i>${l.ultima_conexion ? l.ultima_conexion.replace('T', ' ').substring(0, 19) : 'Nunca'}</td>
+                    <td class="px-6 py-4 text-xs text-gray-500"><i class="far fa-clock mr-1"></i>${l.ultima_conexion_str}</td>
                     <td class="px-6 py-4 text-center">
                         <button onclick="extraerHuellasLector(${l.id})" title="Extraer Huellas al Servidor" class="text-amber-500 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 p-2 rounded mr-1 transition-colors"><i class="fas fa-cloud-download-alt"></i></button>
                         <button onclick="abrirModal(${l.id})" title="Editar" class="text-blue-500 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 p-2 rounded mr-1 transition-colors"><i class="fas fa-edit"></i></button>

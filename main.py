@@ -4268,7 +4268,6 @@ async def obtener_lectores(usuario = Depends(verificar_token)):
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        # Hacemos un JOIN con la tabla de sucursales del schema de la empresa
         cur.execute(f"""
             SELECT d.id, d.numero_serie, d.nombre, d.estado, d.ultima_conexion,
                    d.marca_modelo, d.sucursal_id,
@@ -4277,7 +4276,22 @@ async def obtener_lectores(usuario = Depends(verificar_token)):
             WHERE d.schema_name = %s
             ORDER BY d.id ASC
         """, (schema,))
-        return cur.fetchall()
+        lectores = cur.fetchall()
+        hoy_srv = datetime.now()
+        
+        # ⚡ EL BACKEND APLICA LA INTELIGENCIA DE LOS 15 MINUTOS TAMBIÉN PARA EL CLIENTE
+        for l in lectores:
+            if l["ultima_conexion"]:
+                # Limpiamos la zona horaria para evitar colapsos matemáticos
+                dt_db = l["ultima_conexion"].replace(tzinfo=None)
+                l["ultima_conexion_str"] = dt_db.strftime("%Y-%m-%d %H:%M:%S")
+                dif_minutos = (hoy_srv - dt_db).total_seconds() / 60
+                l["esta_online"] = dif_minutos < 15
+            else:
+                l["ultima_conexion_str"] = "Nunca"
+                l["esta_online"] = False
+
+        return list(lectores)
     finally:
         cur.close()
         conn.close()
@@ -4573,21 +4587,25 @@ async def obtener_monitor_hardware(usuario = Depends(verificar_token)):
         
         for r in relojes:
             if r["ultima_conexion"]:
-                r["ultima_conexion_str"] = r["ultima_conexion"].strftime("%Y-%m-%d %H:%M:%S")
-                dif_minutos = (hoy_srv - r["ultima_conexion"]).total_seconds() / 60
+                # Limpiamos la zona horaria para evitar colapsos matemáticos
+                dt_db = r["ultima_conexion"].replace(tzinfo=None)
+                r["ultima_conexion_str"] = dt_db.strftime("%Y-%m-%d %H:%M:%S")
+                dif_minutos = (hoy_srv - dt_db).total_seconds() / 60
                 r["esta_online"] = dif_minutos < 15
                 r["minutos_offline"] = int(dif_minutos)
             else:
                 r["ultima_conexion_str"] = "Nunca"; r["esta_online"] = False; r["minutos_offline"] = 999999
             
-            # ⚡ RADAR PREDICTIVO: Evaluamos carga de memoria del reloj calculando los registros en BD
+            # ⚡ RADAR PREDICTIVO BLINDADO
             schema = r['schema_name']
             r['registros'] = 0
             if schema:
                 try:
                     cur.execute(f"SELECT COUNT(id) as c FROM {schema}.eventos_brutos WHERE device_no = %s", (r['numero_serie'],))
                     r['registros'] = cur.fetchone()['c']
-                except: pass
+                except Exception as e:
+                    # 🛡️ LA VACUNA: Si algo falla, limpiamos el veneno para no romper el bucle
+                    conn.rollback() 
             
             # Asumimos 50k capacidad. Si es K40, puedes ajustarlo.
             r['capacidad_max'] = 50000 
