@@ -42,9 +42,7 @@ from reportlab.lib.pagesizes import A5, portrait
 from reportlab.pdfgen import canvas
 from reportlab.lib import colors
 
-
 import unicodedata
-
 
 # ==============================================================================
 # 2. CONFIGURACIÓN INICIAL DE LA APLICACIÓN
@@ -88,6 +86,13 @@ def conectar_bd(schema_name="public"):
     # search_path es un comando de PostgreSQL que le indica qué esquema usar.
     return psycopg2.connect(url, options=f"-c search_path={schema_name}")
 
+# -- Registro de auditoria global
+def registrar_auditoria(cur, email_usuario, nivel, accion):
+    """ Guarda un log inmutable en la Caja Negra """
+    try:
+        cur.execute("INSERT INTO saas_auditoria (nivel, usuario, accion) VALUES (%s, %s, %s)", (nivel, email_usuario, accion))
+    except Exception as e:
+        print(f"Error guardando auditoría: {e}") # No rompemos el sistema si el log falla
 
 # ── VERIFICACIÓN DE IDENTIDAD (MIDDLEWARE DE SEGURIDAD) ──
 def verificar_token(request: Request):
@@ -432,6 +437,16 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
 
         cur.execute(script_sql) # Ejecutamos todo el bloque para crear la empresa
 
+        # ⚡ INYECCIÓN DE CAJA NEGRA AQUÍ ⚡
+        # Se ejecuta solo si todo el SQL anterior fue exitoso.
+        registrar_auditoria(
+            cur, 
+            usuario.get("email", "SuperAdmin"), 
+            "INFO", 
+            f"Aprovisionó infraestructura para: {nombre} ({schema_name})"
+        )
+        
+        # Cerramos la conexión de forma segura
         cur.close()
         conn.close()
 
@@ -472,6 +487,8 @@ async def editar_info_empresa(empresa_id: int, request: Request, usuario = Depen
             data.get("tipo_suscripcion", "Mensual"), # ⚡ Nuevo campo
             empresa_id
         ))
+        # ⚡ CAJA NEGRA
+        registrar_auditoria(cur, usuario.get("email"), "WARNING", f"Modificó perfil comercial o vencimiento del cliente ID {empresa_id}")
         conn.commit()
         return {"mensaje": "Información de la empresa actualizada."}
     except Exception as e:
@@ -501,6 +518,8 @@ async def editar_credenciales_admin(empresa_id: int, request: Request, usuario =
             password_hash = bcrypt.hashpw(nueva_pass.encode(), bcrypt.gensalt()).decode()
             cur.execute("UPDATE usuarios SET password_hash = %s WHERE empresa_id = %s AND rol = 'admin'", (password_hash, empresa_id))
             
+        # ⚡ CAJA NEGRA
+        registrar_auditoria(cur, usuario.get("email"), "CRITICAL", f"Alteró las llaves de acceso (RRHH) del cliente ID {empresa_id}")
         conn.commit()
         return {"mensaje": "Credenciales de acceso del cliente actualizadas."}
     finally: cur.close(); conn.close()
@@ -1012,6 +1031,8 @@ def eliminar_empresa(empresa_id: int, usuario = Depends(verificar_token)):
         cur.execute("DELETE FROM empresas WHERE id = %s", (empresa_id,))
         
         # 6. CONFIRMAR CAMBIOS
+        # ⚡ CAJA NEGRA (Aquí ponlo antes del conn.commit())
+        registrar_auditoria(cur, usuario.get("email"), "CRITICAL", f"Destrucción total ejecutada en el esquema: {schema_name}")
         conn.commit()
         
         return {"mensaje": f"La empresa y toda su información fueron eliminadas de raíz."}
@@ -4465,6 +4486,8 @@ async def registrar_pago_saas(empresa_id: int, request: Request, usuario = Depen
             nueva_fecha = date.today() + relativedelta(months=meses_a_sumar)
         
         cur.execute("UPDATE empresas SET fecha_vencimiento = %s, estado_suscripcion = 'activo' WHERE id = %s", (nueva_fecha, empresa_id))
+        # ⚡ CAJA NEGRA
+        registrar_auditoria(cur, usuario.get("email"), "INFO", f"Acreditó pago de {monto} Bs y extendió ciclo al cliente ID {empresa_id}")
         conn.commit()
         return {"mensaje": f"Pago registrado. Próximo vencimiento será el {nueva_fecha.strftime('%d/%m/%Y')}"}
     except Exception as e:
@@ -4568,6 +4591,8 @@ async def propagar_feriado_global(request: Request, usuario = Depends(verificar_
                 """, (fecha, descripcion))
                 afectadas += 1
                 
+        # ⚡ CAJA NEGRA
+        registrar_auditoria(cur, usuario.get("email"), "WARNING", f"Propagó Feriado Global '{descripcion}' afectando a {afectadas} clientes")
         conn.commit()
         return {"mensaje": f"Propagación exitosa. Feriado inyectado en {afectadas} empresas de la red."}
     except Exception as e:
