@@ -34,6 +34,9 @@
             <button onclick="cambiarVista('feriados', this)" class="menu-btn w-full flex items-center p-3 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg font-medium transition-colors">
                 <i class="fas fa-calendar-star w-6 text-center"></i> Feriados Globales
             </button>
+            <button onclick="cambiarVista('auditoria', this)" class="menu-btn w-full flex items-center p-3 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg font-medium transition-colors">
+                <i class="fas fa-user-secret w-6 text-center"></i> Caja Negra (Logs)
+            </button>
         </nav>
         
         <div class="p-4 border-t border-slate-800">
@@ -169,6 +172,35 @@
                     </div>
                 </div>
             </div>`;
+        
+        const VISTA_AUDITORIA = `
+            <div class="mb-6">
+                <h1 class="text-2xl font-bold text-slate-800">Caja Negra (Log de Auditoría)</h1>
+                <p class="text-sm text-slate-500">Registro inmutable de seguridad de todas las acciones del equipo SuperAdmin.</p>
+            </div>
+
+            <div class="bg-slate-900 rounded-xl shadow-lg border border-slate-700 overflow-hidden flex flex-col">
+                <div class="p-4 border-b border-slate-700 bg-slate-800 flex justify-between items-center">
+                    <h3 class="text-white font-bold text-sm"><i class="fas fa-terminal text-green-400 mr-2"></i>Terminal de Seguridad del Core</h3>
+                    <button onclick="cargarAuditoriaAPI()" class="text-slate-400 hover:text-white transition-colors" title="Refrescar Logs"><i class="fas fa-sync-alt"></i></button>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse min-w-[800px]">
+                        <thead>
+                            <tr class="bg-slate-900 text-slate-400 text-[10px] uppercase tracking-wider border-b border-slate-700">
+                                <th class="p-4 font-bold">Fecha / Hora</th>
+                                <th class="p-4 font-bold">Nivel</th>
+                                <th class="p-4 font-bold">Usuario Emisor</th>
+                                <th class="p-4 font-bold w-1/2">Acción Registrada en el Sistema</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaAuditoria" class="text-sm divide-y divide-slate-800 font-mono text-slate-300">
+                            <tr><td colspan="4" class="p-8 text-center text-slate-500"><i class="fas fa-spinner fa-spin mr-2"></i>Desencriptando registros...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
 
         // =========================================================
         // 3. MOTOR DE RUTAS
@@ -183,6 +215,7 @@
             else if (vista === 'empresas') { contenedor.innerHTML = VISTA_EMPRESAS; cargarEmpresasAPI(); } 
             else if (vista === 'hardware') { contenedor.innerHTML = VISTA_HARDWARE; cargarHardwareAPI(); }
             else if (vista === 'feriados') { contenedor.innerHTML = VISTA_FERIADOS; }
+            else if (vista === 'auditoria') { contenedor.innerHTML = VISTA_AUDITORIA; cargarAuditoriaAPI(); } // ⚡ NUEVO
             if(window.innerWidth < 768) toggleMenu();
         }
 
@@ -626,6 +659,37 @@
                     cargarEmpresasAPI();
                     cargarKPIsGlobales();
                 } catch (error) { Swal.fire('Error Crítico', error.message, 'error'); }
+            }
+        }
+
+        async function cargarAuditoriaAPI() {
+            const tbody = document.getElementById('tablaAuditoria');
+            try {
+                const res = await fetch(`${API_URL}/superadmin/auditoria`, { headers: { 'Authorization': `Bearer ${token}` } });
+                const logs = await res.json();
+                
+                if(logs.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-slate-500">No hay registros de auditoría almacenados.</td></tr>';
+                    return;
+                }
+                
+                tbody.innerHTML = '';
+                logs.forEach(log => {
+                    let colorBadge = 'bg-blue-900 text-blue-300 border-blue-500';
+                    if(log.nivel === 'WARNING') colorBadge = 'bg-amber-900 text-amber-300 border-amber-500';
+                    if(log.nivel === 'CRITICAL') colorBadge = 'bg-red-900 text-red-300 border-red-500';
+
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-slate-800 transition-colors">
+                            <td class="p-4 text-xs text-slate-400">${log.fecha}</td>
+                            <td class="p-4"><span class="${colorBadge} px-2 py-1 rounded text-[10px] font-bold border border-opacity-30 uppercase">${log.nivel}</span></td>
+                            <td class="p-4 text-emerald-400 text-xs">${log.usuario}</td>
+                            <td class="p-4 text-[13px] text-slate-200">${log.accion}</td>
+                        </tr>
+                    `;
+                });
+            } catch(e) {
+                tbody.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-red-500">Error conectando con la base de datos de seguridad.</td></tr>';
             }
         }
 

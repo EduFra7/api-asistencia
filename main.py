@@ -1059,10 +1059,7 @@ async def obtener_kpis_saas(usuario = Depends(verificar_token)):
 
 @app.post("/superadmin/impersonate/{empresa_id}")
 async def impersonate_empresa(empresa_id: int, usuario = Depends(verificar_token)):
-    """ 
-    Genera un Token JWT 'Falso' que le permite al SuperAdmin entrar al sistema
-    de un cliente específico para darle soporte técnico.
-    """
+    """ Genera Token falso para dar soporte y GUARDA EL LOG EN LA CAJA NEGRA """
     if usuario.get("rol") != "superadmin":
         raise HTTPException(status_code=403, detail="Acceso denegado.")
         
@@ -1072,30 +1069,27 @@ async def impersonate_empresa(empresa_id: int, usuario = Depends(verificar_token
         cur.execute("SELECT nombre, schema_name FROM empresas WHERE id = %s", (empresa_id,))
         empresa = cur.fetchone()
         
-        if not empresa:
-            raise HTTPException(status_code=404, detail="La empresa no existe.")
+        if not empresa: raise HTTPException(status_code=404, detail="La empresa no existe.")
             
-        # Creamos un token disfrazado de Admin para ESA empresa específica
         token_falso = jwt.encode({
-            "id": 0, # ID genérico de soporte
-            "email": "soporte@tu-sistema.com",
-            "rol": "admin", # ⚡ Entramos con poder total sobre ESA empresa
-            "empresa_id": empresa_id,
-            "schema_name": empresa["schema_name"], 
+            "id": 0, "email": "soporte@tu-sistema.com", "rol": "admin",
+            "empresa_id": empresa_id, "schema_name": empresa["schema_name"], 
             "empresa_nombre": empresa["nombre"],
-            "exp": datetime.utcnow() + timedelta(hours=1) # El pase VIP dura solo 1 hora por seguridad
+            "exp": datetime.utcnow() + timedelta(hours=1)
         }, SECRET_KEY, algorithm="HS256")
         
+        # ⚡ CAJA NEGRA: Registramos la intrusión autorizada
+        cur.execute("""
+            INSERT INTO saas_auditoria (nivel, usuario, accion)
+            VALUES ('WARNING', %s, %s)
+        """, (usuario.get("email", "SuperAdmin"), f"Sesión remota (Impersonate) iniciada en la base de datos de: {empresa['nombre']}"))
+        conn.commit()
+        
         return {
-            "token": token_falso,
-            "schema_name": empresa["schema_name"],
-            "empresa_nombre": empresa["nombre"],
-            "mensaje": f"Acceso concedido a {empresa['nombre']}"
+            "token": token_falso, "schema_name": empresa["schema_name"],
+            "empresa_nombre": empresa["nombre"], "mensaje": f"Acceso concedido a {empresa['nombre']}"
         }
-    finally:
-        cur.close()
-        conn.close()
-
+    finally: cur.close(); conn.close()
 # ==============================================================================
 # 7. RUTAS DE CATÁLOGOS (ESTRUCTURA ORGANIZACIONAL Y TIEMPO)
 # ==============================================================================
@@ -4579,6 +4573,24 @@ async def propagar_feriado_global(request: Request, usuario = Depends(verificar_
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=f"Error en propagación: {str(e)}")
+    finally: cur.close(); conn.close()
+
+# ==============================================================================
+# 22. CAJA NEGRA (LOG DE AUDITORÍA GLOBAL)
+# ==============================================================================
+@app.get("/superadmin/auditoria")
+async def obtener_auditoria(usuario = Depends(verificar_token)):
+    """ Lee los últimos 100 eventos de seguridad del sistema """
+    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403, detail="Solo SuperAdmin.")
+        
+    conn = conectar_bd("public")
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("SELECT * FROM saas_auditoria ORDER BY fecha DESC LIMIT 100")
+        logs = cur.fetchall()
+        for log in logs:
+            log["fecha"] = log["fecha"].strftime("%Y-%m-%d %H:%M:%S")
+        return list(logs)
     finally: cur.close(); conn.close()
 
 # ── RUTA DE ESTADO (Para saber si la API está viva) ──
