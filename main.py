@@ -496,26 +496,31 @@ async def editar_info_empresa(empresa_id: int, request: Request, usuario = Depen
 
 @app.put("/empresas/{empresa_id}/credenciales")
 async def editar_credenciales_admin(empresa_id: int, request: Request, usuario = Depends(verificar_token)):
-    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403, detail="Solo SuperAdmin.")
+    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403)
     data = await request.json()
     conn = conectar_bd("public")
     cur = conn.cursor()
     try:
-        # ⚡ INTELIGENCIA: Buscamos el nombre real de la empresa
         cur.execute("SELECT nombre FROM empresas WHERE id = %s", (empresa_id,))
         emp_nombre = cur.fetchone()[0]
+
+        # ⚡ Inteligencia: Revisar si hubo un cambio real en los contactos
+        cur.execute("SELECT nombre, email FROM usuarios WHERE empresa_id = %s AND rol = 'admin'", (empresa_id,))
+        admin_actual = cur.fetchone()
+        cambio_contacto = False
+        if admin_actual and (admin_actual[0] != data.get("admin_nombre") or admin_actual[1] != data.get("admin_email")):
+            cambio_contacto = True
 
         cur.execute("UPDATE usuarios SET nombre = %s, email = %s WHERE empresa_id = %s AND rol = 'admin'", 
                     (data.get("admin_nombre"), data.get("admin_email"), empresa_id))
         
         nueva_pass = data.get("admin_password")
-        # ⚡ LÓGICA CORREGIDA: Solo disparamos CRITICAL si realmente escribió una contraseña
+        # ⚡ LÓGICA BLINDADA: Solo registra en la caja negra si hubo un cambio real
         if nueva_pass and len(nueva_pass.strip()) > 0:
             password_hash = bcrypt.hashpw(nueva_pass.encode(), bcrypt.gensalt()).decode()
             cur.execute("UPDATE usuarios SET password_hash = %s WHERE empresa_id = %s AND rol = 'admin'", (password_hash, empresa_id))
             registrar_auditoria(cur, usuario.get("email"), "CRITICAL", f"Restableció la CONTRASEÑA de acceso (RRHH) de la empresa: {emp_nombre}")
-        else:
-            # Si solo actualizó el correo, es un INFO
+        elif cambio_contacto:
             registrar_auditoria(cur, usuario.get("email"), "INFO", f"Actualizó datos de contacto del Admin (RRHH) de la empresa: {emp_nombre}")
             
         conn.commit()
@@ -1048,33 +1053,36 @@ def eliminar_empresa(empresa_id: int, usuario = Depends(verificar_token)):
 
 @app.get("/superadmin/kpis")
 async def obtener_kpis_saas(usuario = Depends(verificar_token)):
-    """ Extrae los datos vitales del sistema para el Dashboard del dueño. """
-    if usuario.get("rol") != "superadmin":
-        raise HTTPException(status_code=403, detail="Acceso denegado.")
+    """ Extrae los KPIs y las ALERTAS de cobro """
+    if usuario.get("rol") != "superadmin": raise HTTPException(status_code=403, detail="Acceso denegado.")
         
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        # 1. Contamos empresas usando la ruta absoluta 'public.empresas'
         cur.execute("SELECT COUNT(id) as total FROM public.empresas WHERE id != 1")
-        res_emp = cur.fetchone()
-        total_empresas = res_emp['total'] if res_emp else 0
+        total_empresas = cur.fetchone()['total']
         
-        # 2. Contamos relojes usando la ruta absoluta 'public.dispositivos'
         cur.execute("SELECT COUNT(id) as online FROM public.dispositivos WHERE estado = 'online' AND ultima_conexion >= NOW() - INTERVAL '24 hours'")
-        res_disp = cur.fetchone()
-        relojes_online = res_disp['online'] if res_disp else 0
+        relojes_online = cur.fetchone()['online']
         
+        # ⚡ ALERTAS DE VENCIMIENTO (Clientes a 15 días o vencidos)
+        cur.execute("SELECT nombre, fecha_vencimiento FROM public.empresas WHERE id != 1 AND activo = TRUE")
+        alertas = []
+        hoy = date.today()
+        for e in cur.fetchall():
+            if e['fecha_vencimiento'] and e['fecha_vencimiento'] != date(2099, 12, 31):
+                dias = (e['fecha_vencimiento'] - hoy).days
+                if dias <= 15:
+                    alertas.append({"nombre": e['nombre'], "dias": dias})
+        alertas.sort(key=lambda x: x['dias']) # Ordenar los más urgentes primero
+
         return {
             "total_empresas": total_empresas,
-            "relojes_online": relojes_online
+            "relojes_online": relojes_online,
+            "alertas_cobro": alertas
         }
-    except Exception as e:
-        print(f"❌ Error en KPIs: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cur.close()
-        conn.close()
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+    finally: cur.close(); conn.close()
 
 @app.post("/superadmin/impersonate/{empresa_id}")
 async def impersonate_empresa(empresa_id: int, usuario = Depends(verificar_token)):
@@ -4611,9 +4619,18 @@ async def obtener_auditoria(usuario = Depends(verificar_token)):
         return list(logs)
     finally: cur.close(); conn.close()
 
+# ==============================================================================
+# EXPORTACIÓN DE CAJA NEGRA (Ahora lee el Token de la URL de forma segura)
+# ==============================================================================
 @app.get("/superadmin/auditoria/exportar/excel")
-async def exportar_auditoria_excel(nivel: str = "TODOS", q: str = "", fecha_inicio: str = "", fecha_fin: str = "", usuario = Depends(verificar_token)):
-    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403)
+async def exportar_auditoria_excel(nivel: str = "TODOS", q: str = "", fecha_inicio: str = "", fecha_fin: str = "", token: str = None):
+    # ⚡ FIX URL Token Auth
+    if not token: raise HTTPException(status_code=401)
+    try:
+        usuario = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        if usuario["rol"] != "superadmin": raise HTTPException(status_code=403)
+    except: raise HTTPException(status_code=401)
+
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
@@ -4631,29 +4648,26 @@ async def exportar_auditoria_excel(nivel: str = "TODOS", q: str = "", fecha_inic
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Caja Negra"
-        headers = ["Fecha y Hora", "Nivel de Riesgo", "Usuario Operador", "Acción Ejecutada"]
-        ws.append(headers)
+        ws.append(["Fecha y Hora", "Nivel de Riesgo", "Usuario Operador", "Acción Ejecutada"])
         for cell in ws[1]:
-            cell.font = Font(bold=True, color="FFFFFF")
-            cell.fill = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid")
+            cell.font = Font(bold=True, color="FFFFFF"); cell.fill = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid")
             
-        for log in logs:
-            ws.append([str(log['fecha'])[:19], log['nivel'], log['usuario'], log['accion']])
-            
-        ws.column_dimensions['A'].width = 20
-        ws.column_dimensions['B'].width = 15
-        ws.column_dimensions['C'].width = 30
-        ws.column_dimensions['D'].width = 100
+        for log in logs: ws.append([str(log['fecha'])[:19], log['nivel'], log['usuario'], log['accion']])
+        ws.column_dimensions['A'].width = 20; ws.column_dimensions['B'].width = 15; ws.column_dimensions['C'].width = 30; ws.column_dimensions['D'].width = 100
 
-        output = io.BytesIO()
-        wb.save(output)
-        output.seek(0)
+        output = io.BytesIO(); wb.save(output); output.seek(0)
         return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=Auditoria_SaaS.xlsx"})
     finally: cur.close(); conn.close()
 
 @app.get("/superadmin/auditoria/exportar/pdf")
-async def exportar_auditoria_pdf(nivel: str = "TODOS", q: str = "", fecha_inicio: str = "", fecha_fin: str = "", usuario = Depends(verificar_token)):
-    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403)
+async def exportar_auditoria_pdf(nivel: str = "TODOS", q: str = "", fecha_inicio: str = "", fecha_fin: str = "", token: str = None):
+    # ⚡ FIX URL Token Auth
+    if not token: raise HTTPException(status_code=401)
+    try:
+        usuario = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        if usuario["rol"] != "superadmin": raise HTTPException(status_code=403)
+    except: raise HTTPException(status_code=401)
+
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
@@ -4670,34 +4684,15 @@ async def exportar_auditoria_pdf(nivel: str = "TODOS", q: str = "", fecha_inicio
 
         output = io.BytesIO()
         doc = SimpleDocTemplate(output, pagesize=landscape(letter), leftMargin=30, rightMargin=30, topMargin=30, bottomMargin=30)
-        elements = []
-        styles = getSampleStyleSheet()
-
-        elements.append(Paragraph("<b>CAJA NEGRA - REPORTE DE SEGURIDAD</b>", styles['Title']))
-        elements.append(Spacer(1, 10))
+        elements = [Paragraph("<b>CAJA NEGRA - REPORTE DE SEGURIDAD</b>", getSampleStyleSheet()['Title']), Spacer(1, 10)]
 
         data = [["FECHA / HORA", "NIVEL", "USUARIO", "ACCIÓN REGISTRADA"]]
-        for log in logs:
-            data.append([
-                str(log['fecha'])[:19], 
-                log['nivel'], 
-                log['usuario'], 
-                Paragraph(log['accion'], styles['Normal'])
-            ])
+        for log in logs: data.append([str(log['fecha'])[:19], log['nivel'], log['usuario'], Paragraph(log['accion'], getSampleStyleSheet()['Normal'])])
 
         t = Table(data, colWidths=[100, 60, 150, 400])
-        t.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0F172A")),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 8),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE')
-        ]))
+        t.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#0F172A")), ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke), ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'), ('FONTSIZE', (0, 0), (-1, -1), 8), ('GRID', (0, 0), (-1, -1), 0.5, colors.grey), ('VALIGN', (0, 0), (-1, -1), 'MIDDLE')]))
         
-        elements.append(t)
-        doc.build(elements)
-        output.seek(0)
+        elements.append(t); doc.build(elements); output.seek(0)
         return StreamingResponse(output, media_type="application/pdf", headers={"Content-Disposition": "attachment; filename=Auditoria_SaaS.pdf"})
     finally: cur.close(); conn.close()
 

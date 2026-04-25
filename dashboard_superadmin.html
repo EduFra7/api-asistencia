@@ -71,13 +71,19 @@
         // =========================================================
         // 2. PLANTILLAS DE VISTAS (HTML EN MEMORIA)
         // =========================================================
-        const VISTA_RESUMEN = `<div class="mb-6"><h1 class="text-2xl font-bold text-slate-800">Resumen Global SaaS</h1><p class="text-sm text-slate-500">Métricas en tiempo real de toda tu infraestructura.</p></div>
+        const VISTA_RESUMEN = `
+            <div class="mb-6"><h1 class="text-2xl font-bold text-slate-800">Resumen Global SaaS</h1><p class="text-sm text-slate-500">Métricas en tiempo real de toda tu infraestructura.</p></div>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-l-4 border-l-blue-500"><p class="text-sm font-semibold text-slate-500 uppercase tracking-wide">Empresas Activas</p><p class="text-3xl font-bold text-slate-800 mt-2" id="kpi_empresas"><i class="fas fa-circle-notch fa-spin text-sm text-slate-300"></i></p></div>
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-l-4 border-l-emerald-500"><p class="text-sm font-semibold text-slate-500 uppercase tracking-wide">Relojes Online (24h)</p><p class="text-3xl font-bold text-slate-800 mt-2" id="kpi_relojes"><i class="fas fa-circle-notch fa-spin text-sm text-slate-300"></i></p></div>
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-l-4 border-l-amber-500"><p class="text-sm font-semibold text-slate-500 uppercase tracking-wide">Estado de Servidor</p><p class="text-3xl font-bold text-emerald-600 mt-2">Óptimo</p></div>
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-l-4 border-l-purple-500"><p class="text-sm font-semibold text-slate-500 uppercase tracking-wide">Versión Core</p><p class="text-3xl font-bold text-slate-800 mt-2">2.1.0</p></div>
-            </div>`;
+            </div>
+            <div class="mt-8 border-t border-slate-200 pt-6">
+                <h3 class="text-lg font-bold text-slate-800 mb-4"><i class="fas fa-bell text-red-500 mr-2"></i>Alertas de Cobro y Facturación</h3>
+                <div id="panelAlertas" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <p class="text-sm text-slate-500"><i class="fas fa-spinner fa-spin mr-2"></i>Evaluando cartera de clientes...</p>
+                </div>
+            </div>
+        `;
 
         // ⚡ VISTA EMPRESAS LIMPIA (Un solo botón de Gestionar)
         const VISTA_EMPRESAS = `
@@ -163,8 +169,8 @@
                     <p class="text-sm text-slate-500">Registro inmutable de seguridad de todas las acciones del equipo SuperAdmin.</p>
                 </div>
                 <div class="flex gap-2 w-full md:w-auto">
-                    <button onclick="exportarAuditoria('excel')" class="flex-1 md:flex-none bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-colors"><i class="fas fa-file-excel mr-2"></i> Excel</button>
-                    <button onclick="exportarAuditoria('pdf')" class="flex-1 md:flex-none bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-colors"><i class="fas fa-file-pdf mr-2"></i> PDF</button>
+                    <button onclick="exportarAuditoria('excel')" class="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-colors"><i class="fas fa-file-excel mr-2"></i> Exportar Excel</button>
+                    <button onclick="exportarAuditoria('pdf')" class="flex-1 md:flex-none bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-colors"><i class="fas fa-file-pdf mr-2"></i> Exportar PDF</button>
                 </div>
             </div>
 
@@ -181,17 +187,19 @@
                         <option value="CRITICAL">CRITICAL (Destructivo/Rojo)</option>
                     </select>
                 </div>
-                <div class="w-full">
-                    <input type="date" id="filtroAudDesde" onchange="pintarAuditoria()" class="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm text-slate-600 focus:border-slate-800 outline-none" title="Desde Fecha">
+                <div class="w-full relative">
+                    <label class="absolute -top-2.5 left-2 bg-white px-1 text-[10px] font-bold text-slate-500">Fecha de Inicio</label>
+                    <input type="date" id="filtroAudDesde" onchange="pintarAuditoria()" class="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm text-slate-600 focus:border-slate-800 outline-none">
                 </div>
-                <div class="w-full">
-                    <input type="date" id="filtroAudHasta" onchange="pintarAuditoria()" class="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm text-slate-600 focus:border-slate-800 outline-none" title="Hasta Fecha">
+                <div class="w-full relative">
+                    <label class="absolute -top-2.5 left-2 bg-white px-1 text-[10px] font-bold text-slate-500">Fecha de Fin</label>
+                    <input type="date" id="filtroAudHasta" onchange="pintarAuditoria()" class="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm text-slate-600 focus:border-slate-800 outline-none">
                 </div>
             </div>
 
             <div class="bg-slate-900 rounded-xl shadow-lg border border-slate-700 overflow-hidden flex flex-col">
                 <div class="p-4 border-b border-slate-700 bg-slate-800 flex justify-between items-center">
-                    <h3 class="text-white font-bold text-sm"><i class="fas fa-terminal text-green-400 mr-2"></i>Terminal de Seguridad del Core</h3>
+                    <h3 class="text-white font-bold text-sm"><i class="fas fa-terminal text-emerald-400 mr-2"></i>Terminal de Seguridad del Core</h3>
                     <button onclick="cargarAuditoriaAPI()" class="text-slate-400 hover:text-white transition-colors" title="Refrescar Logs"><i class="fas fa-sync-alt"></i></button>
                 </div>
                 <div class="overflow-x-auto">
@@ -242,6 +250,26 @@
                 const kpis = await res.json();
                 document.getElementById('kpi_empresas').textContent = kpis.total_empresas;
                 document.getElementById('kpi_relojes').textContent = kpis.relojes_online;
+                
+                // ⚡ DIBUJAR ALERTAS DE COBRO
+                const panel = document.getElementById('panelAlertas');
+                if (panel) {
+                    if (!kpis.alertas_cobro || kpis.alertas_cobro.length === 0) {
+                        panel.innerHTML = '<div class="col-span-full p-4 bg-emerald-50 rounded-xl text-emerald-700 border border-emerald-200 text-sm font-bold flex items-center"><i class="fas fa-check-circle mr-2 text-xl"></i> Todos los clientes están al día con sus pagos.</div>';
+                    } else {
+                        panel.innerHTML = '';
+                        kpis.alertas_cobro.forEach(a => {
+                            let color = a.dias < 0 ? 'bg-red-50 border-red-200 text-red-700' : (a.dias <= 5 ? 'bg-orange-50 border-orange-200 text-orange-700' : 'bg-amber-50 border-amber-200 text-amber-700');
+                            let textDias = a.dias < 0 ? `Vencido hace ${Math.abs(a.dias)} días` : `Vence en ${a.dias} días`;
+                            panel.innerHTML += `
+                                <div class="p-4 rounded-xl border ${color} shadow-sm flex justify-between items-center group hover:shadow-md transition-shadow">
+                                    <div><p class="font-bold text-sm text-slate-800">${a.nombre}</p><p class="text-xs mt-1 font-bold"><i class="fas fa-exclamation-circle mr-1"></i>${textDias}</p></div>
+                                    <button onclick="cambiarVista('empresas', document.querySelectorAll('.menu-btn')[1])" class="bg-white border border-slate-200 px-3 py-1.5 rounded-lg shadow-sm text-xs font-bold text-slate-600 hover:bg-slate-800 hover:text-white transition-colors">Gestionar</button>
+                                </div>
+                            `;
+                        });
+                    }
+                }
             } catch (e) {}
         }
 
