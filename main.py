@@ -87,12 +87,20 @@ def conectar_bd(schema_name="public"):
     return psycopg2.connect(url, options=f"-c search_path={schema_name}")
 
 # -- Registro de auditoria global
-def registrar_auditoria(cur, email_usuario, nivel, accion):
-    """ Guarda un log inmutable en la Caja Negra """
+def registrar_auditoria(cur, request: Request, email_usuario, nivel, accion):
+    """ Guarda un log inmutable Forense (Con IP y Navegador) """
     try:
-        cur.execute("INSERT INTO saas_auditoria (nivel, usuario, accion) VALUES (%s, %s, %s)", (nivel, email_usuario, accion))
+        # Extraemos la IP real (incluso si está detrás de Railway/Cloudflare)
+        forwarded = request.headers.get("X-Forwarded-For")
+        ip = forwarded.split(",")[0] if forwarded else request.client.host
+        ua = request.headers.get("User-Agent", "Desconocido")
+        
+        cur.execute("""
+            INSERT INTO saas_auditoria (nivel, usuario, accion, ip_address, user_agent) 
+            VALUES (%s, %s, %s, %s, %s)
+        """, (nivel, email_usuario, accion, ip, ua))
     except Exception as e:
-        print(f"Error guardando auditoría: {e}") # No rompemos el sistema si el log falla
+        print(f"Error guardando auditoría forense: {e}")
 
 # ── VERIFICACIÓN DE IDENTIDAD (MIDDLEWARE DE SEGURIDAD) ──
 def verificar_token(request: Request):
@@ -161,6 +169,13 @@ async def login(request: Request):
         if not bcrypt.checkpw(password.encode(), usuario["password_hash"].encode()):
             raise HTTPException(status_code=401, detail="Credenciales incorrectas")
 
+        # ⚡ KILL-SWITCH: Escudo Anti-Morosos
+        if usuario.get("estado_suscripcion") == "suspendido":
+            # ⚡ Registro Forense del intento bloqueado
+            registrar_auditoria(cur, request, email, "WARNING", f"Intento de acceso bloqueado (Empresa Suspendida): {usuario['empresa_nombre']}")
+            conn.commit()
+            raise HTTPException(status_code=403, detail="Suscripción Suspendida. Contacte a Soporte.")
+
         # 3. Creación del "Pasaporte" (Token JWT)
         # Este token viaja al navegador y es la única prueba de que el usuario ya inició sesión.
         token = jwt.encode({
@@ -211,6 +226,9 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
         razon_social     = data.get("razon_social", "")
         nit              = data.get("nit", "")
         ciudad           = data.get("ciudad", "No especificada")
+        telefono         = data.get("telefono", "")   # ⚡ NUEVO
+        celular          = data.get("celular", "")    # ⚡ NUEVO
+        direccion        = data.get("direccion", "")  # ⚡ NUEVO
         plan_nombre      = data.get("plan_nombre", "Básico")
         limite           = int(data.get("limite_usuarios", 50))
         meses_regalo     = int(data.get("meses_regalo", 0))
@@ -238,11 +256,11 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
         conn.autocommit = True 
         cur  = conn.cursor()
 
-        # ⚡ Insertamos incluyendo la fecha_inicio
+        # ⚡ Insert con los nuevos datos
         cur.execute("""
-            INSERT INTO empresas (nombre, schema_name, razon_social, nit, ciudad, tipo_suscripcion, fecha_inicio, fecha_vencimiento, limite_usuarios, plan_nombre, estado_suscripcion) 
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'activo') RETURNING id
-        """, (nombre, schema_name, razon_social, nit, ciudad, tipo_suscripcion, fecha_inicio, fecha_vencimiento, limite, plan_nombre))
+            INSERT INTO empresas (nombre, schema_name, razon_social, nit, ciudad, telefono, celular, direccion, tipo_suscripcion, fecha_inicio, fecha_vencimiento, limite_usuarios, plan_nombre, estado_suscripcion) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'activo') RETURNING id
+        """, (nombre, schema_name, razon_social, nit, ciudad, telefono, celular, direccion, tipo_suscripcion, fecha_inicio, fecha_vencimiento, limite, plan_nombre))
         empresa_id = cur.fetchone()[0]
 
         cur.execute("""
@@ -440,7 +458,7 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
         # ⚡ INYECCIÓN DE CAJA NEGRA AQUÍ ⚡
         # Se ejecuta solo si todo el SQL anterior fue exitoso.
         registrar_auditoria(
-            cur, 
+            cur, request,
             usuario.get("email", "SuperAdmin"), 
             "INFO", 
             f"Aprovisionó infraestructura para: {nombre} ({schema_name})"
@@ -459,12 +477,11 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
 
 @app.put("/empresas/{empresa_id}/info")
 async def editar_info_empresa(empresa_id: int, request: Request, usuario = Depends(verificar_token)):
-    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403, detail="Solo SuperAdmin.")
+    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403)
     data = await request.json()
     conn = conectar_bd("public")
     cur = conn.cursor()
     try:
-        # ⚡ INTELIGENCIA: Buscamos el nombre real de la empresa
         cur.execute("SELECT nombre FROM empresas WHERE id = %s", (empresa_id,))
         emp_nombre = cur.fetchone()[0]
 
@@ -473,26 +490,63 @@ async def editar_info_empresa(empresa_id: int, request: Request, usuario = Depen
         limite_str = data.get("limite_usuarios")
         limite_final = int(limite_str) if limite_str and str(limite_str).strip() != "" else 50
 
+        # ⚡ UPDATE con los nuevos datos de contacto
         cur.execute("""
             UPDATE empresas 
             SET nombre = %s, razon_social = %s, nit = %s, ciudad = %s, 
+                telefono = %s, celular = %s, direccion = %s,
                 plan_nombre = %s, limite_usuarios = %s, fecha_vencimiento = %s,
                 tipo_suscripcion = %s
             WHERE id = %s
         """, (
-            data.get("nombre"), data.get("razon_social"), data.get("nit"), 
-            data.get("ciudad"), data.get("plan_nombre"), limite_final, 
-            fecha_venc_final, data.get("tipo_suscripcion", "Mensual"), empresa_id
+            data.get("nombre"), data.get("razon_social"), data.get("nit"), data.get("ciudad"), 
+            data.get("telefono"), data.get("celular"), data.get("direccion"),
+            data.get("plan_nombre"), limite_final, fecha_venc_final, data.get("tipo_suscripcion"), empresa_id
         ))
         
-        # ⚡ CAJA NEGRA CORREGIDA
-        registrar_auditoria(cur, usuario.get("email"), "WARNING", f"Modificó perfil comercial o vencimiento de la empresa: {emp_nombre}")
+        # ⚡ FORENSE
+        registrar_auditoria(cur, request, usuario.get("email"), "WARNING", f"Modificó perfil comercial de la empresa: {emp_nombre}")
         conn.commit()
         return {"mensaje": "Información de la empresa actualizada."}
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+    finally: cur.close(); conn.close()
+
+# ==============================================================================
+# ⚡ KILL-SWITCH: CONGELAMIENTO DE INSTANCIAS (SaaS)
+# ==============================================================================
+@app.put("/empresas/{empresa_id}/toggle-estado")
+async def toggle_estado_empresa(empresa_id: int, request: Request, usuario = Depends(verificar_token)):
+    """ Congela o Descongela el acceso de una empresa por morosidad """
+    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403, detail="Solo SuperAdmin.")
+    
+    conn = conectar_bd("public")
+    cur = conn.cursor()
+    try:
+        # 1. Buscamos el estado actual de la empresa
+        cur.execute("SELECT nombre, estado_suscripcion FROM empresas WHERE id = %s", (empresa_id,))
+        emp = cur.fetchone()
+        
+        if not emp:
+            raise HTTPException(status_code=404, detail="Empresa no encontrada")
+            
+        # 2. Invertimos el estado (Si está activo pasa a suspendido, y viceversa)
+        nuevo_estado = 'activo' if emp[1] == 'suspendido' else 'suspendido'
+        
+        # 3. Guardamos el nuevo estado en la base de datos
+        cur.execute("UPDATE empresas SET estado_suscripcion = %s WHERE id = %s", (nuevo_estado, empresa_id))
+        
+        # 4. Registramos el movimiento en la Caja Negra Forense
+        accion = f"DESCONGELÓ y habilitó el servicio" if nuevo_estado == 'activo' else f"CONGELÓ (Kill-Switch) la instancia por morosidad"
+        registrar_auditoria(cur, request, usuario.get("email"), "CRITICAL", f"{accion} de: {emp[0]}")
+        
+        conn.commit()
+        return {"mensaje": f"Empresa {nuevo_estado}.", "nuevo_estado": nuevo_estado}
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
-    finally: cur.close(); conn.close()
+    finally: 
+        cur.close()
+        conn.close()
 
 @app.put("/empresas/{empresa_id}/credenciales")
 async def editar_credenciales_admin(empresa_id: int, request: Request, usuario = Depends(verificar_token)):
@@ -519,9 +573,9 @@ async def editar_credenciales_admin(empresa_id: int, request: Request, usuario =
         if nueva_pass and len(nueva_pass.strip()) > 0:
             password_hash = bcrypt.hashpw(nueva_pass.encode(), bcrypt.gensalt()).decode()
             cur.execute("UPDATE usuarios SET password_hash = %s WHERE empresa_id = %s AND rol = 'admin'", (password_hash, empresa_id))
-            registrar_auditoria(cur, usuario.get("email"), "CRITICAL", f"Restableció la CONTRASEÑA de acceso (RRHH) de la empresa: {emp_nombre}")
+            registrar_auditoria(cur, request, usuario.get("email"), "CRITICAL", f"Restableció la CONTRASEÑA de acceso (RRHH) de la empresa: {emp_nombre}")
         elif cambio_contacto:
-            registrar_auditoria(cur, usuario.get("email"), "INFO", f"Actualizó datos de contacto del Admin (RRHH) de la empresa: {emp_nombre}")
+            registrar_auditoria(cur, request, usuario.get("email"), "INFO", f"Actualizó datos de contacto del Admin (RRHH) de la empresa: {emp_nombre}")
             
         conn.commit()
         return {"mensaje": "Credenciales actualizadas."}
@@ -1006,7 +1060,7 @@ async def iclock_devicecmd(request: Request, SN: str = None):
 # ==============================================================================
 
 @app.delete("/empresas/{empresa_id}")
-def eliminar_empresa(empresa_id: int, usuario = Depends(verificar_token)):
+def eliminar_empresa(empresa_id: int, request: Request, usuario = Depends(verificar_token)):
     # 1. SEGURIDAD: Verificamos usando tu propia función de seguridad
     if usuario.get("rol") != "superadmin":
         raise HTTPException(status_code=403, detail="Acceso denegado. Solo SuperAdmin puede eliminar empresas.")
@@ -1035,7 +1089,7 @@ def eliminar_empresa(empresa_id: int, usuario = Depends(verificar_token)):
         
         # 6. CONFIRMAR CAMBIOS
         # ⚡ CAJA NEGRA (Aquí ponlo antes del conn.commit())
-        registrar_auditoria(cur, usuario.get("email"), "CRITICAL", f"Destrucción total ejecutada en el esquema: {schema_name}")
+        registrar_auditoria(cur, request, usuario.get("email"), "CRITICAL", f"Destrucción total ejecutada en el esquema: {schema_name}")
         conn.commit()
         
         return {"mensaje": f"La empresa y toda su información fueron eliminadas de raíz."}
@@ -1085,7 +1139,7 @@ async def obtener_kpis_saas(usuario = Depends(verificar_token)):
     finally: cur.close(); conn.close()
 
 @app.post("/superadmin/impersonate/{empresa_id}")
-async def impersonate_empresa(empresa_id: int, usuario = Depends(verificar_token)):
+async def impersonate_empresa(empresa_id: int, request: Request, usuario = Depends(verificar_token)):
     """ Genera Token falso para dar soporte y GUARDA EL LOG EN LA CAJA NEGRA """
     if usuario.get("rol") != "superadmin":
         raise HTTPException(status_code=403, detail="Acceso denegado.")
@@ -4488,7 +4542,7 @@ async def registrar_pago_saas(empresa_id: int, request: Request, usuario = Depen
         cur.execute("UPDATE empresas SET fecha_vencimiento = %s, estado_suscripcion = 'activo' WHERE id = %s", (nueva_fecha, empresa_id))
         
         # ⚡ CAJA NEGRA CORREGIDA
-        registrar_auditoria(cur, usuario.get("email"), "INFO", f"Acreditó pago de {monto} Bs y extendió ciclo a la empresa: {emp_nombre}")
+        registrar_auditoria(cur, request, usuario.get("email"), "INFO", f"Acreditó pago de {monto} Bs y extendió ciclo a la empresa: {emp_nombre}")
         conn.commit()
         return {"mensaje": f"Pago registrado. Próximo vencimiento: {nueva_fecha.strftime('%d/%m/%Y')}"}
     except Exception as e:
@@ -4502,13 +4556,10 @@ async def registrar_pago_saas(empresa_id: int, request: Request, usuario = Depen
 
 @app.get("/superadmin/hardware")
 async def obtener_monitor_hardware(usuario = Depends(verificar_token)):
-    """ Escanea todos los relojes y calcula su estado real desde el servidor """
-    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403, detail="Sin permisos.")
-        
+    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403)
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        # ⚡ CORRECCIÓN: Leemos 'marca_modelo' y usamos el 'nombre' del reloj como Ubicación
         cur.execute("""
             SELECT d.id, d.numero_serie, d.estado, d.ultima_conexion, d.schema_name, 
                    d.marca_modelo, d.nombre as ubicacion_nombre,
@@ -4520,7 +4571,6 @@ async def obtener_monitor_hardware(usuario = Depends(verificar_token)):
         relojes = cur.fetchall()
         hoy_srv = datetime.now()
         
-        # ⚡ EL BACKEND HACE EL TRABAJO MATEMÁTICO (Frontend Tonto)
         for r in relojes:
             if r["ultima_conexion"]:
                 r["ultima_conexion_str"] = r["ultima_conexion"].strftime("%Y-%m-%d %H:%M:%S")
@@ -4528,13 +4578,23 @@ async def obtener_monitor_hardware(usuario = Depends(verificar_token)):
                 r["esta_online"] = dif_minutos < 15
                 r["minutos_offline"] = int(dif_minutos)
             else:
-                r["ultima_conexion_str"] = "Nunca"
-                r["esta_online"] = False
-                r["minutos_offline"] = 999999
-                
+                r["ultima_conexion_str"] = "Nunca"; r["esta_online"] = False; r["minutos_offline"] = 999999
+            
+            # ⚡ RADAR PREDICTIVO: Evaluamos carga de memoria del reloj calculando los registros en BD
+            schema = r['schema_name']
+            r['registros'] = 0
+            if schema:
+                try:
+                    cur.execute(f"SELECT COUNT(id) as c FROM {schema}.eventos_brutos WHERE device_no = %s", (r['numero_serie'],))
+                    r['registros'] = cur.fetchone()['c']
+                except: pass
+            
+            # Asumimos 50k capacidad. Si es K40, puedes ajustarlo.
+            r['capacidad_max'] = 50000 
+            r['uso_porcentaje'] = round((r['registros'] / r['capacidad_max']) * 100, 1)
+
         return list(relojes)
     finally: cur.close(); conn.close()
-
 
 @app.post("/superadmin/hardware/{sn}/comando")
 async def enviar_comando_iot_global(sn: str, request: Request, usuario = Depends(verificar_token)):
@@ -4593,7 +4653,7 @@ async def propagar_feriado_global(request: Request, usuario = Depends(verificar_
                 afectadas += 1
                 
         # ⚡ CAJA NEGRA
-        registrar_auditoria(cur, usuario.get("email"), "WARNING", f"Propagó Feriado Global '{descripcion}' afectando a {afectadas} clientes")
+        registrar_auditoria(cur, request, usuario.get("email"), "WARNING", f"Propagó Feriado Global '{descripcion}' afectando a {afectadas} clientes")
         conn.commit()
         return {"mensaje": f"Propagación exitosa. Feriado inyectado en {afectadas} empresas de la red."}
     except Exception as e:
