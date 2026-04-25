@@ -426,7 +426,6 @@
         }
 
         function pintarHardware() {
-            // 1. Capturamos los 4 filtros de la vista
             const buscador = document.getElementById('buscHw')?.value.toLowerCase() || '';
             const filtMod = document.getElementById('filtMod')?.value.toLowerCase() || '';
             const filtUbi = document.getElementById('filtUbi')?.value.toLowerCase() || '';
@@ -434,7 +433,6 @@
             
             const tbody = document.getElementById('tablaHardware'); tbody.innerHTML = '';
 
-            // 2. El Frontend Tonto aplica los filtros usando los nombres de las columnas que vinieron del Backend
             let r = window.datosHardwareGlobal.filter(hw => {
                 const textoMatch = hw.numero_serie.toLowerCase().includes(buscador) || (hw.empresa_nombre && hw.empresa_nombre.toLowerCase().includes(buscador));
                 const modMatch = (hw.marca_modelo || '').toLowerCase().includes(filtMod);
@@ -444,9 +442,8 @@
                 return textoMatch && modMatch && ubiMatch && filtroMatch;
             });
 
-            if (r.length === 0) { tbody.innerHTML = '<tr><td colspan="4" class="p-8 text-center text-slate-500">No se encontraron dispositivos con estos filtros.</td></tr>'; return; }
+            if (r.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-slate-500">No se encontraron dispositivos con estos filtros.</td></tr>'; return; }
 
-            // 3. Dibujamos la tabla final
             r.forEach(hw => {
                 let badgeEstado = '<span class="bg-slate-100 text-slate-500 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-circle text-[8px] mr-1"></i>Offline</span>';
                 
@@ -455,6 +452,9 @@
                 } else if (hw.minutos_offline < 60) {
                     badgeEstado = '<span class="bg-amber-100 text-amber-700 px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas fa-circle text-[8px] mr-1 text-amber-500"></i>Perdió Señal</span>';
                 }
+
+                // ⚡ FIX: DECLARAMOS EL COLOR DE LA MEMORIA AQUÍ PARA EVITAR EL CRASH JS
+                let memColor = hw.uso_porcentaje > 90 ? 'bg-red-500' : (hw.uso_porcentaje > 70 ? 'bg-amber-500' : 'bg-emerald-500');
 
                 tbody.innerHTML += `
                     <tr class="hover:bg-slate-50 transition-colors">
@@ -467,11 +467,6 @@
                             <p class="font-bold text-slate-700">${hw.empresa_nombre || '<span class="text-red-400">Sin Asignar (Desconectado)</span>'}</p>
                             <p class="text-[11px] text-slate-500 mt-0.5"><i class="fas fa-map-marker-alt text-red-400 mr-1"></i>${hw.ubicacion_nombre || 'Sin Nombre Asignado'}</p>
                             <p class="text-[9px] text-blue-500 font-mono mt-0.5 hidden md:block">DB: ${hw.schema_name}</p>
-                        </td>
-                        <td class="p-4 text-right">
-                            <button onclick="enviarComandoRemoto('${hw.numero_serie}')" class="bg-slate-800 hover:bg-slate-700 text-white p-2 px-3 rounded-lg transition-colors font-medium text-xs shadow-sm">
-                                <i class="fas fa-terminal mr-1"></i> Consola
-                            </button>
                         </td>
                         <td class="p-4">
                             <div class="w-full bg-slate-200 rounded-full h-2 mb-1 max-w-[120px]"><div class="${memColor} h-2 rounded-full" style="width: ${hw.uso_porcentaje > 100 ? 100 : hw.uso_porcentaje}%"></div></div>

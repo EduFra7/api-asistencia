@@ -4268,6 +4268,10 @@ async def obtener_lectores(usuario = Depends(verificar_token)):
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
+        # 1. ⚡ FIX HORARIO: Le pedimos la hora EXACTA al motor de Base de Datos (Misma Zona Horaria)
+        cur.execute("SELECT NOW() as db_now")
+        hoy_db = cur.fetchone()['db_now'].replace(tzinfo=None)
+
         cur.execute(f"""
             SELECT d.id, d.numero_serie, d.nombre, d.estado, d.ultima_conexion,
                    d.marca_modelo, d.sucursal_id,
@@ -4277,16 +4281,18 @@ async def obtener_lectores(usuario = Depends(verificar_token)):
             ORDER BY d.id ASC
         """, (schema,))
         lectores = cur.fetchall()
-        hoy_srv = datetime.now()
         
-        # ⚡ EL BACKEND APLICA LA INTELIGENCIA DE LOS 15 MINUTOS TAMBIÉN PARA EL CLIENTE
         for l in lectores:
             if l["ultima_conexion"]:
-                # Limpiamos la zona horaria para evitar colapsos matemáticos
                 dt_db = l["ultima_conexion"].replace(tzinfo=None)
-                l["ultima_conexion_str"] = dt_db.strftime("%Y-%m-%d %H:%M:%S")
-                dif_minutos = (hoy_srv - dt_db).total_seconds() / 60
-                l["esta_online"] = dif_minutos < 15
+                
+                # 2. ⚡ MATEMÁTICA PERFECTA (Sin paradojas de tiempo)
+                dif_minutos = (hoy_db - dt_db).total_seconds() / 60
+                l["esta_online"] = 0 <= dif_minutos < 15 # Debe estar entre 0 y 15 min
+                
+                # 3. ⚡ FIX +4 HORAS: Ajustamos la visualización a la zona horaria de Bolivia
+                dt_bo = dt_db - timedelta(hours=4)
+                l["ultima_conexion_str"] = dt_bo.strftime("%Y-%m-%d %H:%M:%S")
             else:
                 l["ultima_conexion_str"] = "Nunca"
                 l["esta_online"] = False
@@ -4574,6 +4580,10 @@ async def obtener_monitor_hardware(usuario = Depends(verificar_token)):
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
+        # 1. ⚡ FIX HORARIO: Hora exacta del motor SQL
+        cur.execute("SELECT NOW() as db_now")
+        hoy_db = cur.fetchone()['db_now'].replace(tzinfo=None)
+
         cur.execute("""
             SELECT d.id, d.numero_serie, d.estado, d.ultima_conexion, d.schema_name, 
                    d.marca_modelo, d.nombre as ubicacion_nombre,
@@ -4583,20 +4593,25 @@ async def obtener_monitor_hardware(usuario = Depends(verificar_token)):
             ORDER BY d.ultima_conexion DESC NULLS LAST
         """)
         relojes = cur.fetchall()
-        hoy_srv = datetime.now()
         
         for r in relojes:
             if r["ultima_conexion"]:
-                # Limpiamos la zona horaria para evitar colapsos matemáticos
                 dt_db = r["ultima_conexion"].replace(tzinfo=None)
-                r["ultima_conexion_str"] = dt_db.strftime("%Y-%m-%d %H:%M:%S")
-                dif_minutos = (hoy_srv - dt_db).total_seconds() / 60
-                r["esta_online"] = dif_minutos < 15
-                r["minutos_offline"] = int(dif_minutos)
+                
+                # 2. ⚡ MATEMÁTICA PERFECTA
+                dif_minutos = (hoy_db - dt_db).total_seconds() / 60
+                r["esta_online"] = 0 <= dif_minutos < 15
+                r["minutos_offline"] = int(dif_minutos) if dif_minutos >= 0 else 0
+                
+                # 3. ⚡ FIX +4 HORAS
+                dt_bo = dt_db - timedelta(hours=4)
+                r["ultima_conexion_str"] = dt_bo.strftime("%Y-%m-%d %H:%M:%S")
             else:
-                r["ultima_conexion_str"] = "Nunca"; r["esta_online"] = False; r["minutos_offline"] = 999999
+                r["ultima_conexion_str"] = "Nunca"
+                r["esta_online"] = False
+                r["minutos_offline"] = 999999
             
-            # ⚡ RADAR PREDICTIVO BLINDADO
+            # RADAR PREDICTIVO BLINDADO
             schema = r['schema_name']
             r['registros'] = 0
             if schema:
@@ -4604,10 +4619,8 @@ async def obtener_monitor_hardware(usuario = Depends(verificar_token)):
                     cur.execute(f"SELECT COUNT(id) as c FROM {schema}.eventos_brutos WHERE device_no = %s", (r['numero_serie'],))
                     r['registros'] = cur.fetchone()['c']
                 except Exception as e:
-                    # 🛡️ LA VACUNA: Si algo falla, limpiamos el veneno para no romper el bucle
                     conn.rollback() 
             
-            # Asumimos 50k capacidad. Si es K40, puedes ajustarlo.
             r['capacidad_max'] = 50000 
             r['uso_porcentaje'] = round((r['registros'] / r['capacidad_max']) * 100, 1)
 
