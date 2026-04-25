@@ -100,10 +100,12 @@
                 <tbody id="tablaEmpresas" class="text-sm divide-y divide-slate-100"><tr><td colspan="4" class="p-8 text-center text-slate-500"><i class="fas fa-spinner fa-spin mr-2"></i>Cargando...</td></tr></tbody>
             </table></div></div>`;
 
-        // ⚡ VISTA_HARDWARE AHORA CON FILTROS DE MODELO Y UBICACIÓN
+        // =========================================================
+        // ⚡ VISTA HARDWARE (CON FILTROS Y BARRA DE MEMORIA)
+        // =========================================================
         const VISTA_HARDWARE = `
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
-                <div><h1 class="text-2xl font-bold text-slate-800">Radar IoT (Hardware)</h1><p class="text-sm text-slate-500">Monitor global de activos físicos ZKTeco en tu red.</p></div>
+                <div><h1 class="text-2xl font-bold text-slate-800">Radar IoT (Hardware)</h1><p class="text-sm text-slate-500">Monitor global Predictivo de activos físicos ZKTeco.</p></div>
                 <button onclick="cargarHardwareAPI()" class="bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-md"><i class="fas fa-satellite-dish mr-2"></i> Refrescar Red</button>
             </div>
             
@@ -129,10 +131,11 @@
                 </div>
             </div>
 
-            <div class="bg-white rounded-xl shadow-sm border overflow-hidden flex flex-col"><div class="overflow-x-auto"><table class="w-full text-left border-collapse min-w-[900px]">
-                <thead><tr class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider border-b"><th class="p-4 font-bold w-1/5">Estado y Señal</th><th class="p-4 font-bold">Hardware (S/N y Modelo)</th><th class="p-4 font-bold">Cliente y Ubicación</th><th class="p-4 font-bold text-right">Comandos Remotos</th></tr></thead>
-                <tbody id="tablaHardware" class="text-sm divide-y divide-slate-100"><tr><td colspan="4" class="p-8 text-center text-slate-500"><i class="fas fa-satellite-dish fa-spin mr-2"></i>Rastreando señales...</td></tr></tbody>
-            </table></div></div>`;
+            <div class="bg-white rounded-xl shadow-sm border overflow-hidden flex flex-col"><div class="overflow-x-auto"><table class="w-full text-left border-collapse min-w-[1000px]">
+                <thead><tr class="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider border-b"><th class="p-4 font-bold w-1/6">Estado</th><th class="p-4 font-bold">Identidad</th><th class="p-4 font-bold">Cliente y Ubicación</th><th class="p-4 font-bold">Uso Memoria ZK</th><th class="p-4 font-bold text-right">Acción</th></tr></thead>
+                <tbody id="tablaHardware" class="text-sm divide-y divide-slate-100"><tr><td colspan="5" class="p-8 text-center text-slate-500"><i class="fas fa-satellite-dish fa-spin mr-2"></i>Rastreando señales...</td></tr></tbody>
+            </table></div></div>
+        `;
 
         // ⚡ NUEVA VISTA: FERIADOS GLOBALES
         const VISTA_FERIADOS = `
@@ -161,12 +164,14 @@
                 </div>
             </div>`;
         
-        // ⚡ VISTA DE AUDITORÍA REDISEÑADA (Filtros + Exportación)
+        // =========================================================
+        // ⚡ VISTA AUDITORÍA (CON FILTROS, FECHAS, EXCEL Y COLUMNA FORENSE)
+        // =========================================================
         const VISTA_AUDITORIA = `
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                 <div>
-                    <h1 class="text-2xl font-bold text-slate-800">Caja Negra (Log de Auditoría)</h1>
-                    <p class="text-sm text-slate-500">Registro inmutable de seguridad de todas las acciones del equipo SuperAdmin.</p>
+                    <h1 class="text-2xl font-bold text-slate-800">Caja Negra (Log Forense)</h1>
+                    <p class="text-sm text-slate-500">Rastreo inmutable de seguridad, IP y User-Agent del equipo SuperAdmin.</p>
                 </div>
                 <div class="flex gap-2 w-full md:w-auto">
                     <button onclick="exportarAuditoria('excel')" class="flex-1 md:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition-colors"><i class="fas fa-file-excel mr-2"></i> Exportar Excel</button>
@@ -199,21 +204,22 @@
 
             <div class="bg-slate-900 rounded-xl shadow-lg border border-slate-700 overflow-hidden flex flex-col">
                 <div class="p-4 border-b border-slate-700 bg-slate-800 flex justify-between items-center">
-                    <h3 class="text-white font-bold text-sm"><i class="fas fa-terminal text-emerald-400 mr-2"></i>Terminal de Seguridad del Core</h3>
+                    <h3 class="text-white font-bold text-sm"><i class="fas fa-terminal text-emerald-400 mr-2"></i>Terminal de Seguridad Forense</h3>
                     <button onclick="cargarAuditoriaAPI()" class="text-slate-400 hover:text-white transition-colors" title="Refrescar Logs"><i class="fas fa-sync-alt"></i></button>
                 </div>
                 <div class="overflow-x-auto">
-                    <table class="w-full text-left border-collapse min-w-[900px]">
+                    <table class="w-full text-left border-collapse min-w-[1000px]">
                         <thead>
                             <tr class="bg-slate-900 text-slate-400 text-[10px] uppercase tracking-wider border-b border-slate-700">
                                 <th class="p-4 font-bold">Fecha / Hora</th>
                                 <th class="p-4 font-bold">Nivel</th>
                                 <th class="p-4 font-bold">Usuario Emisor</th>
-                                <th class="p-4 font-bold w-1/2">Acción Registrada en el Sistema</th>
+                                <th class="p-4 font-bold w-1/3">Acción Registrada en el Sistema</th>
+                                <th class="p-4 font-bold">Forense (IP / OS)</th>
                             </tr>
                         </thead>
                         <tbody id="tablaAuditoria" class="text-sm divide-y divide-slate-800 font-mono text-slate-300">
-                            <tr><td colspan="4" class="p-8 text-center text-slate-500"><i class="fas fa-spinner fa-spin mr-2"></i>Desencriptando registros...</td></tr>
+                            <tr><td colspan="5" class="p-8 text-center text-slate-500"><i class="fas fa-spinner fa-spin mr-2"></i>Desencriptando registros...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -316,6 +322,9 @@
         // =========================================================
         // ⚡ EL CEREBRO DEL SLIDE-OVER (DRAWER) ⚡
         // =========================================================
+        // =========================================================
+        // ⚡ EL CEREBRO DEL SLIDE-OVER (DRAWER) CON CONTACTOS ⚡
+        // =========================================================
         window.abrirDrawer = function(emp) {
             document.getElementById('drawer_nombre').textContent = emp.nombre;
             document.getElementById('drawer_nit').innerHTML = `<i class="fas fa-database mr-1"></i>${emp.schema_name} | NIT: ${emp.nit || 'N/A'}`;
@@ -331,6 +340,15 @@
                         <span class="text-xs font-bold ${estaVencido ? 'text-red-500' : 'text-emerald-500'} bg-slate-50 px-2 py-1 rounded">Vence: ${emp.fecha_vencimiento || 'Indefinido'}</span>
                     </div>
                     <p class="text-[10px] text-slate-400 mb-2">Suscripción ${emp.tipo_suscripcion || 'Mensual'}</p>
+                </div>
+
+                <div>
+                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center"><i class="fas fa-address-book mr-1"></i> Datos de Contacto</h4>
+                    <div class="bg-slate-50 p-3 rounded-lg text-xs text-slate-600 border border-slate-100">
+                        <p><i class="fas fa-phone text-slate-400 mr-2 w-3"></i> ${emp.telefono || 'Sin teléfono fijo'}</p>
+                        <p class="mt-1.5"><i class="fas fa-mobile-alt text-emerald-500 mr-2 w-3"></i> ${emp.celular || 'Sin celular / WhatsApp'}</p>
+                        <p class="mt-1.5"><i class="fas fa-map-marker-alt text-red-400 mr-2 w-3"></i> ${emp.direccion || 'Sin dirección registrada'}</p>
+                    </div>
                 </div>
 
                 <div>
@@ -523,75 +541,63 @@
         function abrirModalEmpresa() {
             Swal.fire({
                 title: 'Aprovisionar Nuevo Cliente',
-                width: '650px',
+                width: '750px',
                 html: `
-                    <div class="grid grid-cols-2 gap-4 text-left mt-2">
-                        <div class="col-span-2"><h4 class="text-xs font-bold text-blue-600 uppercase border-b pb-1">1. Datos Comerciales</h4></div>
-                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Nombre Comercial</label><input type="text" id="swal_emp_nombre" class="mt-1 w-full border rounded p-2 text-sm focus:border-blue-500 outline-none"></div>
-                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">NIT</label><input type="text" id="swal_emp_nit" class="mt-1 w-full border rounded p-2 text-sm focus:border-blue-500 outline-none"></div>
-                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Razón Social</label><input type="text" id="swal_emp_razon" class="mt-1 w-full border rounded p-2 text-sm focus:border-blue-500 outline-none"></div>
-                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Ciudad / Ubicación</label><input type="text" id="swal_emp_ciudad" class="mt-1 w-full border rounded p-2 text-sm focus:border-blue-500 outline-none" placeholder="Ej. La Paz"></div>
+                    <div class="grid grid-cols-3 gap-4 text-left mt-2">
+                        <div class="col-span-3"><h4 class="text-xs font-bold text-blue-600 uppercase border-b pb-1">1. Datos Comerciales y Contacto</h4></div>
+                        <div class="col-span-3 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Nombre Comercial</label><input type="text" id="swal_emp_nombre" class="mt-1 w-full border rounded p-2 text-sm focus:border-blue-500 outline-none"></div>
+                        <div class="col-span-3 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Razón Social</label><input type="text" id="swal_emp_razon" class="mt-1 w-full border rounded p-2 text-sm focus:border-blue-500 outline-none"></div>
+                        <div class="col-span-3 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">NIT</label><input type="text" id="swal_emp_nit" class="mt-1 w-full border rounded p-2 text-sm focus:border-blue-500 outline-none"></div>
+                        
+                        <div class="col-span-3 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Ciudad</label><input type="text" id="swal_emp_ciudad" class="mt-1 w-full border rounded p-2 text-sm focus:border-blue-500 outline-none"></div>
+                        <div class="col-span-3 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Teléfono (Fijo)</label><input type="text" id="swal_emp_telefono" class="mt-1 w-full border rounded p-2 text-sm focus:border-blue-500 outline-none"></div>
+                        <div class="col-span-3 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Celular (WhatsApp)</label><input type="text" id="swal_emp_celular" class="mt-1 w-full border rounded p-2 text-sm focus:border-blue-500 outline-none"></div>
+                        <div class="col-span-3"><label class="block text-[10px] font-bold text-slate-500 uppercase">Dirección Central</label><input type="text" id="swal_emp_direccion" class="mt-1 w-full border rounded p-2 text-sm focus:border-blue-500 outline-none"></div>
 
-                        <div class="col-span-2 mt-2"><h4 class="text-xs font-bold text-blue-600 uppercase border-b pb-1">2. Acceso RRHH (Admin)</h4></div>
-                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Nombre Encargado</label><input type="text" id="swal_admin_nombre" class="mt-1 w-full border rounded p-2 text-sm focus:border-blue-500 outline-none"></div>
-                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Correo (Login)</label><input type="email" id="swal_admin_email" class="mt-1 w-full border rounded p-2 text-sm focus:border-blue-500 outline-none"></div>
-                        <div class="col-span-2 relative">
+                        <div class="col-span-3 mt-2"><h4 class="text-xs font-bold text-blue-600 uppercase border-b pb-1">2. Acceso RRHH (Admin)</h4></div>
+                        <div class="col-span-3 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Nombre Encargado</label><input type="text" id="swal_admin_nombre" class="mt-1 w-full border rounded p-2 text-sm focus:border-blue-500 outline-none"></div>
+                        <div class="col-span-3 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Correo (Login)</label><input type="email" id="swal_admin_email" class="mt-1 w-full border rounded p-2 text-sm focus:border-blue-500 outline-none"></div>
+                        <div class="col-span-3 md:col-span-1 relative">
                             <label class="block text-[10px] font-bold text-slate-500 uppercase">Contraseña Inicial</label>
                             <input type="password" id="swal_admin_pass" class="mt-1 w-full border rounded p-2 text-sm pr-10 focus:border-blue-500 outline-none">
                             <i class="fas fa-eye absolute right-3 top-7 cursor-pointer text-slate-400 hover:text-blue-500" onclick="togglePassword('swal_admin_pass')"></i>
                         </div>
 
-                        <div class="col-span-2 mt-2"><h4 class="text-xs font-bold text-blue-600 uppercase border-b pb-1">3. Suscripción y Límites</h4></div>
-                        <div class="col-span-2 md:col-span-1">
-                            <label class="block text-[10px] font-bold text-slate-500 uppercase">Inicio del Contrato</label>
+                        <div class="col-span-3 mt-2"><h4 class="text-xs font-bold text-blue-600 uppercase border-b pb-1">3. Suscripción y Límites</h4></div>
+                        <div class="col-span-3 md:col-span-1">
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase">Inicio Contrato</label>
                             <input type="date" id="swal_fecha_inicio" value="${new Date().toISOString().split('T')[0]}" class="mt-1 w-full border rounded p-2 text-sm focus:border-blue-500 outline-none">
                         </div>
-                        <div class="col-span-2 md:col-span-1">
+                        <div class="col-span-3 md:col-span-1">
                             <label class="block text-[10px] font-bold text-slate-500 uppercase">Tipo Suscripción</label>
                             <select id="swal_tipo_sub" class="mt-1 w-full border rounded p-2 text-sm bg-slate-50 focus:border-blue-500 outline-none">
-                                <option value="Mensual">Mensual</option>
-                                <option value="Anual">Anual</option>
-                                <option value="Indefinido">Vitalicio/Prueba</option>
+                                <option value="Mensual">Mensual</option><option value="Anual">Anual</option><option value="Indefinido">Vitalicio/Prueba</option>
                             </select>
                         </div>
-                        <div class="col-span-2 md:col-span-1">
+                        <div class="col-span-3 md:col-span-1">
                             <label class="block text-[10px] font-bold text-slate-500 uppercase">Regalo / Gracia</label>
                             <select id="swal_meses" class="mt-1 w-full border rounded p-2 text-sm focus:border-blue-500 outline-none">
-                                <option value="0">Cobro Inmediato (0 Meses)</option>
-                                <option value="1">Prueba 1 Mes</option>
-                                <option value="6">Regalo 6 Meses</option>
+                                <option value="0">Ninguno (0 Meses)</option><option value="1">Prueba 1 Mes</option><option value="6">Regalo 6 Meses</option>
                             </select>
                         </div>
-                        <div class="col-span-2 md:col-span-1">
+                        <div class="col-span-3 md:col-span-1">
                             <label class="block text-[10px] font-bold text-slate-500 uppercase">Plan</label>
                             <select id="swal_plan" onchange="document.getElementById('swal_limite').value = this.options[this.selectedIndex].dataset.lim" class="mt-1 w-full border rounded p-2 text-sm focus:border-blue-500 outline-none">
-                                <option value="Básico" data-lim="50">Básico (50 usuarios)</option>
-                                <option value="Pro" data-lim="200">Pro (200 usuarios)</option>
-                                <option value="Industrial" data-lim="1000">Industrial (1000 usuarios)</option>
+                                <option value="Básico" data-lim="50">Básico (50 usu.)</option><option value="Pro" data-lim="200">Pro (200 usu.)</option><option value="Industrial" data-lim="1000">Industrial (1000 usu.)</option>
                             </select>
                         </div>
-                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Límite Usuarios</label><input type="number" id="swal_limite" value="50" class="mt-1 w-full border rounded p-2 text-sm bg-slate-100 outline-none"></div>
+                        <div class="col-span-3 md:col-span-2"><label class="block text-[10px] font-bold text-slate-500 uppercase">Límite Usuarios Real</label><input type="number" id="swal_limite" value="50" class="mt-1 w-full border rounded p-2 text-sm bg-slate-100 outline-none"></div>
                     </div>
                 `,
                 showCancelButton: true, confirmButtonText: '<i class="fas fa-server mr-1"></i> Aprovisionar', confirmButtonColor: '#2563eb', cancelButtonText: 'Cancelar',
                 preConfirm: () => {
                     const d = {
-                        nombre: document.getElementById('swal_emp_nombre').value,
-                        nit: document.getElementById('swal_emp_nit').value,
-                        razon_social: document.getElementById('swal_emp_razon').value,
-                        ciudad: document.getElementById('swal_emp_ciudad').value,
-                        admin_nombre: document.getElementById('swal_admin_nombre').value,
-                        admin_email: document.getElementById('swal_admin_email').value,
-                        admin_password: document.getElementById('swal_admin_pass').value,
-                        tipo_suscripcion: document.getElementById('swal_tipo_sub').value,
-                        plan_nombre: document.getElementById('swal_plan').value,
-                        limite_usuarios: document.getElementById('swal_limite').value,
-                        meses_regalo: document.getElementById('swal_meses').value,
-                        fecha_inicio: document.getElementById('swal_fecha_inicio').value
+                        nombre: document.getElementById('swal_emp_nombre').value, nit: document.getElementById('swal_emp_nit').value, razon_social: document.getElementById('swal_emp_razon').value,
+                        ciudad: document.getElementById('swal_emp_ciudad').value, telefono: document.getElementById('swal_emp_telefono').value, celular: document.getElementById('swal_emp_celular').value, direccion: document.getElementById('swal_emp_direccion').value,
+                        admin_nombre: document.getElementById('swal_admin_nombre').value, admin_email: document.getElementById('swal_admin_email').value, admin_password: document.getElementById('swal_admin_pass').value,
+                        tipo_suscripcion: document.getElementById('swal_tipo_sub').value, plan_nombre: document.getElementById('swal_plan').value, limite_usuarios: document.getElementById('swal_limite').value, meses_regalo: document.getElementById('swal_meses').value, fecha_inicio: document.getElementById('swal_fecha_inicio').value
                     };
-                    if(!d.nombre || !d.admin_email || !d.admin_password) {
-                        Swal.showValidationMessage('Nombre, Correo y Contraseña son obligatorios.'); return false;
-                    }
+                    if(!d.nombre || !d.admin_email || !d.admin_password) { Swal.showValidationMessage('Nombre, Correo y Contraseña son obligatorios.'); return false; }
                     return d;
                 }
             }).then(async (result) => {
@@ -610,46 +616,42 @@
         function abrirModalEdicion(emp) {
             Swal.fire({
                 title: `Editar: ${emp.nombre}`,
-                width: '700px',
+                width: '750px',
                 html: `
-                    <div class="grid grid-cols-2 gap-4 text-left mt-2">
-                        <div class="col-span-2"><h4 class="text-xs font-bold text-amber-600 uppercase border-b pb-1">1. Datos Comerciales</h4></div>
-                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Nombre Comercial</label><input type="text" id="edit_nombre" value="${emp.nombre}" class="mt-1 w-full border rounded p-2 text-sm outline-none focus:border-amber-500"></div>
-                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">NIT</label><input type="text" id="edit_nit" value="${emp.nit || ''}" class="mt-1 w-full border rounded p-2 text-sm outline-none focus:border-amber-500"></div>
-                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Razón Social</label><input type="text" id="edit_razon" value="${emp.razon_social || ''}" class="mt-1 w-full border rounded p-2 text-sm outline-none focus:border-amber-500"></div>
-                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Ciudad</label><input type="text" id="edit_ciudad" value="${emp.ciudad || ''}" class="mt-1 w-full border rounded p-2 text-sm outline-none focus:border-amber-500"></div>
+                    <div class="grid grid-cols-3 gap-4 text-left mt-2">
+                        <div class="col-span-3"><h4 class="text-xs font-bold text-amber-600 uppercase border-b pb-1">1. Datos Comerciales y Contacto</h4></div>
+                        <div class="col-span-3 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Nombre Comercial</label><input type="text" id="edit_nombre" value="${emp.nombre}" class="mt-1 w-full border rounded p-2 text-sm outline-none focus:border-amber-500"></div>
+                        <div class="col-span-3 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Razón Social</label><input type="text" id="edit_razon" value="${emp.razon_social || ''}" class="mt-1 w-full border rounded p-2 text-sm outline-none focus:border-amber-500"></div>
+                        <div class="col-span-3 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">NIT</label><input type="text" id="edit_nit" value="${emp.nit || ''}" class="mt-1 w-full border rounded p-2 text-sm outline-none focus:border-amber-500"></div>
                         
-                        <div class="col-span-2 mt-4"><h4 class="text-xs font-bold text-amber-600 uppercase border-b pb-1">2. Suscripción y Prórrogas</h4></div>
+                        <div class="col-span-3 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Ciudad</label><input type="text" id="edit_ciudad" value="${emp.ciudad || ''}" class="mt-1 w-full border rounded p-2 text-sm outline-none focus:border-amber-500"></div>
+                        <div class="col-span-3 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Teléfono (Fijo)</label><input type="text" id="edit_telefono" value="${emp.telefono || ''}" class="mt-1 w-full border rounded p-2 text-sm outline-none focus:border-amber-500"></div>
+                        <div class="col-span-3 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Celular (WhatsApp)</label><input type="text" id="edit_celular" value="${emp.celular || ''}" class="mt-1 w-full border rounded p-2 text-sm outline-none focus:border-amber-500"></div>
+                        <div class="col-span-3"><label class="block text-[10px] font-bold text-slate-500 uppercase">Dirección Central</label><input type="text" id="edit_direccion" value="${emp.direccion || ''}" class="mt-1 w-full border rounded p-2 text-sm outline-none focus:border-amber-500"></div>
                         
-                        <div class="col-span-2 md:col-span-1">
+                        <div class="col-span-3 mt-4"><h4 class="text-xs font-bold text-amber-600 uppercase border-b pb-1">2. Suscripción y Prórrogas</h4></div>
+                        <div class="col-span-3 md:col-span-1">
                             <label class="block text-[10px] font-bold text-slate-500 uppercase">Plan Contratado</label>
                             <select id="edit_plan" class="mt-1 w-full border rounded p-2 text-sm outline-none focus:border-amber-500">
-                                <option value="Básico" ${emp.plan_nombre === 'Básico' ? 'selected' : ''}>Básico (50 usuarios)</option>
-                                <option value="Pro" ${emp.plan_nombre === 'Pro' ? 'selected' : ''}>Pro (200 usuarios)</option>
-                                <option value="Industrial" ${emp.plan_nombre === 'Industrial' ? 'selected' : ''}>Industrial (1000 usuarios)</option>
-                                <option value="Infinito" ${emp.plan_nombre === 'Infinito' ? 'selected' : ''}>Infinito (SuperAdmin)</option>
+                                <option value="Básico" ${emp.plan_nombre === 'Básico' ? 'selected' : ''}>Básico (50 usuarios)</option><option value="Pro" ${emp.plan_nombre === 'Pro' ? 'selected' : ''}>Pro (200 usuarios)</option><option value="Industrial" ${emp.plan_nombre === 'Industrial' ? 'selected' : ''}>Industrial (1000 usuarios)</option><option value="Infinito" ${emp.plan_nombre === 'Infinito' ? 'selected' : ''}>Infinito (SuperAdmin)</option>
                             </select>
                         </div>
-                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Límite Usuarios</label><input type="number" id="edit_limite" value="${emp.limite_usuarios || 50}" class="mt-1 w-full border rounded p-2 text-sm outline-none focus:border-amber-500"></div>
-                        
-                        <div class="col-span-2 md:col-span-1">
+                        <div class="col-span-3 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Límite Usuarios</label><input type="number" id="edit_limite" value="${emp.limite_usuarios || 50}" class="mt-1 w-full border rounded p-2 text-sm outline-none focus:border-amber-500"></div>
+                        <div class="col-span-3 md:col-span-1">
                             <label class="block text-[10px] font-bold text-slate-500 uppercase">Tipo Suscripción</label>
                             <select id="edit_tipo_sub" class="mt-1 w-full border rounded p-2 text-sm outline-none focus:border-amber-500">
-                                <option value="Mensual" ${emp.tipo_suscripcion === 'Mensual' ? 'selected' : ''}>Mensual</option>
-                                <option value="Anual" ${emp.tipo_suscripcion === 'Anual' ? 'selected' : ''}>Anual</option>
-                                <option value="Indefinido" ${emp.tipo_suscripcion === 'Indefinido' ? 'selected' : ''}>Indefinido (Prueba/Interno)</option>
+                                <option value="Mensual" ${emp.tipo_suscripcion === 'Mensual' ? 'selected' : ''}>Mensual</option><option value="Anual" ${emp.tipo_suscripcion === 'Anual' ? 'selected' : ''}>Anual</option><option value="Indefinido" ${emp.tipo_suscripcion === 'Indefinido' ? 'selected' : ''}>Indefinido (Prueba/Interno)</option>
                             </select>
                         </div>
-
-                        <div class="col-span-2 md:col-span-1">
+                        <div class="col-span-3 md:col-span-1">
                             <label class="block text-[10px] font-bold text-red-500 uppercase">Prórroga / Vencimiento Manual</label>
                             <input type="date" id="edit_vencimiento" value="${emp.fecha_vencimiento || ''}" class="mt-1 w-full border border-red-200 rounded p-2 text-sm outline-none focus:border-amber-500" title="Usa esto para dar días gratis sin registrar un pago">
                         </div>
 
-                        <div class="col-span-2 mt-4"><h4 class="text-xs font-bold text-amber-600 uppercase border-b pb-1">3. Soporte Técnico (Reset de Credenciales)</h4></div>
-                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Nombre Admin</label><input type="text" id="edit_admin_nombre" value="${emp.admin_nombre || ''}" class="mt-1 w-full border rounded p-2 text-sm bg-amber-50 outline-none focus:border-amber-500"></div>
-                        <div class="col-span-2 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Correo Admin</label><input type="email" id="edit_admin_email" value="${emp.admin_email || ''}" class="mt-1 w-full border rounded p-2 text-sm bg-amber-50 outline-none focus:border-amber-500"></div>
-                        <div class="col-span-2 relative">
+                        <div class="col-span-3 mt-4"><h4 class="text-xs font-bold text-amber-600 uppercase border-b pb-1">3. Soporte Técnico (Reset Credenciales)</h4></div>
+                        <div class="col-span-3 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Nombre Admin</label><input type="text" id="edit_admin_nombre" value="${emp.admin_nombre || ''}" class="mt-1 w-full border rounded p-2 text-sm bg-amber-50 outline-none focus:border-amber-500"></div>
+                        <div class="col-span-3 md:col-span-1"><label class="block text-[10px] font-bold text-slate-500 uppercase">Correo Admin</label><input type="email" id="edit_admin_email" value="${emp.admin_email || ''}" class="mt-1 w-full border rounded p-2 text-sm bg-amber-50 outline-none focus:border-amber-500"></div>
+                        <div class="col-span-3 md:col-span-1 relative">
                             <label class="block text-[10px] font-bold text-slate-500 uppercase text-red-500">Nueva Contraseña (Opcional)</label>
                             <input type="password" id="edit_admin_pass" placeholder="Dejar en blanco para no cambiar..." class="mt-1 w-full border border-red-200 rounded p-2 text-sm pr-10 outline-none focus:border-amber-500">
                             <i class="fas fa-eye absolute right-3 top-7 cursor-pointer text-slate-400 hover:text-amber-600" onclick="togglePassword('edit_admin_pass')"></i>
@@ -660,20 +662,11 @@
                 preConfirm: () => {
                     return {
                         info: {
-                            nombre: document.getElementById('edit_nombre').value,
-                            nit: document.getElementById('edit_nit').value,
-                            razon_social: document.getElementById('edit_razon').value,
-                            ciudad: document.getElementById('edit_ciudad').value,
-                            plan_nombre: document.getElementById('edit_plan').value,
-                            limite_usuarios: document.getElementById('edit_limite').value,
-                            tipo_suscripcion: document.getElementById('edit_tipo_sub').value, // ⚡ Lo capturamos para el backend
-                            fecha_vencimiento: document.getElementById('edit_vencimiento').value
+                            nombre: document.getElementById('edit_nombre').value, nit: document.getElementById('edit_nit').value, razon_social: document.getElementById('edit_razon').value,
+                            ciudad: document.getElementById('edit_ciudad').value, telefono: document.getElementById('edit_telefono').value, celular: document.getElementById('edit_celular').value, direccion: document.getElementById('edit_direccion').value,
+                            plan_nombre: document.getElementById('edit_plan').value, limite_usuarios: document.getElementById('edit_limite').value, tipo_suscripcion: document.getElementById('edit_tipo_sub').value, fecha_vencimiento: document.getElementById('edit_vencimiento').value
                         },
-                        credenciales: {
-                            admin_nombre: document.getElementById('edit_admin_nombre').value,
-                            admin_email: document.getElementById('edit_admin_email').value,
-                            admin_password: document.getElementById('edit_admin_pass').value
-                        }
+                        credenciales: { admin_nombre: document.getElementById('edit_admin_nombre').value, admin_email: document.getElementById('edit_admin_email').value, admin_password: document.getElementById('edit_admin_pass').value }
                     }
                 }
             }).then(async (result) => {
@@ -684,6 +677,7 @@
                         await fetch(`${API_URL}/empresas/${emp.id}/credenciales`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(result.value.credenciales) });
                         Swal.fire('¡Actualizado!', 'Datos guardados correctamente.', 'success');
                         cargarEmpresasAPI();
+                        cerrarDrawer(); // Ocultamos el panel para refrescar la vista
                     } catch (e) { Swal.fire('Error', e.message, 'error'); }
                 }
             });
@@ -816,7 +810,7 @@
                 if(log.nivel === 'WARNING') colorBadge = 'bg-amber-900 text-amber-400 border-amber-600';
                 if(log.nivel === 'CRITICAL') colorBadge = 'bg-red-900 text-red-400 border-red-600';
                 let uaCorto = log.user_agent.split(' ')[0] || 'N/A'; // Súper simple parsing
-                
+
                 tbody.innerHTML += `
                     <tr class="hover:bg-slate-800 transition-colors">
                         <td class="p-4 text-xs text-slate-400 whitespace-nowrap">${log.fecha}</td>
