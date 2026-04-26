@@ -4869,6 +4869,7 @@ async def exportar_auditoria_pdf(nivel: str = "TODOS", q: str = "", fecha_inicio
     finally: cur.close(); conn.close()
 
 # ── RUTA DE ESTADO (Para saber si la API está viva) ──
+@app.head("/")
 @app.get("/")
 def inicio():
     return {"estado": "API funcionando", "version": "2.1 (SaaS Global)"}
