@@ -1107,36 +1107,117 @@ def eliminar_empresa(empresa_id: int, request: Request, usuario = Depends(verifi
 
 @app.get("/superadmin/kpis")
 async def obtener_kpis_saas(usuario = Depends(verificar_token)):
-    """ Extrae los KPIs y las ALERTAS de cobro """
+    """ Extrae KPIs de Negocio y Motor 360 de Alertas (Finanzas + Hardware) """
     if usuario.get("rol") != "superadmin": raise HTTPException(status_code=403, detail="Acceso denegado.")
         
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
+        # 1. Métricas Base
         cur.execute("SELECT COUNT(id) as total FROM public.empresas WHERE id != 1")
         total_empresas = cur.fetchone()['total']
         
         cur.execute("SELECT COUNT(id) as online FROM public.dispositivos WHERE estado = 'online' AND ultima_conexion >= NOW() - INTERVAL '24 hours'")
         relojes_online = cur.fetchone()['online']
         
-        # ⚡ ALERTAS DE VENCIMIENTO (Clientes a 15 días o vencidos)
-        cur.execute("SELECT nombre, fecha_vencimiento FROM public.empresas WHERE id != 1 AND activo = TRUE")
-        alertas = []
+        notificaciones = []
+
+        # 2. ALERTAS FINANCIERAS (Cobros <= 15 días)
+        cur.execute("SELECT id, nombre, fecha_vencimiento FROM public.empresas WHERE id != 1 AND activo = TRUE")
         hoy = date.today()
         for e in cur.fetchall():
             if e['fecha_vencimiento'] and e['fecha_vencimiento'] != date(2099, 12, 31):
                 dias = (e['fecha_vencimiento'] - hoy).days
                 if dias <= 15:
-                    alertas.append({"nombre": e['nombre'], "dias": dias})
-        alertas.sort(key=lambda x: x['dias']) # Ordenar los más urgentes primero
+                    notificaciones.append({
+                        "id": f"cobro_{e['id']}",
+                        "tipo": "cobro",
+                        "titulo": "Cobro Pendiente",
+                        "mensaje": f"{e['nombre']} vence en {dias} días." if dias >= 0 else f"{e['nombre']} VENCIDO hace {abs(dias)} días.",
+                        "nivel": "warning" if dias > 0 else "critical",
+                        "accion": "empresas",
+                        "filtro": e['nombre'],
+                        "icono": "fa-hand-holding-usd"
+                    })
+
+        # 3. ALERTAS DE HARDWARE (Memoria, Desconexión, Sensor Fantasma)
+        cur.execute("SELECT NOW() as db_now")
+        hoy_db = cur.fetchone()['db_now'].replace(tzinfo=None)
+
+        cur.execute("""
+            SELECT d.numero_serie, d.nombre as reloj_nombre, d.marca_modelo, d.schema_name, d.ultima_conexion, e.nombre as empresa_nombre
+            FROM public.dispositivos d
+            LEFT JOIN public.empresas e ON d.schema_name = e.schema_name
+        """)
+        dispositivos = cur.fetchall()
+
+        for d in dispositivos:
+            sn = d['numero_serie']
+            emp_name = d['empresa_nombre'] or 'Sin Asignar'
+
+            # A. Desconexión Grave (> 24h)
+            if d['ultima_conexion']:
+                dt_db = d['ultima_conexion'].replace(tzinfo=None)
+                horas_offline = (hoy_db - dt_db).total_seconds() / 3600
+                if horas_offline > 24:
+                    notificaciones.append({
+                        "id": f"off_{sn}", "tipo": "hw_offline", "titulo": "Desconexión Grave",
+                        "mensaje": f"El equipo de {emp_name} lleva {int(horas_offline)}h sin internet.",
+                        "nivel": "critical", "accion": "hardware", "filtro": sn, "icono": "fa-wifi"
+                    })
+            else:
+                notificaciones.append({
+                    "id": f"off_{sn}", "tipo": "hw_offline", "titulo": "Equipo Inactivo",
+                    "mensaje": f"El reloj {sn} jamás se ha conectado.",
+                    "nivel": "warning", "accion": "hardware", "filtro": sn, "icono": "fa-satellite-dish"
+                })
+
+            # Evaluamos Memoria y Sensor solo si el equipo tiene base de datos asignada
+            if d['schema_name']:
+                schema = d['schema_name']
+                try:
+                    cur.execute(f"SELECT COUNT(id) as c, MAX(fecha_hora) as ultimo_marcaje FROM {schema}.eventos_brutos WHERE device_no = %s", (sn,))
+                    res_ev = cur.fetchone()
+                    conteo = res_ev['c'] or 0
+                    ult_marcaje = res_ev['ultimo_marcaje']
+
+                    # B. Carga Crítica de Memoria (> 75%)
+                    limite = 100000 if 'K50' in str(d['marca_modelo']).upper() else 50000
+                    porcentaje = (conteo / limite) * 100
+
+                    if porcentaje >= 75:
+                        notificaciones.append({
+                            "id": f"mem_{sn}", "tipo": "hw_memoria", "titulo": "Memoria Crítica",
+                            "mensaje": f"El reloj de {emp_name} está al {round(porcentaje,1)}%. Requiere limpieza.",
+                            "nivel": "critical" if porcentaje > 90 else "warning", "accion": "hardware", "filtro": sn, "icono": "fa-microchip"
+                        })
+
+                    # C. Sensor Fantasma (Reloj Online pero sin marcajes en 48h)
+                    if ult_marcaje and d['ultima_conexion']:
+                        horas_offline_reloj = (hoy_db - d['ultima_conexion'].replace(tzinfo=None)).total_seconds() / 3600
+                        if horas_offline_reloj < 24: # Solo aplica si el reloj está vivo
+                            horas_sin_marcar = (hoy_db - ult_marcaje.replace(tzinfo=None)).total_seconds() / 3600
+                            if horas_sin_marcar > 48:
+                                notificaciones.append({
+                                    "id": f"ghost_{sn}", "tipo": "hw_fantasma", "titulo": "Posible Lente Dañado",
+                                    "mensaje": f"El reloj de {emp_name} está encendido, pero no registra huellas hace {int(horas_sin_marcar)}h.",
+                                    "nivel": "warning", "accion": "hardware", "filtro": sn, "icono": "fa-fingerprint"
+                                })
+                except:
+                    conn.rollback()
+
+        # Ordenar: Las rojas (critical) arriba, las amarillas (warning) abajo.
+        notificaciones.sort(key=lambda x: 0 if x['nivel'] == 'critical' else 1)
 
         return {
             "total_empresas": total_empresas,
             "relojes_online": relojes_online,
-            "alertas_cobro": alertas
+            "notificaciones": notificaciones
         }
-    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
-    finally: cur.close(); conn.close()
+    except Exception as e: 
+        raise HTTPException(status_code=500, detail=str(e))
+    finally: 
+        cur.close(); conn.close()
 
 @app.post("/superadmin/impersonate/{empresa_id}")
 async def impersonate_empresa(empresa_id: int, request: Request, usuario = Depends(verificar_token)):
