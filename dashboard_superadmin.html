@@ -33,6 +33,7 @@
         <nav class="flex-1 p-4 space-y-2 overflow-y-auto">
             <button onclick="cambiarVista('resumen', this)" class="menu-btn w-full flex items-center p-3 bg-blue-600 rounded-lg text-white font-medium transition-colors shadow-sm"><i class="fas fa-chart-pie w-6 text-center"></i> Resumen Global</button>
             <button onclick="cambiarVista('empresas', this)" class="menu-btn w-full flex items-center p-3 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg font-medium transition-colors"><i class="fas fa-building w-6 text-center"></i> Clientes / Empresas</button>
+            <button onclick="cambiarVista('finanzas', this)" class="menu-btn w-full flex items-center p-3 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg font-medium transition-colors"><i class="fas fa-file-invoice-dollar w-6 text-center"></i> Contabilidad y MRR</button>
             <button onclick="cambiarVista('hardware', this)" class="menu-btn w-full flex items-center p-3 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg font-medium transition-colors"><i class="fas fa-microchip w-6 text-center"></i> Monitor Hardware</button>
             <button onclick="cambiarVista('feriados', this)" class="menu-btn w-full flex items-center p-3 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg font-medium transition-colors"><i class="fas fa-calendar-star w-6 text-center"></i> Feriados Globales</button>
             <button onclick="cambiarVista('auditoria', this)" class="menu-btn w-full flex items-center p-3 hover:bg-slate-800 text-slate-300 hover:text-white rounded-lg font-medium transition-colors"><i class="fas fa-user-secret w-6 text-center"></i> Caja Negra (Logs)</button>
@@ -261,6 +262,32 @@
                 </div>
             </div>
         `;
+        
+        // ⚡ NUEVA VISTA: CONTABILIDAD Y FINANZAS
+        const VISTA_FINANZAS = `
+            <div class="mb-6"><h1 class="text-2xl font-bold text-slate-800">Flujo de Caja (Finanzas)</h1><p class="text-sm text-slate-500">Monitor de Ingreso Recurrente y pagos globales.</p></div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-emerald-200">
+                    <p class="text-xs font-bold text-emerald-600 uppercase tracking-wide"><i class="fas fa-chart-line mr-1"></i> MRR (Últimos 30 días)</p>
+                    <p class="text-3xl font-black text-slate-800 mt-2">Bs. <span id="fin_mrr"><i class="fas fa-spinner fa-spin text-sm text-slate-300"></i></span></p>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wide"><i class="fas fa-vault mr-1"></i> Total Histórico Recaudado</p>
+                    <p class="text-3xl font-black text-slate-800 mt-2">Bs. <span id="fin_total"><i class="fas fa-spinner fa-spin text-sm text-slate-300"></i></span></p>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+                <div class="p-4 border-b border-slate-100 bg-slate-50"><h3 class="font-bold text-slate-700 text-sm"><i class="fas fa-history mr-2"></i>Últimos 100 Pagos Registrados</h3></div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm whitespace-nowrap min-w-[700px]">
+                        <thead><tr class="bg-white text-slate-400 text-[10px] uppercase border-b border-slate-100"><th class="p-4 font-bold">Fecha</th><th class="p-4 font-bold">Cliente</th><th class="p-4 font-bold">Concepto</th><th class="p-4 font-bold">Ref. Transacción</th><th class="p-4 font-bold text-right">Ingreso</th></tr></thead>
+                        <tbody id="tablaFinanzas" class="divide-y divide-slate-50 text-slate-600"><tr><td colspan="5" class="p-8 text-center"><i class="fas fa-spinner fa-spin mr-2"></i>Cargando libros contables...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        `;
 
         // =========================================================
         // 3. MOTOR DE RUTAS
@@ -276,6 +303,7 @@
             else if (vista === 'hardware') { contenedor.innerHTML = VISTA_HARDWARE; cargarHardwareAPI(); }
             else if (vista === 'feriados') { contenedor.innerHTML = VISTA_FERIADOS; }
             else if (vista === 'auditoria') { contenedor.innerHTML = VISTA_AUDITORIA; cargarAuditoriaAPI(); } // ⚡ NUEVO
+            else if (vista === 'finanzas') { contenedor.innerHTML = VISTA_FINANZAS; cargarFinanzasAPI(); }
             if(window.innerWidth < 768) toggleMenu();
         }
 
@@ -490,6 +518,49 @@
             overlay.classList.remove('hidden');
             setTimeout(() => overlay.classList.remove('opacity-0'), 10);
             panel.classList.remove('translate-x-full');
+
+            const listaModulos = [
+                { key: 'dashboard_cliente', label: 'Dashboard Principal', icon: 'fa-chart-line' },
+                { key: 'ausencias', label: 'Módulo de Ausencias', icon: 'fa-user-clock' },
+                { key: 'calendario', label: 'Calendario Laboral', icon: 'fa-calendar-alt' },
+                { key: 'feriado', label: 'Gestión de Feriados', icon: 'fa-umbrella-beach' },
+                { key: 'lectores', label: 'Gestión de Lectores ADMS', icon: 'fa-microchip' },
+                { key: 'organizacion', label: 'Estructura Organizacional', icon: 'fa-sitemap' },
+                { key: 'planilla', label: 'Cálculo de Planilla', icon: 'fa-file-invoice' },
+                { key: 'reporte_dia', label: 'Reportes Diarios', icon: 'fa-clipboard-list' },
+                { key: 'simulador', label: 'Simulador de Marcajes', icon: 'fa-vial' },
+                { key: 'turnos', label: 'Gestión de Turnos', icon: 'fa-clock' },
+                { key: 'configuracion', label: 'Configuración de Empresa', icon: 'fa-cogs' }
+            ];
+
+            let htmlModulos = listaModulos.map(m => `
+                <label class="flex items-center justify-between p-2 hover:bg-slate-50 rounded transition-colors cursor-pointer group">
+                    <div class="flex items-center gap-3">
+                        <div class="w-7 h-7 flex items-center justify-center rounded bg-slate-100 text-slate-500 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
+                            <i class="fas ${m.icon} text-xs"></i>
+                        </div>
+                        <span class="text-xs font-semibold text-slate-700">${m.label}</span>
+                    </div>
+                    <input type="checkbox" 
+                        onchange="guardarPermisoModulo(${emp.id}, '${m.key}', this.checked)"
+                        class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                        ${(emp.modulos && emp.modulos[m.key]) ? 'checked' : ''}>
+                </label>
+            `).join('');
+
+            content.innerHTML = `
+                <div class="space-y-6">
+                    <div>
+                        <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center">
+                            <i class="fas fa-key mr-2"></i> Licencia de Módulos (Acceso)
+                        </h4>
+                        <div class="grid grid-cols-1 gap-1">
+                            ${htmlModulos}
+                        </div>
+                    </div>
+                    <hr class="border-slate-100">
+                    </div>
+            `;
         }
 
         window.cerrarDrawer = function() {
@@ -498,6 +569,25 @@
             panel.classList.add('translate-x-full');
             overlay.classList.add('opacity-0');
             setTimeout(() => overlay.classList.add('hidden'), 300);
+        }
+
+        window.guardarPermisoModulo = async function(empId, moduloKey, estado) {
+            const emp = window.datosEmpresasGlobal.find(e => e.id === empId);
+            if(!emp.modulos) emp.modulos = {};
+            emp.modulos[moduloKey] = estado;
+
+            try {
+                await fetch(`${API_URL}/superadmin/empresas/${empId}/permisos`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify(emp.modulos)
+                });
+                // Notificación sutil de guardado
+                const toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 1000 });
+                toast.fire({ icon: 'success', title: 'Permiso actualizado' });
+            } catch(e) {
+                Swal.fire('Error', 'No se pudo actualizar el permiso', 'error');
+            }
         }
 
         // =========================================================
@@ -626,7 +716,7 @@
         // =========================================================
         // MODALES CRUD (Intactos, compactados por espacio)
         // =========================================================
-                // =========================================================
+        // =========================================================
         // 5. MODALES DE GESTIÓN DE CLIENTE (CREAR / EDITAR)
         // =========================================================
         function abrirModalEmpresa() {
@@ -806,6 +896,30 @@
             });
         }
 
+
+        async function cargarFinanzasAPI() {
+            try {
+                const res = await fetch(`${API_URL}/superadmin/finanzas`, { headers: { 'Authorization': `Bearer ${token}` } });
+                const data = await res.json();
+                
+                document.getElementById('fin_mrr').textContent = parseFloat(data.mrr).toFixed(2);
+                document.getElementById('fin_total').textContent = parseFloat(data.total_ingresos).toFixed(2);
+                
+                const tbody = document.getElementById('tablaFinanzas');
+                if(data.pagos.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-slate-400">Aún no hay transacciones registradas.</td></tr>'; return; }
+                
+                tbody.innerHTML = data.pagos.map(p => `
+                    <tr class="hover:bg-slate-50">
+                        <td class="p-4 text-xs">${p.fecha_pago}</td>
+                        <td class="p-4 font-bold text-slate-700">${p.empresa_nombre}</td>
+                        <td class="p-4"><span class="bg-blue-50 text-blue-600 px-2 py-1 rounded text-[10px] font-bold uppercase">${p.tipo_pago}</span></td>
+                        <td class="p-4 font-mono text-xs text-slate-400">${p.comprobante_ref}</td>
+                        <td class="p-4 font-bold text-emerald-600 text-right">+ Bs. ${parseFloat(p.monto).toFixed(2)}</td>
+                    </tr>
+                `).join('');
+            } catch(e) { document.getElementById('tablaFinanzas').innerHTML = '<tr><td colspan="5" class="p-8 text-center text-red-500">Error al cargar finanzas.</td></tr>'; }
+        }
+
         async function verHistorialPagos(empresa_id, nombre_empresa) {
             Swal.fire({ title: 'Obteniendo Libros Contables...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
             try {
@@ -828,15 +942,29 @@
         async function entrarComoEmpresa(empresa_id) {
             Swal.fire({ title: 'Generando Pasaporte Seguro...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
             try {
-                const res = await fetch(`${API_URL}/superadmin/impersonate/${empresa_id}`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+                const res = await fetch(`${API_URL}/superadmin/impersonate/${empresa_id}`, { 
+                    method: 'POST', 
+                    headers: { 'Authorization': `Bearer ${token}` } 
+                });
                 const data = await res.json();
+                
                 if(!res.ok) throw new Error(data.detail);
-                localStorage.setItem('token', data.token);
-                localStorage.setItem('userData', JSON.stringify({ nombre: "Soporte (SuperAdmin)", rol: "admin", empresa: data.empresa_nombre, schema_name: data.schema_name }));
-                window.location.href = 'dashboard_cliente.html';
-            } catch (error) { Swal.fire('Error de Acceso', error.message, 'error'); }
-        }
 
+                // ⚡ ACTUALIZACIÓN: Guardamos el token y el objeto completo de permisos (módulos)
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('userData', JSON.stringify({ 
+                    nombre: "Soporte (SuperAdmin)", 
+                    rol: "admin", 
+                    empresa: data.empresa_nombre, 
+                    schema_name: data.schema_name,
+                    modulos: data.modulos // <--- ⚡ ESTO ES LO QUE PERMITE QUE EL MENÚ SE DIBUJE CORRECTAMENTE
+                }));
+
+                window.location.href = 'dashboard_cliente.html';
+            } catch (error) { 
+                Swal.fire('Error de Acceso', error.message, 'error'); 
+            }
+        }
         async function eliminarEmpresa(id_empresa, nombre_empresa) {
             const result = await Swal.fire({
                 title: 'Destrucción de Infraestructura',

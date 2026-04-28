@@ -144,20 +144,17 @@ async def login(request: Request):
         email    = data.get("email", "").strip().lower()
         password = data.get("password", "")
 
-        # 1. Buscamos al usuario siempre en la tabla global ('public')
+        # 1. Buscamos al usuario y traemos los MÓDULOS de su empresa
         conn = conectar_bd("public")
-        # RealDictCursor hace que los resultados salgan como diccionarios {"nombre": "Juan"}
-        # en lugar de simples tuplas ("Juan",)
         cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
-        # Hacemos un JOIN para traer tanto los datos del usuario como el esquema de su empresa
         cur.execute("""
-            SELECT u.*, e.nombre as empresa_nombre, e.schema_name
+            SELECT u.*, e.nombre as empresa_nombre, e.schema_name, e.modulos
             FROM usuarios u
             JOIN empresas e ON e.id = u.empresa_id
             WHERE u.email = %s AND u.activo = TRUE
         """, (email,))
-        usuario = cur.fetchone() # Trae el primer resultado encontrado
+        usuario = cur.fetchone()
         cur.close()
         conn.close()
 
@@ -177,15 +174,18 @@ async def login(request: Request):
             raise HTTPException(status_code=403, detail="Suscripción Suspendida. Contacte a Soporte.")
 
         # 3. Creación del "Pasaporte" (Token JWT)
-        # Este token viaja al navegador y es la única prueba de que el usuario ya inició sesión.
+        # ⚡ INYECCIÓN: Agregamos "modulos" al token
+        modulos_empresa = usuario.get("modulos", {})
+
         token = jwt.encode({
             "id":             usuario["id"],
             "email":          usuario["email"],
             "rol":            usuario["rol"],
             "empresa_id":     usuario["empresa_id"],
-            "schema_name":    usuario["schema_name"], # Esto es vital para saber a qué esquema enviarlo luego
+            "schema_name":    usuario["schema_name"], 
             "empresa_nombre": usuario["empresa_nombre"],
-            "exp":            datetime.utcnow() + timedelta(hours=8) # El token caduca en 8 horas
+            "modulos":        modulos_empresa, # <--- ⚡ EL PASAPORTE VIP
+            "exp":            datetime.utcnow() + timedelta(hours=8)
         }, SECRET_KEY, algorithm="HS256")
 
         # Devolvemos el token y los datos básicos para que el frontend arme la interfaz
@@ -194,7 +194,8 @@ async def login(request: Request):
             "nombre":         usuario["nombre"],
             "rol":            usuario["rol"],
             "empresa_nombre": usuario["empresa_nombre"],
-            "schema_name":    usuario["schema_name"]
+            "schema_name":    usuario["schema_name"],
+            "modulos":        modulos_empresa  # <--- ⚡ PARA EL LOCALSTORAGE
         }
 
     except HTTPException:
@@ -1228,28 +1229,28 @@ async def impersonate_empresa(empresa_id: int, request: Request, usuario = Depen
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        cur.execute("SELECT nombre, schema_name FROM empresas WHERE id = %s", (empresa_id,))
+        # ⚡ INYECCIÓN: Extraemos los módulos para el SuperAdmin también
+        cur.execute("SELECT nombre, schema_name, modulos FROM empresas WHERE id = %s", (empresa_id,))
         empresa = cur.fetchone()
         
         if not empresa: raise HTTPException(status_code=404, detail="La empresa no existe.")
             
         token_falso = jwt.encode({
-            "id": 0, "email": "soporte@tu-sistema.com", "rol": "admin",
+            "id": 0, "email": "soporte@bitech.com", "rol": "admin",
             "empresa_id": empresa_id, "schema_name": empresa["schema_name"], 
             "empresa_nombre": empresa["nombre"],
+            "modulos": empresa.get("modulos", {}), # <--- ⚡ PASAPORTE PARA EL ADMIN
             "exp": datetime.utcnow() + timedelta(hours=1)
         }, SECRET_KEY, algorithm="HS256")
         
-        # ⚡ CAJA NEGRA: Registramos la intrusión autorizada
-        cur.execute("""
-            INSERT INTO saas_auditoria (nivel, usuario, accion)
-            VALUES ('WARNING', %s, %s)
-        """, (usuario.get("email", "SuperAdmin"), f"Sesión remota (Impersonate) iniciada en la base de datos de: {empresa['nombre']}"))
+        registrar_auditoria(cur, request, usuario.get("email", "SuperAdmin"), "WARNING", f"Sesión remota (Impersonate) iniciada en la base de datos de: {empresa['nombre']}")
         conn.commit()
         
         return {
             "token": token_falso, "schema_name": empresa["schema_name"],
-            "empresa_nombre": empresa["nombre"], "mensaje": f"Acceso concedido a {empresa['nombre']}"
+            "empresa_nombre": empresa["nombre"],
+            "modulos": empresa.get("modulos", {}), # <--- ⚡ FRONTEND DEL ADMIN
+            "mensaje": f"Acceso concedido a {empresa['nombre']}"
         }
     finally: cur.close(); conn.close()
 # ==============================================================================
@@ -4866,6 +4867,53 @@ async def exportar_auditoria_pdf(nivel: str = "TODOS", q: str = "", fecha_inicio
         
         elements.append(t); doc.build(elements); output.seek(0)
         return StreamingResponse(output, media_type="application/pdf", headers={"Content-Disposition": "attachment; filename=Auditoria_SaaS.pdf"})
+    finally: cur.close(); conn.close()
+
+# ---------------------------------------------------------
+# 23. Dashboard Financiero Centralizado
+# ---------------------------------------------------------
+@app.get("/superadmin/contabilidad")
+async def obtener_contabilidad_global(usuario = Depends(verificar_token)):
+    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403)
+    conn = conectar_bd("public")
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        # Resumen financiero
+        cur.execute("SELECT COALESCE(SUM(monto), 0) as total FROM saas_pagos")
+        total = cur.fetchone()['total']
+        cur.execute("SELECT COALESCE(SUM(monto), 0) as mrr FROM saas_pagos WHERE fecha_pago >= NOW() - INTERVAL '30 days'")
+        mrr = cur.fetchone()['mrr']
+        
+        # Historial (Ingresos y Gastos)
+        cur.execute("""
+            SELECT p.*, e.nombre as empresa_nombre 
+            FROM saas_pagos p 
+            LEFT JOIN empresas e ON p.empresa_id = e.id 
+            ORDER BY p.fecha_pago DESC LIMIT 100
+        """)
+        historial = cur.fetchall()
+        for h in historial: h['fecha_pago'] = h['fecha_pago'].strftime("%Y-%m-%d %H:%M")
+
+        return {"mrr": mrr, "total": total, "historial": historial}
+    finally: cur.close(); conn.close()
+
+# ---------------------------------------------------------
+# 24. Gestión de Módulos (Feature Flags)
+# ---------------------------------------------------------
+@app.put("/superadmin/empresas/{empresa_id}/permisos")
+async def actualizar_permisos_modulos(empresa_id: int, request: Request, usuario = Depends(verificar_token)):
+    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403)
+    nuevos_modulos = await request.json()
+    conn = conectar_bd("public")
+    cur = conn.cursor()
+    try:
+        cur.execute("UPDATE empresas SET modulos = %s WHERE id = %s", (json.dumps(nuevos_modulos), empresa_id))
+        registrar_auditoria(cur, request, usuario.get("email"), "INFO", f"Cambio de permisos de módulos para Empresa ID: {empresa_id}")
+        conn.commit()
+        return {"mensaje": "Permisos actualizados correctamente."}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
     finally: cur.close(); conn.close()
 
 # ── RUTA DE ESTADO (Para saber si la API está viva) ──
