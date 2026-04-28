@@ -124,6 +124,29 @@ def verificar_token(request: Request):
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Token inválido o manipulado.")
 
+# 🛡️ ¡NUEVO!: EL CANDADO MAESTRO (DEPENDENCY FACTORY)
+def requiere_modulo(modulo: str):
+    """
+    Fábrica de candados. Se pone en la puerta de la ruta y verifica si el 
+    token del usuario tiene permiso para entrar al módulo solicitado.
+    """
+    def validador(usuario: dict = Depends(verificar_token)):
+        # Si es el SuperAdmin original en su Panel Global, lo dejamos pasar a cualquier lado
+        if usuario.get("rol") == "superadmin":
+            return usuario
+            
+        # Si es cliente (o el SuperAdmin haciendo impersonate de soporte), validamos el pasaporte
+        modulos = usuario.get("modulos", {})
+        
+        # Solo bloqueamos si está explícitamente en False
+        if modulos.get(modulo) is False:
+            raise HTTPException(
+                status_code=403, 
+                detail=f"Acceso Denegado: Su plan de suscripción actual no incluye el módulo '{modulo.upper()}'."
+            )
+        return usuario
+    return validador
+
 # ── HORA OFICIAL DEL SERVIDOR (Para sincronizar Frontends) ──
 @app.get("/hora-servidor")
 def obtener_hora_servidor():
@@ -341,7 +364,7 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
                 horas_extras BOOLEAN DEFAULT FALSE,
                 medio_tiempo_fines BOOLEAN DEFAULT FALSE,
                 eliminado BOOLEAN DEFAULT FALSE
-            )
+            );
 
             -- ==========================================
             -- 2. TABLA PRINCIPAL DE EMPLEADOS (Planilla)
@@ -375,8 +398,9 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
                 
                 huella_template TEXT,                  -- Aquí guardaremos el string de la huella dactilar
                 creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                historial_movimientos TEXT DEFAULT ''   -- Caja negra de registro de movimiento
+                actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                historial_movimientos TEXT DEFAULT '',   -- Caja negra de registro de movimiento
+                saldo_vacaciones_inicial NUMERIC(5,2) DEFAULT 0.00
             );
 
             -- ==========================================
@@ -636,7 +660,7 @@ def crear_superadmin():
 
 
 # ==============================================================================
-# X. CEREBRO DE CECÁLCULO - EVENT - DRIVEN
+# X. CEREBRO DE CÁLCULO - EVENT - DRIVEN
 # ==============================================================================
 
 # ⚡ FUNCIÓN MAESTRA: EL CEREBRO EVENT-DRIVEN
@@ -1261,7 +1285,7 @@ async def impersonate_empresa(empresa_id: int, request: Request, usuario = Depen
 # A. SUCURSALES (Físico)
 # ------------------------------------------------------------------------------
 @app.get("/sucursales")
-def obtener_sucursales(usuario = Depends(verificar_token)):
+def obtener_sucursales(usuario = Depends(requiere_modulo("organizacion"))):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -1272,7 +1296,7 @@ def obtener_sucursales(usuario = Depends(verificar_token)):
     return list(sucursales)
 
 @app.post("/sucursales")
-async def crear_sucursal(data: dict, usuario = Depends(verificar_token)):
+async def crear_sucursal(data: dict, usuario = Depends(requiere_modulo("organizacion"))):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor()
@@ -1299,7 +1323,7 @@ async def crear_sucursal(data: dict, usuario = Depends(verificar_token)):
 
 # --- RUTA PARA ACTUALIZAR SUCURSAL (EDICIÓN) ---
 @app.put("/sucursales/{sucursal_id}")
-async def actualizar_sucursal(sucursal_id: int, data: dict, usuario = Depends(verificar_token)):
+async def actualizar_sucursal(sucursal_id: int, data: dict, usuario = Depends(requiere_modulo("organizacion"))):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor()
@@ -1331,7 +1355,7 @@ async def actualizar_sucursal(sucursal_id: int, data: dict, usuario = Depends(ve
         conn.close()
 
 @app.delete("/sucursales/{sucursal_id}")
-def eliminar_sucursal(sucursal_id: int, usuario = Depends(verificar_token)):
+def eliminar_sucursal(sucursal_id: int, usuario = Depends(requiere_modulo("organizacion"))):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor()
@@ -1354,7 +1378,7 @@ def eliminar_sucursal(sucursal_id: int, usuario = Depends(verificar_token)):
 # B. SECCIONES (Lógico)
 # ------------------------------------------------------------------------------
 @app.get("/secciones")
-def obtener_secciones(usuario = Depends(verificar_token)):
+def obtener_secciones(usuario = Depends(requiere_modulo("organizacion"))):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -1365,7 +1389,7 @@ def obtener_secciones(usuario = Depends(verificar_token)):
     return list(secciones)
 
 @app.post("/secciones")
-async def crear_seccion(request: Request, usuario = Depends(verificar_token)):
+async def crear_seccion(request: Request, usuario = Depends(requiere_modulo("organizacion"))):
     schema = usuario["schema_name"]
     data = await request.json()
     nombre = data.get("nombre")
@@ -1390,7 +1414,7 @@ async def crear_seccion(request: Request, usuario = Depends(verificar_token)):
 
 # --- RUTA PARA ACTUALIZAR SECCIÓN (EDICIÓN) ---
 @app.put("/secciones/{seccion_id}")
-async def actualizar_seccion(seccion_id: int, data: dict, usuario = Depends(verificar_token)):
+async def actualizar_seccion(seccion_id: int, data: dict, usuario = Depends(requiere_modulo("organizacion"))):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor()
@@ -1418,7 +1442,7 @@ async def actualizar_seccion(seccion_id: int, data: dict, usuario = Depends(veri
         conn.close()
 
 @app.delete("/secciones/{seccion_id}")
-def eliminar_seccion(seccion_id: int, usuario = Depends(verificar_token)):
+def eliminar_seccion(seccion_id: int, usuario = Depends(requiere_modulo("organizacion"))):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor()
@@ -1442,7 +1466,7 @@ def eliminar_seccion(seccion_id: int, usuario = Depends(verificar_token)):
 
 # ⚡ NUEVO ENDPOINT: Extrae estadísticas y cargos únicos en milisegundos
 @app.get("/empleados/stats")
-async def obtener_empleados_stats(usuario = Depends(verificar_token)):
+async def obtener_empleados_stats(usuario = Depends(requiere_modulo("planilla"))):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -1487,7 +1511,7 @@ async def obtener_empleados(
     cargo: str = '',
     limite: int = 500,    # Límite alto por defecto para permitir exportar a Excel
     offset: int = 0,
-    usuario = Depends(verificar_token)
+    usuario = Depends(requiere_modulo("planilla"))
 ):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
@@ -1560,7 +1584,7 @@ async def obtener_empleados(
         conn.close()
 
 @app.post("/empleados")
-async def crear_empleado(request: Request, usuario = Depends(verificar_token)):
+async def crear_empleado(request: Request, usuario = Depends(requiere_modulo("planilla"))):
     schema = usuario["schema_name"]
     data = await request.json()
     
@@ -1655,7 +1679,7 @@ async def crear_empleado(request: Request, usuario = Depends(verificar_token)):
         conn.close()
 
 @app.put("/empleados/{empleado_id}")
-async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depends(verificar_token)):
+async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depends(requiere_modulo("planilla"))):
     schema = usuario["schema_name"]
     data = await request.json()
     
@@ -1797,7 +1821,7 @@ async def actualizar_empleado(empleado_id: int, request: Request, usuario = Depe
         conn.close()
 
 @app.delete("/empleados/{empleado_id}")
-async def eliminar_empleado(empleado_id: int, request: Request, usuario = Depends(verificar_token)):
+async def eliminar_empleado(empleado_id: int, request: Request, usuario = Depends(requiere_modulo("planilla"))):
     """ 
     BORRADO HÍBRIDO: 
     1. Soft Delete en ERP (Mantiene historial).
@@ -1882,7 +1906,7 @@ async def eliminar_empleado(empleado_id: int, request: Request, usuario = Depend
 
 # ⚡ NUEVO: FABRICANTE DE EXCEL SERVER-SIDE
 @app.get("/empleados/exportar/excel")
-async def exportar_empleados_excel(estado: str="activos", q: str="", sucursal_id: str="", seccion_id: str="", cargo: str="", usuario=Depends(verificar_token)):
+async def exportar_empleados_excel(estado: str="activos", q: str="", sucursal_id: str="", seccion_id: str="", cargo: str="", usuario=Depends(requiere_modulo("planilla"))):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -1985,7 +2009,7 @@ async def exportar_empleados_excel(estado: str="activos", q: str="", sucursal_id
 
 # ⚡ NUEVO: FABRICANTE DE PDF SERVER-SIDE
 @app.get("/empleados/exportar/pdf")
-async def exportar_empleados_pdf(estado: str="activos", q: str="", sucursal_id: str="", seccion_id: str="", cargo: str="", usuario=Depends(verificar_token)):
+async def exportar_empleados_pdf(estado: str="activos", q: str="", sucursal_id: str="", seccion_id: str="", cargo: str="", usuario=Depends(requiere_modulo("planilla"))):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -2093,7 +2117,7 @@ async def exportar_empleados_pdf(estado: str="activos", q: str="", sucursal_id: 
 # ==========================================
 
 @app.get("/turnos")
-async def obtener_turnos(usuario = Depends(verificar_token)):
+async def obtener_turnos(usuario = Depends(requiere_modulo("turnos"))):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -2122,7 +2146,7 @@ def calcular_minutos_almuerzo(inicio: str, fin: str) -> int:
 # CALCULADORA INTELIGENTE DE TURNOS
 # ==========================================
 @app.get("/turnos/calculadora")
-async def calculadora_turnos(ingreso: str = "", salida: str = "", alm_in: str = "", alm_out: str = "", usuario = Depends(verificar_token)):
+async def calculadora_turnos(ingreso: str = "", salida: str = "", alm_in: str = "", alm_out: str = "", usuario = Depends(requiere_modulo("turnos"))):
     """Calculadora centralizada para mantener el Frontend Tonto"""
     min_almuerzo = 0
     total_str = "0.00 hrs/día"
@@ -2146,7 +2170,7 @@ async def calculadora_turnos(ingreso: str = "", salida: str = "", alm_in: str = 
     return {"almuerzo_min": min_almuerzo, "total_str": total_str}
 
 @app.post("/turnos")
-async def crear_turno(data: dict, usuario = Depends(verificar_token)):
+async def crear_turno(data: dict, usuario = Depends(requiere_modulo("turnos"))):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor()
@@ -2176,7 +2200,7 @@ async def crear_turno(data: dict, usuario = Depends(verificar_token)):
         cur.close(); conn.close()
 
 @app.put("/turnos/{turno_id}")
-async def actualizar_turno(turno_id: int, data: dict, usuario = Depends(verificar_token)):
+async def actualizar_turno(turno_id: int, data: dict, usuario = Depends(requiere_modulo("turnos"))):
     schema = usuario["schema_name"]
     
     # ⚡ El Cerebro calcula antes de guardar
@@ -2224,7 +2248,7 @@ async def actualizar_turno(turno_id: int, data: dict, usuario = Depends(verifica
         cur.close(); conn.close()
 
 @app.delete("/turnos/{turno_id}")
-async def eliminar_turno(turno_id: int, usuario = Depends(verificar_token)):
+async def eliminar_turno(turno_id: int, usuario = Depends(requiere_modulo("turnos"))):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor()
@@ -2259,7 +2283,7 @@ async def eliminar_turno(turno_id: int, usuario = Depends(verificar_token)):
 # ⚡ NUEVO: Estadísticas Generales de Ausencias (Milisegundos)
 # ⚡ NUEVO: Estadísticas Generales y Cargos (Milisegundos)
 @app.get("/ausencias/stats")
-async def obtener_ausencias_stats(usuario = Depends(verificar_token)):
+async def obtener_ausencias_stats(usuario = Depends(requiere_modulo("ausencias"))):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -2296,7 +2320,7 @@ async def obtener_ausencias_stats(usuario = Depends(verificar_token)):
 # ⚡ NUEVO: Buscador de Empleados con Cálculo Kardex "On-The-Fly"
 @app.get("/ausencias/directorio")
 async def buscar_directorio_ausencias(
-    estado: str = "todos", q: str = "", sucursal_id: str = "", seccion_id: str = "", cargo: str = "", limite: int = 100, usuario = Depends(verificar_token)
+    estado: str = "todos", q: str = "", sucursal_id: str = "", seccion_id: str = "", cargo: str = "", limite: int = 100, usuario = Depends(requiere_modulo("ausencias"))
 ):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
@@ -2358,7 +2382,7 @@ async def buscar_directorio_ausencias(
 # 1. KARDEX (Calcula los días disponibles matemáticamente)
 # ------------------------------------------------------------------------------
 @app.get("/empleados/{empleado_id}/kardex_vacaciones")
-async def calcular_vacaciones(empleado_id: int, usuario = Depends(verificar_token)):
+async def calcular_vacaciones(empleado_id: int, usuario = Depends(requiere_modulo("ausencias"))):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -2418,7 +2442,7 @@ async def calcular_vacaciones(empleado_id: int, usuario = Depends(verificar_toke
 # 2. HISTORIAL DE AUSENCIAS (Trae la lista de vacaciones/permisos tomados)
 # ------------------------------------------------------------------------------
 @app.get("/empleados/{empleado_id}/ausencias")
-async def obtener_historial_ausencias(empleado_id: int, usuario = Depends(verificar_token)):
+async def obtener_historial_ausencias(empleado_id: int, usuario = Depends(requiere_modulo("ausencias"))):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -2441,7 +2465,7 @@ async def obtener_historial_ausencias(empleado_id: int, usuario = Depends(verifi
 # ------------------------------------------------------------------------------
 # ⚡ ESTA ES LA NUEVA RUTA QUE FALTABA PARA QUE FUNCIONE EL BOTÓN DEL FRONTEND
 @app.put("/empleados/{empleado_id}/saldo_inicial")
-async def actualizar_saldo_inicial(empleado_id: int, data: dict, usuario = Depends(verificar_token)):
+async def actualizar_saldo_inicial(empleado_id: int, data: dict, usuario = Depends(requiere_modulo("ausencias"))):
     schema = usuario["schema_name"]
     nuevo_saldo = data.get("saldo_inicial")
     admin_password = data.get("admin_password")
@@ -2483,7 +2507,7 @@ async def actualizar_saldo_inicial(empleado_id: int, data: dict, usuario = Depen
 # 4. REGISTRAR UNA NUEVA AUSENCIA (Motor de Guardado Inteligente)
 # ------------------------------------------------------------------------------
 @app.post("/ausencias")
-async def registrar_ausencia(data: dict, usuario = Depends(verificar_token)):
+async def registrar_ausencia(data: dict, usuario = Depends(requiere_modulo("ausencias"))):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) 
@@ -2664,7 +2688,7 @@ async def registrar_ausencia(data: dict, usuario = Depends(verificar_token)):
 # 5. ANULAR AUSENCIA (Soft Delete con Protección de Auditoría)
 # ------------------------------------------------------------------------------
 @app.delete("/ausencias/{ausencia_id}")
-async def anular_ausencia(ausencia_id: int, usuario = Depends(verificar_token)):
+async def anular_ausencia(ausencia_id: int, usuario = Depends(requiere_modulo("ausencias"))):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -2694,7 +2718,7 @@ async def anular_ausencia(ausencia_id: int, usuario = Depends(verificar_token)):
 # 6. EDITAR OBSERVACIONES DE AUSENCIA
 # ------------------------------------------------------------------------------
 @app.put("/ausencias/{ausencia_id}")
-async def editar_ausencia(ausencia_id: int, data: dict, usuario = Depends(verificar_token)):
+async def editar_ausencia(ausencia_id: int, data: dict, usuario = Depends(requiere_modulo("ausencias"))):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor()
@@ -2718,7 +2742,7 @@ async def editar_ausencia(ausencia_id: int, data: dict, usuario = Depends(verifi
 
 # ⚡ NUEVO: FABRICANTE DE BOLETA DE PERMISO/VACACIÓN (Server-Side PDF)
 @app.get("/ausencias/{ausencia_id}/boleta/pdf")
-async def descargar_boleta_pdf(ausencia_id: int, usuario = Depends(verificar_token)):
+async def descargar_boleta_pdf(ausencia_id: int, usuario = Depends(requiere_modulo("ausencias"))):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -2786,7 +2810,7 @@ async def descargar_boleta_pdf(ausencia_id: int, usuario = Depends(verificar_tok
 
 # ⚡ NUEVO: FABRICANTE DE KARDEX DE HISTORIAL (Server-Side PDF)
 @app.get("/empleados/{empleado_id}/historial_ausencias/pdf")
-async def descargar_historial_ausencias_pdf(empleado_id: int, usuario = Depends(verificar_token)):
+async def descargar_historial_ausencias_pdf(empleado_id: int, usuario = Depends(requiere_modulo("ausencias"))):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -3029,7 +3053,7 @@ def calcular_dia_asistencia(marcajes_brutos: list, turno: dict, permisos: list, 
 # ==============================================================================
 
 @app.get("/empleados/{empleado_id}/asistencia/{anio}/{mes}")
-async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usuario = Depends(verificar_token)):
+async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usuario = Depends(requiere_modulo("calendario"))):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -3282,7 +3306,7 @@ async def obtener_asistencia_mensual(empleado_id: int, anio: int, mes: int, usua
 # 13. MÓDULO: FERIADOS
 # ==============================================================================
 @app.get("/feriados")
-async def obtener_feriados(anio: int = None, usuario = Depends(verificar_token)):
+async def obtener_feriados(anio: int = None, usuario = Depends(requiere_modulo("feriado"))):
     schema = usuario.get("schema_name")
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -3312,7 +3336,7 @@ async def obtener_feriados(anio: int = None, usuario = Depends(verificar_token))
         conn.close()
 
 @app.post("/sincronizar-feriados/{anio}")
-async def sincronizar_feriados_moviles(anio: int, usuario = Depends(verificar_token)):
+async def sincronizar_feriados_moviles(anio: int, usuario = Depends(requiere_modulo("feriado"))):
     schema = usuario.get("schema_name")
     conn = conectar_bd(schema)
     cur = conn.cursor()
@@ -3361,7 +3385,7 @@ class FeriadoCreate(BaseModel):
     recurrente: bool = False
 
 @app.post("/feriados")
-async def crear_feriado_manual(feriado: FeriadoCreate, usuario = Depends(verificar_token)):
+async def crear_feriado_manual(feriado: FeriadoCreate, usuario = Depends(requiere_modulo("feriado"))):
     # Seguridad: Solo admins pueden crear feriados
     if usuario.get("rol") not in ["admin", "superadmin"]:
         raise HTTPException(status_code=403, detail="Sin permisos para crear feriados.")
@@ -3393,7 +3417,7 @@ async def crear_feriado_manual(feriado: FeriadoCreate, usuario = Depends(verific
 
 
 @app.delete("/feriados/{feriado_id}")
-async def eliminar_feriado(feriado_id: int, usuario = Depends(verificar_token)):
+async def eliminar_feriado(feriado_id: int, usuario = Depends(requiere_modulo("feriado"))):
     if usuario.get("rol") not in ["admin", "superadmin"]:
         raise HTTPException(status_code=403, detail="Sin permisos para eliminar feriados.")
         
@@ -3434,7 +3458,7 @@ async def obtener_reporte_diario(
     sucursal_id: str = "", 
     seccion_id: str = "", 
     turno_id: str = "", 
-    usuario = Depends(verificar_token)
+    usuario = Depends(requiere_modulo("reporte_dia"))
 ):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
@@ -3617,7 +3641,7 @@ async def obtener_reporte_diario(
 # ==============================================================================
 
 @app.put("/asistencia/{empleado_id}/editar-dia")
-async def editar_asistencia_manual(empleado_id: int, data: dict, request: Request, usuario = Depends(verificar_token)):
+async def editar_asistencia_manual(empleado_id: int, data: dict, request: Request, usuario = Depends(requiere_modulo("reporte_dia"))):
     schema = usuario["schema_name"]
     
     if usuario["rol"] not in ["admin", "superadmin"]:
@@ -3752,7 +3776,7 @@ async def editar_asistencia_manual(empleado_id: int, data: dict, request: Reques
         conn.close()
 
 @app.delete("/asistencia/{empleado_id}/eliminar-dia/{fecha}")
-async def eliminar_asistencia_dia(empleado_id: int, fecha: str, request: Request, usuario = Depends(verificar_token)):
+async def eliminar_asistencia_dia(empleado_id: int, fecha: str, request: Request, usuario = Depends(requiere_modulo("reporte_dia"))):
     schema = usuario["schema_name"]
     
     # 1. Verificación de Roles
@@ -3814,7 +3838,7 @@ async def eliminar_asistencia_dia(empleado_id: int, fecha: str, request: Request
 # ==============================================================================
 
 @app.get("/empleados/{empleado_id}/reporte/excel/{anio}/{mes}")
-async def descargar_reporte_excel(empleado_id: int, anio: int, mes: int, usuario = Depends(verificar_token)):
+async def descargar_reporte_excel(empleado_id: int, anio: int, mes: int, usuario = Depends(requiere_modulo("reporte_dia"))):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -3998,7 +4022,7 @@ async def descargar_reporte_excel(empleado_id: int, anio: int, mes: int, usuario
 
 
 @app.get("/empleados/{empleado_id}/reporte/pdf/{anio}/{mes}")
-async def descargar_reporte_pdf(empleado_id: int, anio: int, mes: int, usuario = Depends(verificar_token)):
+async def descargar_reporte_pdf(empleado_id: int, anio: int, mes: int, usuario = Depends(requiere_modulo("reporte_dia"))):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -4182,7 +4206,7 @@ async def descargar_reporte_pdf(empleado_id: int, anio: int, mes: int, usuario =
 
 # ── SIMULADOR DE HARDWARE (VERSIÓN EVENT-DRIVEN) ──
 @app.post("/simulador/evento")
-async def simulador_evento(data: dict, background_tasks: BackgroundTasks, usuario = Depends(verificar_token)):
+async def simulador_evento(data: dict, background_tasks: BackgroundTasks, usuario = Depends(requiere_modulo("simulador"))):
     # 1. El Frontend Tonto solo manda 3 textos
     device_no = data.get("device_no")
     bio_id = data.get("bio_id")
@@ -4240,7 +4264,7 @@ async def simulador_evento(data: dict, background_tasks: BackgroundTasks, usuari
 # ==============================================================================
 
 @app.get("/dashboard/resumen")
-async def obtener_dashboard_resumen(usuario = Depends(verificar_token)):
+async def obtener_dashboard_resumen(usuario = Depends(requiere_modulo("dashboard_cliente"))):
     schema = usuario["schema_name"]
     conn = conectar_bd(schema)
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -4345,7 +4369,7 @@ async def obtener_dashboard_resumen(usuario = Depends(verificar_token)):
 # ==============================================================================
 
 @app.get("/lectores")
-async def obtener_lectores(usuario = Depends(verificar_token)):
+async def obtener_lectores(usuario = Depends(requiere_modulo("lectores"))):
     schema = usuario["schema_name"]
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -4385,7 +4409,7 @@ async def obtener_lectores(usuario = Depends(verificar_token)):
         conn.close()
 
 @app.post("/lectores")
-async def registrar_lector(request: Request, usuario = Depends(verificar_token)):
+async def registrar_lector(request: Request, usuario = Depends(requiere_modulo("lectores"))):
     schema = usuario["schema_name"]
     data = await request.json()
     sn = data.get("numero_serie", "").strip()
@@ -4413,7 +4437,7 @@ async def registrar_lector(request: Request, usuario = Depends(verificar_token))
         conn.close()
 
 @app.put("/lectores/{lector_id}")
-async def editar_lector(lector_id: int, request: Request, usuario = Depends(verificar_token)):
+async def editar_lector(lector_id: int, request: Request, usuario = Depends(requiere_modulo("lectores"))):
     schema = usuario["schema_name"]
     data = await request.json()
     
@@ -4432,7 +4456,7 @@ async def editar_lector(lector_id: int, request: Request, usuario = Depends(veri
         conn.close()
 
 @app.delete("/lectores/{lector_id}")
-async def eliminar_lector(lector_id: int, usuario = Depends(verificar_token)):
+async def eliminar_lector(lector_id: int, usuario = Depends(requiere_modulo("lectores"))):
     schema = usuario["schema_name"]
     conn = conectar_bd("public")
     cur = conn.cursor()
@@ -4450,7 +4474,7 @@ async def eliminar_lector(lector_id: int, usuario = Depends(verificar_token)):
 
 # --- ACTUALIZAR TAMBIÉN ESTA FUNCIÓN EN TU MAIN.PY ---
 @app.post("/empleados/{empleado_id}/adms/enviar-usuario")
-async def adms_enviar_usuario(empleado_id: int, usuario = Depends(verificar_token)):
+async def adms_enviar_usuario(empleado_id: int, usuario = Depends(requiere_modulo("lectores"))):
     schema = usuario["schema_name"]
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -4485,7 +4509,7 @@ async def adms_enviar_usuario(empleado_id: int, usuario = Depends(verificar_toke
         cur.close(); conn.close()
 
 @app.post("/lectores/{lector_id}/extraer-huellas")
-async def adms_extraer_huellas(lector_id: int, usuario = Depends(verificar_token)):
+async def adms_extraer_huellas(lector_id: int, usuario = Depends(requiere_modulo("lectores"))):
     """ Ordena al reloj que suba las huellas de todos los empleados activos (Bucle For) """
     schema = usuario["schema_name"]
     
@@ -4530,7 +4554,7 @@ async def adms_extraer_huellas(lector_id: int, usuario = Depends(verificar_token
         conn.close()
 
 @app.post("/empleados/{empleado_id}/adms/propagar-huella")
-async def adms_propagar_huella(empleado_id: int, usuario = Depends(verificar_token)):
+async def adms_propagar_huella(empleado_id: int, usuario = Depends(requiere_modulo("lectores"))):
     schema = usuario["schema_name"]
     import base64 # 🛡️ Importamos para el salvavidas matemático
     
