@@ -4894,7 +4894,7 @@ async def exportar_auditoria_pdf(nivel: str = "TODOS", q: str = "", fecha_inicio
     finally: cur.close(); conn.close()
 
 # ---------------------------------------------------------
-# 23. Dashboard Financiero Centralizado
+# 23. Dashboard Financiero Centralizado (Ingresos y Egresos)
 # ---------------------------------------------------------
 @app.get("/superadmin/contabilidad")
 async def obtener_contabilidad_global(usuario = Depends(verificar_token)):
@@ -4902,23 +4902,64 @@ async def obtener_contabilidad_global(usuario = Depends(verificar_token)):
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        # Resumen financiero
+        # 1. Ingresos
         cur.execute("SELECT COALESCE(SUM(monto), 0) as total FROM saas_pagos")
-        total = cur.fetchone()['total']
+        ingresos_totales = cur.fetchone()['total']
+        
         cur.execute("SELECT COALESCE(SUM(monto), 0) as mrr FROM saas_pagos WHERE fecha_pago >= NOW() - INTERVAL '30 days'")
         mrr = cur.fetchone()['mrr']
+
+        # 2. Egresos
+        cur.execute("SELECT COALESCE(SUM(monto), 0) as total FROM saas_gastos")
+        egresos_totales = cur.fetchone()['total']
         
-        # Historial (Ingresos y Gastos)
-        cur.execute("""
-            SELECT p.*, e.nombre as empresa_nombre 
+        # 3. Balance
+        balance_neto = float(ingresos_totales) - float(egresos_totales)
+        
+        # 4. Historial Combinado (Uniendo ambas tablas)
+        query_historial = """
+            SELECT 'ingreso' as tipo_movimiento, p.fecha_pago as fecha, e.nombre as entidad, 
+                   p.tipo_pago as concepto, p.comprobante_ref, p.monto 
             FROM saas_pagos p 
             LEFT JOIN empresas e ON p.empresa_id = e.id 
-            ORDER BY p.fecha_pago DESC LIMIT 100
-        """)
+            UNION ALL
+            SELECT 'egreso' as tipo_movimiento, g.fecha_gasto as fecha, 'Operaciones SaaS' as entidad, 
+                   g.concepto, g.comprobante_ref, g.monto 
+            FROM saas_gastos g
+            ORDER BY fecha DESC LIMIT 100
+        """
+        cur.execute(query_historial)
         historial = cur.fetchall()
-        for h in historial: h['fecha_pago'] = h['fecha_pago'].strftime("%Y-%m-%d %H:%M")
+        for h in historial:
+            if hasattr(h['fecha'], 'strftime'):
+                h['fecha'] = h['fecha'].strftime("%Y-%m-%d %H:%M")
+            else:
+                h['fecha'] = str(h['fecha'])
 
-        return {"mrr": mrr, "total": total, "historial": historial}
+        return {
+            "mrr": float(mrr), 
+            "ingresos_totales": float(ingresos_totales), 
+            "egresos_totales": float(egresos_totales),
+            "balance_neto": balance_neto,
+            "historial": historial
+        }
+    finally: cur.close(); conn.close()
+
+@app.post("/superadmin/gastos")
+async def registrar_gasto_saas(request: Request, usuario = Depends(verificar_token)):
+    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403)
+    data = await request.json()
+    conn = conectar_bd("public")
+    cur = conn.cursor()
+    try:
+        cur.execute("INSERT INTO saas_gastos (monto, concepto, comprobante_ref, fecha_gasto) VALUES (%s, %s, %s, %s)",
+                    (data['monto'], data['concepto'], data.get('referencia', 'S/R'), data.get('fecha')))
+        registrar_auditoria(cur, request, usuario.get("email"), "INFO", f"Registró un Gasto/Egreso de Bs. {data['monto']} por {data['concepto']}")
+        conn.commit()
+        return {"mensaje": "Gasto registrado correctamente en el flujo de caja."}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
     finally: cur.close(); conn.close()
 
 # ---------------------------------------------------------

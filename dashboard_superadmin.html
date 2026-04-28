@@ -263,27 +263,40 @@
             </div>
         `;
         
-        // ⚡ NUEVA VISTA: CONTABILIDAD Y FINANZAS
+        // ⚡ NUEVA VISTA: CONTABILIDAD Y FINANZAS (Egresos e Ingresos)
         const VISTA_FINANZAS = `
-            <div class="mb-6"><h1 class="text-2xl font-bold text-slate-800">Flujo de Caja (Finanzas)</h1><p class="text-sm text-slate-500">Monitor de Ingreso Recurrente y pagos globales.</p></div>
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                <div><h1 class="text-2xl font-bold text-slate-800">Flujo de Caja (Finanzas)</h1><p class="text-sm text-slate-500">Monitor de Ingresos y Egresos operativos del SaaS.</p></div>
+                <button onclick="registrarEgreso()" class="bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-md transition-colors"><i class="fas fa-minus-circle mr-2"></i> Registrar Egreso (Gasto)</button>
+            </div>
             
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-emerald-200">
-                    <p class="text-xs font-bold text-emerald-600 uppercase tracking-wide"><i class="fas fa-chart-line mr-1"></i> MRR (Últimos 30 días)</p>
-                    <p class="text-3xl font-black text-slate-800 mt-2">Bs. <span id="fin_mrr"><i class="fas fa-spinner fa-spin text-sm text-slate-300"></i></span></p>
+                    <p class="text-[10px] font-bold text-emerald-600 uppercase tracking-wide"><i class="fas fa-chart-line mr-1"></i> MRR (Últimos 30 días)</p>
+                    <p class="text-2xl font-black text-slate-800 mt-2">Bs. <span id="fin_mrr"><i class="fas fa-spinner fa-spin text-sm text-slate-300"></i></span></p>
                 </div>
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wide"><i class="fas fa-vault mr-1"></i> Total Histórico Recaudado</p>
-                    <p class="text-3xl font-black text-slate-800 mt-2">Bs. <span id="fin_total"><i class="fas fa-spinner fa-spin text-sm text-slate-300"></i></span></p>
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wide"><i class="fas fa-arrow-down mr-1"></i> Total Ingresos</p>
+                    <p class="text-2xl font-black text-slate-800 mt-2">Bs. <span id="fin_ingresos"><i class="fas fa-spinner fa-spin text-sm text-slate-300"></i></span></p>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-red-200">
+                    <p class="text-[10px] font-bold text-red-500 uppercase tracking-wide"><i class="fas fa-arrow-up mr-1"></i> Total Egresos</p>
+                    <p class="text-2xl font-black text-slate-800 mt-2">Bs. <span id="fin_egresos"><i class="fas fa-spinner fa-spin text-sm text-slate-300"></i></span></p>
+                </div>
+                <div class="bg-slate-900 p-6 rounded-xl shadow-sm border border-slate-800">
+                    <p class="text-[10px] font-bold text-blue-400 uppercase tracking-wide"><i class="fas fa-wallet mr-1"></i> Balance Neto</p>
+                    <p class="text-2xl font-black text-white mt-2">Bs. <span id="fin_balance"><i class="fas fa-spinner fa-spin text-sm text-slate-300"></i></span></p>
                 </div>
             </div>
 
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-                <div class="p-4 border-b border-slate-100 bg-slate-50"><h3 class="font-bold text-slate-700 text-sm"><i class="fas fa-history mr-2"></i>Últimos 100 Pagos Registrados</h3></div>
+                <div class="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                    <h3 class="font-bold text-slate-700 text-sm"><i class="fas fa-history mr-2"></i>Últimos Movimientos (Kardex)</h3>
+                </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-left text-sm whitespace-nowrap min-w-[700px]">
-                        <thead><tr class="bg-white text-slate-400 text-[10px] uppercase border-b border-slate-100"><th class="p-4 font-bold">Fecha</th><th class="p-4 font-bold">Cliente</th><th class="p-4 font-bold">Concepto</th><th class="p-4 font-bold">Ref. Transacción</th><th class="p-4 font-bold text-right">Ingreso</th></tr></thead>
-                        <tbody id="tablaFinanzas" class="divide-y divide-slate-50 text-slate-600"><tr><td colspan="5" class="p-8 text-center"><i class="fas fa-spinner fa-spin mr-2"></i>Cargando libros contables...</td></tr></tbody>
+                        <thead><tr class="bg-white text-slate-400 text-[10px] uppercase border-b border-slate-100"><th class="p-4 font-bold">Fecha</th><th class="p-4 font-bold">Tipo</th><th class="p-4 font-bold">Entidad / Cliente</th><th class="p-4 font-bold">Concepto</th><th class="p-4 font-bold">Ref. Transacción</th><th class="p-4 font-bold text-right">Monto</th></tr></thead>
+                        <tbody id="tablaFinanzas" class="divide-y divide-slate-50 text-slate-600"><tr><td colspan="6" class="p-8 text-center"><i class="fas fa-spinner fa-spin mr-2"></i>Cargando libros contables...</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -425,11 +438,9 @@
                 let fechaVenc = emp.fecha_vencimiento || 'Indefinido';
                 if(emp.fecha_vencimiento && emp.fecha_vencimiento !== '2099-12-31' && new Date(emp.fecha_vencimiento) < new Date()) { badgeEstado = '<span class="bg-red-100 text-red-700 px-2 py-1 rounded text-[10px] font-bold uppercase">Vencido</span>'; }
 
-                const empSeguro = JSON.stringify(emp).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
-                
                 // ⚡ LA TABLA AHORA SOLO TIENE UN BOTÓN MAESTRO
                 tbody.innerHTML += `
-                    <tr class="hover:bg-blue-50 transition-colors group cursor-pointer" onclick='abrirDrawer(${empSeguro})'>
+                    <tr class="hover:bg-blue-50 transition-colors group cursor-pointer" onclick='abrirDrawer(${emp.id})'>
                         <td class="p-4"><div class="flex items-center"><div class="h-10 w-10 rounded-lg bg-slate-800 text-white flex items-center justify-center font-bold mr-3">${emp.nombre.charAt(0).toUpperCase()}</div>
                             <div><p class="font-bold text-slate-800 group-hover:text-blue-600 transition-colors">${emp.nombre}</p><p class="text-[11px] text-slate-500"><i class="fas fa-map-marker-alt text-red-400 mr-1"></i>${emp.ciudad || 'N/A'}</p></div></div></td>
                         <td class="p-4"><p class="text-sm font-bold text-slate-700">${emp.plan_nombre || 'Básico'}</p><div class="w-full bg-slate-200 rounded-full h-1.5 mb-1 mt-1 max-w-[150px]"><div class="${colorUso} h-1.5 rounded-full" style="width: ${usoPorcentaje > 100 ? 100 : usoPorcentaje}%"></div></div><p class="text-[10px] text-slate-500">${emp.total_empleados} de ${emp.limite_usuarios} usuarios</p></td>
@@ -444,80 +455,16 @@
         }
 
         // =========================================================
-        // ⚡ EL CEREBRO DEL SLIDE-OVER (DRAWER) ⚡
-        // =========================================================
-        // =========================================================
         // ⚡ EL CEREBRO DEL SLIDE-OVER (DRAWER) CON CONTACTOS ⚡
         // =========================================================
-        window.abrirDrawer = function(emp) {
+        window.abrirDrawer = function(emp_id) {
+            // ⚡ FIX: Extraemos los datos siempre frescos de la memoria
+            const emp = window.datosEmpresasGlobal.find(e => e.id === emp_id);
+            
             document.getElementById('drawer_nombre').textContent = emp.nombre;
             document.getElementById('drawer_nit').innerHTML = `<i class="fas fa-database mr-1"></i>${emp.schema_name} | NIT: ${emp.nit || 'N/A'}`;
             
-            const empSeguro = JSON.stringify(emp).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
             const estaVencido = emp.fecha_vencimiento && new Date(emp.fecha_vencimiento) < new Date();
-
-            let html = `
-                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden">
-                    <div class="absolute top-0 left-0 w-1 h-full ${estaVencido ? 'bg-red-500' : 'bg-emerald-500'}"></div>
-                    <div class="flex justify-between items-center mb-1">
-                        <span class="text-xs font-bold text-slate-500 uppercase">Plan ${emp.plan_nombre}</span>
-                        <span class="text-xs font-bold ${estaVencido ? 'text-red-500' : 'text-emerald-500'} bg-slate-50 px-2 py-1 rounded">Vence: ${emp.fecha_vencimiento || 'Indefinido'}</span>
-                    </div>
-                    <p class="text-[10px] text-slate-400 mb-2">Suscripción ${emp.tipo_suscripcion || 'Mensual'}</p>
-                </div>
-
-                <div>
-                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center"><i class="fas fa-address-book mr-1"></i> Datos de Contacto</h4>
-                    <div class="bg-slate-50 p-3 rounded-lg text-xs text-slate-600 border border-slate-100">
-                        <p><i class="fas fa-phone text-slate-400 mr-2 w-3"></i> ${emp.telefono || 'Sin teléfono fijo'}</p>
-                        <p class="mt-1.5"><i class="fas fa-mobile-alt text-emerald-500 mr-2 w-3"></i> ${emp.celular || 'Sin celular / WhatsApp'}</p>
-                        <p class="mt-1.5"><i class="fas fa-map-marker-alt text-red-400 mr-2 w-3"></i> ${emp.direccion || 'Sin dirección registrada'}</p>
-                    </div>
-                </div>
-
-                <div>
-                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center"><i class="fas fa-plug mr-1"></i> Operatividad</h4>
-                    <button onclick="entrarComoEmpresa(${emp.id})" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg font-bold text-sm transition-colors shadow-md flex justify-center items-center">
-                        <i class="fas fa-sign-in-alt mr-2"></i> Entrar al Panel (Impersonate)
-                    </button>
-                </div>
-
-                <div>
-                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center"><i class="fas fa-wallet mr-1"></i> Gestión Financiera</h4>
-                    <div class="grid grid-cols-2 gap-2">
-                        <button onclick="registrarPago(${emp.id}, '${emp.nombre}')" class="bg-emerald-50 hover:bg-emerald-500 text-emerald-700 hover:text-white border border-emerald-200 p-3 rounded-lg font-bold text-xs transition-colors flex flex-col justify-center items-center">
-                            <i class="fas fa-hand-holding-usd mb-1 text-lg"></i> Acreditar Pago
-                        </button>
-                        <button onclick="verHistorialPagos(${emp.id}, '${emp.nombre}')" class="bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-sm p-3 rounded-lg font-bold text-xs transition-colors flex flex-col justify-center items-center">
-                            <i class="fas fa-file-invoice-dollar mb-1 text-lg"></i> Historial
-                        </button>
-                    </div>
-                </div>
-
-                <div>
-                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center"><i class="fas fa-sliders-h mr-1"></i> Configuración</h4>
-                    <button onclick='abrirModalEdicion(${empSeguro})' class="w-full bg-white hover:bg-amber-50 text-amber-700 border border-slate-200 hover:border-amber-300 shadow-sm p-3 rounded-lg font-bold text-sm transition-colors flex justify-between items-center mb-2">
-                        <span><i class="fas fa-edit mr-2"></i> Editar Info y Prórrogas</span> <i class="fas fa-chevron-right text-xs opacity-50"></i>
-                    </button>
-                </div>
-
-                <div class="pt-4 mt-2 border-t border-slate-200 space-y-2">
-                    <button onclick="toggleEstadoEmpresa(${emp.id})" class="w-full ${emp.estado_suscripcion === 'suspendido' ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white border-emerald-200' : 'bg-orange-50 text-orange-600 hover:bg-orange-500 hover:text-white border-orange-200'} border p-3 rounded-lg font-bold text-xs transition-all flex justify-center items-center">
-                        <i class="fas ${emp.estado_suscripcion === 'suspendido' ? 'fa-play' : 'fa-pause'} mr-2"></i> 
-                        ${emp.estado_suscripcion === 'suspendido' ? 'Descongelar Instancia (Reactivar)' : 'Kill-Switch (Congelar Instancia)'}
-                    </button>
-                    <button onclick="eliminarEmpresa(${emp.id}, '${emp.nombre}')" class="w-full bg-white hover:bg-red-500 hover:text-white text-red-500 border border-red-200 p-3 rounded-lg font-bold text-xs transition-all flex justify-center items-center">
-                        <i class="fas fa-trash-alt mr-2"></i> Destruir Totalmente
-                    </button>
-                </div>
-            `;
-            document.getElementById('drawer_body').innerHTML = html;
-            
-            const overlay = document.getElementById('drawerOverlay');
-            const panel = document.getElementById('drawerEmpresa');
-            overlay.classList.remove('hidden');
-            setTimeout(() => overlay.classList.remove('opacity-0'), 10);
-            panel.classList.remove('translate-x-full');
 
             const listaModulos = [
                 { key: 'dashboard_cliente', label: 'Dashboard Principal', icon: 'fa-chart-line' },
@@ -542,25 +489,81 @@
                         <span class="text-xs font-semibold text-slate-700">${m.label}</span>
                     </div>
                     <input type="checkbox" 
-                        onchange="guardarPermisoModulo(${emp.id}, '${m.key}', this.checked)"
-                        class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                        ${(emp.modulos && emp.modulos[m.key]) ? 'checked' : ''}>
+                           onchange="guardarPermisoModulo(${emp.id}, '${m.key}', this.checked)"
+                           class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                           ${(emp.modulos && emp.modulos[m.key]) ? 'checked' : ''}>
                 </label>
             `).join('');
 
-            content.innerHTML = `
-                <div class="space-y-6">
-                    <div>
-                        <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center">
-                            <i class="fas fa-key mr-2"></i> Licencia de Módulos (Acceso)
-                        </h4>
-                        <div class="grid grid-cols-1 gap-1">
-                            ${htmlModulos}
-                        </div>
+            let html = `
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative overflow-hidden mb-4">
+                    <div class="absolute top-0 left-0 w-1 h-full ${estaVencido ? 'bg-red-500' : 'bg-emerald-500'}"></div>
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-xs font-bold text-slate-500 uppercase">Plan ${emp.plan_nombre || 'Básico'}</span>
+                        <span class="text-xs font-bold ${estaVencido ? 'text-red-500' : 'text-emerald-500'} bg-slate-50 px-2 py-1 rounded">Vence: ${emp.fecha_vencimiento || 'Indefinido'}</span>
                     </div>
-                    <hr class="border-slate-100">
+                    <p class="text-[10px] text-slate-400 mb-2">Suscripción ${emp.tipo_suscripcion || 'Mensual'}</p>
+                </div>
+
+                <div class="mb-4">
+                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center"><i class="fas fa-key mr-1"></i> Licencia de Módulos (Accesos)</h4>
+                    <div class="bg-slate-50 p-2 rounded-lg border border-slate-100 grid grid-cols-1 gap-1">
+                        ${htmlModulos}
                     </div>
+                </div>
+
+                <div class="mb-4">
+                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center"><i class="fas fa-address-book mr-1"></i> Datos de Contacto</h4>
+                    <div class="bg-slate-50 p-3 rounded-lg text-xs text-slate-600 border border-slate-100">
+                        <p><i class="fas fa-phone text-slate-400 mr-2 w-3"></i> ${emp.telefono || 'Sin teléfono fijo'}</p>
+                        <p class="mt-1.5"><i class="fas fa-mobile-alt text-emerald-500 mr-2 w-3"></i> ${emp.celular || 'Sin celular / WhatsApp'}</p>
+                        <p class="mt-1.5"><i class="fas fa-map-marker-alt text-red-400 mr-2 w-3"></i> ${emp.direccion || 'Sin dirección registrada'}</p>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center"><i class="fas fa-plug mr-1"></i> Operatividad</h4>
+                    <button onclick="entrarComoEmpresa(${emp.id})" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg font-bold text-sm transition-colors shadow-md flex justify-center items-center">
+                        <i class="fas fa-sign-in-alt mr-2"></i> Entrar al Panel (Impersonate)
+                    </button>
+                </div>
+
+                <div class="mb-4">
+                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center"><i class="fas fa-wallet mr-1"></i> Gestión Financiera</h4>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="registrarPago(${emp.id}, '${emp.nombre}')" class="bg-emerald-50 hover:bg-emerald-500 text-emerald-700 hover:text-white border border-emerald-200 p-3 rounded-lg font-bold text-xs transition-colors flex flex-col justify-center items-center">
+                            <i class="fas fa-hand-holding-usd mb-1 text-lg"></i> Acreditar Pago
+                        </button>
+                        <button onclick="verHistorialPagos(${emp.id}, '${emp.nombre}')" class="bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-sm p-3 rounded-lg font-bold text-xs transition-colors flex flex-col justify-center items-center">
+                            <i class="fas fa-file-invoice-dollar mb-1 text-lg"></i> Historial
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center"><i class="fas fa-sliders-h mr-1"></i> Configuración</h4>
+                    <button onclick='abrirModalEdicion(${emp.id})' class="w-full bg-white hover:bg-amber-50 text-amber-700 border border-slate-200 hover:border-amber-300 shadow-sm p-3 rounded-lg font-bold text-sm transition-colors flex justify-between items-center mb-2">
+                        <span><i class="fas fa-edit mr-2"></i> Editar Info y Prórrogas</span> <i class="fas fa-chevron-right text-xs opacity-50"></i>
+                    </button>
+                </div>
+
+                <div class="pt-4 mt-2 border-t border-slate-200 space-y-2">
+                    <button onclick="toggleEstadoEmpresa(${emp.id})" class="w-full ${emp.estado_suscripcion === 'suspendido' ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-500 hover:text-white border-emerald-200' : 'bg-orange-50 text-orange-600 hover:bg-orange-500 hover:text-white border-orange-200'} border p-3 rounded-lg font-bold text-xs transition-all flex justify-center items-center">
+                        <i class="fas ${emp.estado_suscripcion === 'suspendido' ? 'fa-play' : 'fa-pause'} mr-2"></i> 
+                        ${emp.estado_suscripcion === 'suspendido' ? 'Descongelar Instancia (Reactivar)' : 'Kill-Switch (Congelar Instancia)'}
+                    </button>
+                    <button onclick="eliminarEmpresa(${emp.id}, '${emp.nombre}')" class="w-full bg-white hover:bg-red-500 hover:text-white text-red-500 border border-red-200 p-3 rounded-lg font-bold text-xs transition-all flex justify-center items-center">
+                        <i class="fas fa-trash-alt mr-2"></i> Destruir Totalmente
+                    </button>
+                </div>
             `;
+            
+            document.getElementById('drawer_body').innerHTML = html;
+            const overlay = document.getElementById('drawerOverlay');
+            const panel = document.getElementById('drawerEmpresa');
+            overlay.classList.remove('hidden');
+            setTimeout(() => overlay.classList.remove('opacity-0'), 10);
+            panel.classList.remove('translate-x-full');
         }
 
         window.cerrarDrawer = function() {
@@ -794,7 +797,8 @@
             });
         }
 
-        function abrirModalEdicion(emp) {
+        function abrirModalEdicion(emp_id) {
+            const emp = window.datosEmpresasGlobal.find(e => e.id === emp_id);
             Swal.fire({
                 title: `Editar: ${emp.nombre}`,
                 width: '750px',
@@ -895,29 +899,96 @@
                 }
             });
         }
-
+        
+        function registrarEgreso() {
+            Swal.fire({
+                title: 'Registrar Egreso (Gasto)',
+                html: `
+                    <div class="space-y-3 text-left">
+                        <div><label class="block text-xs font-bold text-slate-500 uppercase">Monto Gastado (Bs)</label><input type="number" id="swal_egreso_monto" class="mt-1 w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:border-red-500" placeholder="Ej. 350.00"></div>
+                        <div><label class="block text-xs font-bold text-slate-500 uppercase">Concepto / Destino</label><input type="text" id="swal_egreso_concepto" class="mt-1 w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:border-red-500" placeholder="Ej. Pago Servidor Render / API WhatsApp"></div>
+                        <div><label class="block text-xs font-bold text-slate-500 uppercase">N° Recibo / Referencia</label><input type="text" id="swal_egreso_ref" class="mt-1 w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:border-red-500" placeholder="Ej. FACT-001"></div>
+                        <div><label class="block text-xs font-bold text-slate-500 uppercase">Fecha del Gasto</label><input type="date" id="swal_egreso_fecha" value="${new Date().toISOString().split('T')[0]}" class="mt-1 w-full border border-slate-300 rounded-lg p-2.5 outline-none focus:border-red-500"></div>
+                    </div>
+                `,
+                showCancelButton: true, confirmButtonText: '<i class="fas fa-save mr-1"></i> Guardar Gasto', confirmButtonColor: '#dc2626', cancelButtonText: 'Cancelar',
+                preConfirm: () => {
+                    const monto = document.getElementById('swal_egreso_monto').value;
+                    const concepto = document.getElementById('swal_egreso_concepto').value;
+                    if(!monto || !concepto) { Swal.showValidationMessage('El monto y concepto son obligatorios'); return false; }
+                    return { 
+                        monto: monto, 
+                        concepto: concepto, 
+                        referencia: document.getElementById('swal_egreso_ref').value,
+                        fecha: document.getElementById('swal_egreso_fecha').value
+                    }
+                }
+            }).then(async (result) => {
+                if (result.isConfirmed) {
+                    Swal.fire({ title: 'Procesando...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                    try {
+                        const res = await fetch(`${API_URL}/superadmin/gastos`, { 
+                            method: 'POST', 
+                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, 
+                            body: JSON.stringify(result.value) 
+                        });
+                        if(!res.ok) throw new Error((await res.json()).detail);
+                        Swal.fire('¡Gasto Registrado!', (await res.json()).mensaje, 'success');
+                        cargarFinanzasAPI(); 
+                    } catch (e) { Swal.fire('Error', e.message, 'error'); }
+                }
+            });
+        }
 
         async function cargarFinanzasAPI() {
             try {
-                const res = await fetch(`${API_URL}/superadmin/finanzas`, { headers: { 'Authorization': `Bearer ${token}` } });
+                const res = await fetch(`${API_URL}/superadmin/contabilidad`, { 
+                    headers: { 'Authorization': `Bearer ${token}` } 
+                });
+                
+                if(!res.ok) throw new Error("Error en la API");
                 const data = await res.json();
                 
-                document.getElementById('fin_mrr').textContent = parseFloat(data.mrr).toFixed(2);
-                document.getElementById('fin_total').textContent = parseFloat(data.total_ingresos).toFixed(2);
+                const elMrr = document.getElementById('fin_mrr');
+                const elIngresos = document.getElementById('fin_ingresos');
+                const elEgresos = document.getElementById('fin_egresos');
+                const elBalance = document.getElementById('fin_balance');
+                
+                if(elMrr) elMrr.textContent = parseFloat(data.mrr).toFixed(2);
+                if(elIngresos) elIngresos.textContent = parseFloat(data.ingresos_totales).toFixed(2);
+                if(elEgresos) elEgresos.textContent = parseFloat(data.egresos_totales).toFixed(2);
+                if(elBalance) elBalance.textContent = parseFloat(data.balance_neto).toFixed(2);
                 
                 const tbody = document.getElementById('tablaFinanzas');
-                if(data.pagos.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="p-8 text-center text-slate-400">Aún no hay transacciones registradas.</td></tr>'; return; }
-                
-                tbody.innerHTML = data.pagos.map(p => `
-                    <tr class="hover:bg-slate-50">
-                        <td class="p-4 text-xs">${p.fecha_pago}</td>
-                        <td class="p-4 font-bold text-slate-700">${p.empresa_nombre}</td>
-                        <td class="p-4"><span class="bg-blue-50 text-blue-600 px-2 py-1 rounded text-[10px] font-bold uppercase">${p.tipo_pago}</span></td>
-                        <td class="p-4 font-mono text-xs text-slate-400">${p.comprobante_ref}</td>
-                        <td class="p-4 font-bold text-emerald-600 text-right">+ Bs. ${parseFloat(p.monto).toFixed(2)}</td>
-                    </tr>
-                `).join('');
-            } catch(e) { document.getElementById('tablaFinanzas').innerHTML = '<tr><td colspan="5" class="p-8 text-center text-red-500">Error al cargar finanzas.</td></tr>'; }
+                if(tbody) {
+                    if(data.historial.length === 0) { 
+                        tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-slate-400">Aún no hay transacciones registradas.</td></tr>'; 
+                        return; 
+                    }
+                    
+                    tbody.innerHTML = data.historial.map(p => {
+                        const esIngreso = p.tipo_movimiento === 'ingreso';
+                        const colorBadge = esIngreso ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600';
+                        const colorMonto = esIngreso ? 'text-emerald-600' : 'text-red-500';
+                        const signo = esIngreso ? '+' : '-';
+                        const icono = esIngreso ? 'fa-arrow-down' : 'fa-arrow-up';
+
+                        return `
+                        <tr class="hover:bg-slate-50 transition-colors">
+                            <td class="p-4 text-xs text-slate-500">${p.fecha}</td>
+                            <td class="p-4"><span class="${colorBadge} px-2 py-1 rounded text-[10px] font-bold uppercase"><i class="fas ${icono} mr-1"></i>${p.tipo_movimiento}</span></td>
+                            <td class="p-4 font-bold text-slate-700">${p.entidad || 'N/A'}</td>
+                            <td class="p-4 text-xs">${p.concepto}</td>
+                            <td class="p-4 font-mono text-xs text-slate-400">${p.comprobante_ref || 'S/R'}</td>
+                            <td class="p-4 font-bold ${colorMonto} text-right">${signo} Bs. ${parseFloat(p.monto).toFixed(2)}</td>
+                        </tr>
+                        `;
+                    }).join('');
+                }
+            } catch(e) { 
+                const tbody = document.getElementById('tablaFinanzas');
+                if(tbody) tbody.innerHTML = '<tr><td colspan="6" class="p-8 text-center text-red-500">Error al cargar finanzas.</td></tr>'; 
+            }
         }
 
         async function verHistorialPagos(empresa_id, nombre_empresa) {
