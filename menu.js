@@ -184,8 +184,9 @@ function renderizarMenu(pantallaActiva) {
     const generarEnlace = (idModulo, icono, url, texto) => {
         // Si la base de datos dice que es 'false', lo ocultamos. 
         // (Asumimos 'true' por defecto si el módulo es nuevo y no está en la BD aún)
-        if (modulos[idModulo] === false) return ''; 
-        
+        // Si no es superadmin Y el módulo está en false, se oculta
+        if (rol !== 'superadmin' && modulos[idModulo] === false) return '';
+
         const activo = (pantallaActiva === idModulo) ? claseActiva : claseInactiva;
         return `<a href="${url}" class="${activo}"><i class="fas ${icono} w-5 mr-2 text-center"></i> ${texto}</a>`;
     };
@@ -254,6 +255,10 @@ function verificarAccesoPantalla() {
     const userDataStr = localStorage.getItem('userData');
     if (!userDataStr) return;
     const modulos = JSON.parse(userDataStr).modulos || {};
+    const rol = userData.rol;
+    
+    // 🛡️ MODO DIOS: Si eres superadmin, el escudo se apaga para ti
+    if (rol === 'superadmin') return;
 
     // 🗺️ Mapa de "Pantalla -> Permiso Necesario"
     const mapaSeguridad = {

@@ -40,7 +40,6 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.pagesizes import A5, portrait
 from reportlab.pdfgen import canvas
-from reportlab.lib import colors
 
 import unicodedata
 
@@ -1273,7 +1272,8 @@ async def impersonate_empresa(empresa_id: int, request: Request, usuario = Depen
         return {
             "token": token_falso, "schema_name": empresa["schema_name"],
             "empresa_nombre": empresa["nombre"],
-            "modulos": empresa.get("modulos", {}), # <--- ⚡ FRONTEND DEL ADMIN
+            "modulos": empresa.get("modulos", {}),
+             "rol": "superadmin",
             "mensaje": f"Acceso concedido a {empresa['nombre']}"
         }
     finally: cur.close(); conn.close()
