@@ -1259,7 +1259,7 @@ async def impersonate_empresa(empresa_id: int, request: Request, usuario = Depen
         if not empresa: raise HTTPException(status_code=404, detail="La empresa no existe.")
             
         token_falso = jwt.encode({
-            "id": 0, "email": "soporte@bitech.com", "rol": "admin",
+            "id": 0, "email": "soporte@bitech.com", "rol": "superadmin",
             "empresa_id": empresa_id, "schema_name": empresa["schema_name"], 
             "empresa_nombre": empresa["nombre"],
             "modulos": empresa.get("modulos", {}), # <--- ⚡ PASAPORTE PARA EL ADMIN

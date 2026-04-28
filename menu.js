@@ -173,7 +173,7 @@ function renderizarMenu(pantallaActiva) {
     if (userDataStr) {
         const userData = JSON.parse(userDataStr);
         empresaNombre = userData.empresa_nombre || userData.empresa || "Empresa"; 
-        rol = userData.rol === 'admin' ? 'Administrador' : 'Usuario';
+        rol = userData.rol; 
         modulos = userData.modulos || {}; // ⚡ EXTRAEMOS DEL LOCALSTORAGE
     }
 
@@ -215,7 +215,7 @@ function renderizarMenu(pantallaActiva) {
         <div class="p-4 md:p-6 border-b border-slate-800 flex justify-between items-center shrink-0">
             <div class="min-w-0">
                 <h2 class="text-lg font-bold text-blue-400 truncate"><i class="fas fa-fingerprint mr-2"></i>${empresaNombre}</h2>
-                <p class="text-[10px] md:text-xs text-slate-400 mt-1 uppercase tracking-wider truncate">${rol}</p>
+                <p class="text-[10px] md:text-xs ${rol === 'superadmin' ? 'text-amber-400' : 'text-slate-400'} mt-1 uppercase tracking-wider truncate">${textoRol}</p>
             </div>
             <button onclick="toggleMenu()" class="xl:hidden text-slate-400 hover:text-white p-2 outline-none"><i class="fas fa-times text-xl"></i></button>
         </div>
@@ -248,15 +248,15 @@ function renderizarMenu(pantallaActiva) {
 // ==============================================================================
 function verificarAccesoPantalla() {
     const url = window.location.pathname.toLowerCase();
-    
-    // Ignoramos el login y el panel del superadmin
     if (url.includes('index.html') || url.includes('dashboard_superadmin.html')) return;
 
     const userDataStr = localStorage.getItem('userData');
     if (!userDataStr) return;
-    const modulos = JSON.parse(userDataStr).modulos || {};
-    const rol = userData.rol;
     
+    const userData = JSON.parse(userDataStr);
+    const rol = userData.rol; // ⚡ Capturamos el rol
+    const modulos = userData.modulos || {};
+
     // 🛡️ MODO DIOS: Si eres superadmin, el escudo se apaga para ti
     if (rol === 'superadmin') return;
 
@@ -276,8 +276,7 @@ function verificarAccesoPantalla() {
 
     // Revisamos en qué página está el usuario y si tiene permiso
     for (const [archivo, moduloRequerido] of Object.entries(mapaSeguridad)) {
-        if (url.includes(archivo)) {
-            if (modulos[moduloRequerido] === false) {
+        if (url.includes(archivo) && modulos[moduloRequerido] === false) {
                 // 🚨 ¡Intrusión detectada! Lo pateamos de vuelta al inicio
                 Swal.fire({
                     icon: 'warning',
@@ -287,7 +286,6 @@ function verificarAccesoPantalla() {
                 }).then(() => {
                     window.location.href = 'dashboard_cliente.html';
                 });
-            }
         }
     }
 }
