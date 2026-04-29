@@ -215,7 +215,7 @@ function renderizarMenu(pantallaActiva) {
         <div class="p-4 md:p-6 border-b border-slate-800 flex justify-between items-center shrink-0">
             <div class="min-w-0">
                 <h2 class="text-lg font-bold text-blue-400 truncate"><i class="fas fa-fingerprint mr-2"></i>${empresaNombre}</h2>
-                <p class="text-[10px] md:text-xs ${rol === 'superadmin' ? 'text-amber-400' : 'text-slate-400'} mt-1 uppercase tracking-wider truncate">${textoRol}</p>
+                <p class="text-[10px] md:text-xs text-slate-400 mt-1 uppercase tracking-wider truncate">${rol}</p>
             </div>
             <button onclick="toggleMenu()" class="xl:hidden text-slate-400 hover:text-white p-2 outline-none"><i class="fas fa-times text-xl"></i></button>
         </div>
@@ -276,7 +276,8 @@ function verificarAccesoPantalla() {
 
     // Revisamos en qué página está el usuario y si tiene permiso
     for (const [archivo, moduloRequerido] of Object.entries(mapaSeguridad)) {
-        if (url.includes(archivo) && modulos[moduloRequerido] === false) {
+        if (url.includes(archivo)) {
+            if (modulos[moduloRequerido] === false) {
                 // 🚨 ¡Intrusión detectada! Lo pateamos de vuelta al inicio
                 Swal.fire({
                     icon: 'warning',
@@ -286,6 +287,7 @@ function verificarAccesoPantalla() {
                 }).then(() => {
                     window.location.href = 'dashboard_cliente.html';
                 });
+            }
         }
     }
 }
