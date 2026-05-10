@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.git/
+.env
+*.log
+.venv/
+node_modules/
+
+# Marketplaces de skills (no se auto-cargan, evitar escaneo)
+.claude/skills/superpowers/
+.claude/skills/alirezarezvani-skills/
+.claude/skills/trailofbits-skills/

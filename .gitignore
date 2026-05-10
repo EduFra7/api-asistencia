@@ -1,3 +1,8 @@
 .env
 __pycache__/
 *.pyc
+
+# Marketplaces de skills (grandes, se activan con /plugin)
+.claude/skills/superpowers/
+.claude/skills/alirezarezvani-skills/
+.claude/skills/trailofbits-skills/
