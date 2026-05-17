@@ -180,13 +180,10 @@ async def login(request: Request):
         cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         cur.execute("""
-            SELECT u.*,
-                   COALESCE(e.nombre, 'Sistema')   AS empresa_nombre,
-                   COALESCE(e.schema_name, 'public') AS schema_name,
-                   COALESCE(e.modulos, '{}'::jsonb)  AS modulos,
+            SELECT u.*, e.nombre as empresa_nombre, e.schema_name, e.modulos,
                    e.estado_suscripcion
             FROM usuarios u
-            LEFT JOIN empresas e ON e.id = u.empresa_id
+            JOIN empresas e ON e.id = u.empresa_id
             WHERE u.email = %s AND u.activo = TRUE
         """, (email,))
         usuario = cur.fetchone()
@@ -5537,10 +5534,10 @@ async def crear_administrador(request: Request, usuario = Depends(verificar_toke
             raise HTTPException(status_code=409, detail="Ya existe un usuario con ese correo electrónico.")
         cur.execute("""
             INSERT INTO usuarios
-                (nombre, apellido, email, password_hash, rol,
+                (empresa_id, nombre, apellido, email, password_hash, rol,
                  ci, direccion, telefono, celular, whatsapp,
                  pais, ciudad, correo_contacto, foto_base64)
-            VALUES (%s,%s,%s,%s,'administrador',%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            VALUES (1,%s,%s,%s,%s,'administrador',%s,%s,%s,%s,%s,%s,%s,%s,%s)
             RETURNING id
         """, (
             nombre,
