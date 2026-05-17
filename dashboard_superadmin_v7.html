@@ -517,6 +517,24 @@ function hideLoading() {
 /* ═══════════════════════════════════════════════════
    AUTH
 ═══════════════════════════════════════════════════ */
+function _nombreVisible(nombre, apellido) {
+  const primerApellido = (apellido || '').trim().split(' ')[0];
+  return ((nombre || '').trim() + (primerApellido ? ' ' + primerApellido : '')).trim() || 'Superadmin';
+}
+
+function _inicialesAvatar(nombre, apellido) {
+  const n = (nombre || '').trim();
+  const a = (apellido || '').trim();
+  if (n && a) return (n[0] + a[0]).toUpperCase();
+  return (n.split(' ').map(w => w[0]).join('').slice(0, 2) || 'SA').toUpperCase();
+}
+
+function _actualizarSidebarPerfil(nombre, apellido, rol) {
+  document.getElementById('sidebarAvatar').textContent   = _inicialesAvatar(nombre, apellido);
+  document.getElementById('sidebarUserName').textContent = _nombreVisible(nombre, apellido);
+  document.getElementById('sidebarRolLabel').textContent = rol === 'administrador' ? 'Administrador' : 'Superadmin';
+}
+
 function initAuth() {
   const token = localStorage.getItem('token');
   const raw   = localStorage.getItem('userData');
@@ -525,12 +543,7 @@ function initAuth() {
     State.token    = token;
     State.userData = JSON.parse(raw);
     if (!['superadmin', 'administrador'].includes(State.userData.rol)) { window.location.href = 'index.html'; return; }
-    const initials = (State.userData.nombre || 'SA')
-      .split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-    document.getElementById('sidebarAvatar').textContent  = initials;
-    document.getElementById('sidebarUserName').textContent = State.userData.nombre || 'Superadmin';
-    document.getElementById('sidebarRolLabel').textContent =
-      State.userData.rol === 'administrador' ? 'Administrador' : 'Superadmin';
+    _actualizarSidebarPerfil(State.userData.nombre, State.userData.apellido, State.userData.rol);
     if (State.userData.rol === 'superadmin') {
       document.getElementById('nav-administradores').classList.remove('hidden');
     }
@@ -3121,6 +3134,8 @@ document.addEventListener('keydown', e => {
    MEJORA 11 — Configuraciones del SaaS
 ═══════════════════════════════════════════════════ */
 async function cargarConfiguraciones() {
+  _cfgFotoBase64  = null;
+  _cfgFotoChanged = false;
   let perfil = {}, cfg = {};
   try {
     [perfil, cfg] = await Promise.all([
@@ -3129,13 +3144,24 @@ async function cargarConfiguraciones() {
     ]);
   } catch (_) { /* se renderiza con vacíos */ }
   renderConfiguraciones(perfil || {}, cfg || {});
+  // Carga foto de perfil en background si existe
+  if (perfil.tiene_foto) {
+    try {
+      const r = await apiFetch('/superadmin/perfil/foto');
+      if (r.foto_base64) {
+        const av = document.getElementById('cfg-avatar');
+        if (av) av.innerHTML = `<img src="${r.foto_base64}" class="w-full h-full object-cover" alt="Foto">`;
+      }
+    } catch {}
+  }
 }
 
 function renderConfiguraciones(perfil, cfg) {
-  const inp = 'w-full bg-slate-50 dark:bg-dark-900 border border-light-border dark:border-dark-border rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-brand-blue transition-colors placeholder-slate-400 dark:placeholder-slate-600';
-  const lbl = 'block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5';
+  const inp  = 'w-full bg-slate-50 dark:bg-dark-900 border border-light-border dark:border-dark-border rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-brand-blue transition-colors placeholder-slate-400 dark:placeholder-slate-600';
+  const lbl  = 'block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5';
   const card = 'bg-white dark:bg-dark-800 rounded-xl border border-light-border dark:border-dark-border shadow-sm p-6';
-  const initials = (perfil.nombre || 'SA').slice(0, 2).toUpperCase();
+  const initials = _inicialesAvatar(perfil.nombre, perfil.apellido);
+  const nombreMostrado = _nombreVisible(perfil.nombre, perfil.apellido);
 
   document.getElementById('content').innerHTML = `
   <div class="max-w-5xl mx-auto space-y-5 animate-fade-up">
@@ -3151,29 +3177,75 @@ function renderConfiguraciones(perfil, cfg) {
       <!-- ── COLUMNA IZQUIERDA: Perfil ── -->
       <div class="${card}">
         <h2 class="text-sm font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-          <i class="fas fa-user-circle text-brand-blue text-base"></i> Perfil del superadmin
+          <i class="fas fa-user-circle text-brand-blue text-base"></i> Mi perfil
         </h2>
 
-        <!-- Avatar + datos -->
+        <!-- Avatar -->
         <div class="flex items-center gap-4 mb-5 pb-5 border-b border-light-border dark:border-dark-border">
-          <div id="cfg-avatar"
-               class="w-12 h-12 rounded-full bg-brand-blue flex items-center justify-center text-white text-base font-bold shrink-0 select-none">
-            ${initials}
+          <div class="relative shrink-0">
+            <div id="cfg-avatar"
+                 class="w-14 h-14 rounded-full bg-brand-blue flex items-center justify-center text-white text-lg font-bold overflow-hidden select-none">
+              ${perfil.tiene_foto
+                ? `<img id="cfg-foto-img" src="" alt="" class="w-full h-full object-cover">`
+                : initials}
+            </div>
+            <button type="button" onclick="_seleccionarFotoPerfil()" title="Cambiar foto"
+                    class="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-brand-blue text-white flex items-center justify-center shadow hover:bg-brand-blue/80 transition-colors">
+              <i class="fas fa-camera text-[9px]"></i>
+            </button>
           </div>
           <div class="min-w-0">
-            <p class="text-sm font-semibold text-slate-800 dark:text-white truncate">${esc(perfil.nombre || '—')}</p>
+            <p class="text-sm font-semibold text-slate-800 dark:text-white truncate">${esc(nombreMostrado)}</p>
             <p class="text-[11px] text-slate-400 truncate">${esc(perfil.email || '—')}</p>
+            <button type="button" onclick="_seleccionarFotoPerfil()"
+                    class="text-[11px] text-brand-blue hover:underline mt-0.5">Cambiar foto…</button>
+          </div>
+          <input type="file" id="cfg-foto-input" accept="image/*" class="hidden" onchange="_procesarFotoPerfil(this.files[0])">
+        </div>
+
+        <!-- Campos del perfil -->
+        <div class="space-y-3">
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="${lbl}">Nombre <span class="text-red-400">*</span></label>
+              <input id="cfg-nombre" type="text" value="${esc(perfil.nombre || '')}" class="${inp}" placeholder="Nombre">
+            </div>
+            <div>
+              <label class="${lbl}">Apellido</label>
+              <input id="cfg-apellido" type="text" value="${esc(perfil.apellido || '')}" class="${inp}" placeholder="Apellido">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="${lbl}">Carnet de Identidad</label>
+              <input id="cfg-ci" type="text" value="${esc(perfil.ci || '')}" class="${inp}" placeholder="CI">
+            </div>
+            <div>
+              <label class="${lbl}">Celular</label>
+              <input id="cfg-celular" type="text" value="${esc(perfil.celular || '')}" class="${inp}" placeholder="+591 7…">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="${lbl}">País</label>
+              <input id="cfg-pais" type="text" value="${esc(perfil.pais || 'Bolivia')}" class="${inp}">
+            </div>
+            <div>
+              <label class="${lbl}">Ciudad</label>
+              <input id="cfg-ciudad" type="text" value="${esc(perfil.ciudad || '')}" class="${inp}" placeholder="Ciudad">
+            </div>
+          </div>
+          <div>
+            <label class="${lbl}">Correo de contacto</label>
+            <input id="cfg-correo-contacto" type="email" value="${esc(perfil.correo_contacto || '')}" class="${inp}" placeholder="contacto@ejemplo.com">
+          </div>
+          <div>
+            <label class="${lbl}">Correo de inicio de sesión</label>
+            <input type="text" value="${esc(perfil.email || '')}" class="${inp} opacity-60 cursor-not-allowed" readonly
+                   title="El correo de acceso no se puede cambiar aquí">
           </div>
         </div>
 
-        <!-- Nombre -->
-        <div class="space-y-3">
-          <div>
-            <label class="${lbl}">Nombre visible</label>
-            <input id="cfg-nombre" type="text" value="${esc(perfil.nombre || '')}"
-                   class="${inp}" placeholder="Su nombre completo">
-          </div>
-        </div>
         <button onclick="guardarPerfil()"
                 class="mt-4 flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white
                        bg-brand-blue hover:bg-blue-900 rounded-lg transition-colors">
@@ -3188,18 +3260,15 @@ function renderConfiguraciones(perfil, cfg) {
           <div class="space-y-3">
             <div>
               <label class="${lbl}">Contraseña actual</label>
-              <input id="cfg-pwd-actual" type="password" class="${inp}"
-                     placeholder="••••••••" autocomplete="current-password">
+              <input id="cfg-pwd-actual" type="password" class="${inp}" placeholder="••••••••" autocomplete="current-password">
             </div>
             <div>
               <label class="${lbl}">Nueva contraseña</label>
-              <input id="cfg-pwd-nueva" type="password" class="${inp}"
-                     placeholder="Mínimo 8 caracteres" autocomplete="new-password">
+              <input id="cfg-pwd-nueva" type="password" class="${inp}" placeholder="Mínimo 8 caracteres" autocomplete="new-password">
             </div>
             <div>
               <label class="${lbl}">Confirmar nueva contraseña</label>
-              <input id="cfg-pwd-confirmar" type="password" class="${inp}"
-                     placeholder="••••••••" autocomplete="new-password">
+              <input id="cfg-pwd-confirmar" type="password" class="${inp}" placeholder="••••••••" autocomplete="new-password">
             </div>
           </div>
           <button onclick="cambiarPasswordAdmin()"
@@ -3339,16 +3408,46 @@ function renderConfiguraciones(perfil, cfg) {
   </div>`;
 }
 
+let _cfgFotoBase64  = null;
+let _cfgFotoChanged = false;
+
+function _seleccionarFotoPerfil() { document.getElementById('cfg-foto-input')?.click(); }
+
+async function _procesarFotoPerfil(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    const b64 = await _redimensionarImagen(e.target.result, 320, 0.88);
+    _cfgFotoBase64  = b64;
+    _cfgFotoChanged = true;
+    const av = document.getElementById('cfg-avatar');
+    if (av) av.innerHTML = `<img src="${b64}" class="w-full h-full object-cover" alt="Foto">`;
+  };
+  reader.readAsDataURL(file);
+}
+
 async function guardarPerfil() {
-  const nombre = (document.getElementById('cfg-nombre')?.value || '').trim();
+  const nombre   = (document.getElementById('cfg-nombre')?.value || '').trim();
+  const apellido = (document.getElementById('cfg-apellido')?.value || '').trim();
   if (!nombre) { mostrarError('El nombre no puede estar vacío.'); return; }
+
+  const payload = {
+    nombre,
+    apellido:        apellido || null,
+    ci:              document.getElementById('cfg-ci')?.value.trim()              || null,
+    celular:         document.getElementById('cfg-celular')?.value.trim()         || null,
+    pais:            document.getElementById('cfg-pais')?.value.trim()            || 'Bolivia',
+    ciudad:          document.getElementById('cfg-ciudad')?.value.trim()          || null,
+    correo_contacto: document.getElementById('cfg-correo-contacto')?.value.trim() || null,
+  };
+  if (_cfgFotoChanged) payload.foto_base64 = _cfgFotoBase64 ?? '';
+
   try {
-    await apiFetch('/superadmin/perfil', { method: 'PUT', body: JSON.stringify({ nombre }) });
-    if (State.userData) State.userData.nombre = nombre;
-    const avatarEl = document.getElementById('cfg-avatar');
-    if (avatarEl) avatarEl.textContent = nombre.slice(0, 2).toUpperCase();
-    const nameEl = document.getElementById('sidebarUserName');
-    if (nameEl) nameEl.textContent = nombre;
+    await apiFetch('/superadmin/perfil', { method: 'PUT', body: JSON.stringify(payload) });
+    if (State.userData) { State.userData.nombre = nombre; State.userData.apellido = apellido; }
+    localStorage.setItem('userData', JSON.stringify(State.userData));
+    _actualizarSidebarPerfil(nombre, apellido, State.userData.rol);
+    _cfgFotoChanged = false;
     mostrarExito('Perfil actualizado correctamente.');
   } catch (e) { mostrarError(e.message); }
 }

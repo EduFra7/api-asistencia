@@ -224,10 +224,11 @@ async def login(request: Request):
         return {
             "token":          token,
             "nombre":         usuario["nombre"],
+            "apellido":       usuario.get("apellido") or "",
             "rol":            usuario["rol"],
             "empresa_nombre": usuario["empresa_nombre"],
             "schema_name":    usuario["schema_name"],
-            "modulos":        modulos_empresa  # <--- ⚡ PARA EL LOCALSTORAGE
+            "modulos":        modulos_empresa
         }
 
     except HTTPException:
@@ -5380,14 +5381,29 @@ async def enviar_email_de_prueba(request: Request, usuario = Depends(verificar_t
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error SMTP: {e}")
 
-# ── Endpoints: Perfil del superadmin ──
+# ── Endpoints: Perfil del staff SaaS ──
+@app.get("/superadmin/perfil/foto")
+async def obtener_foto_perfil_propio(usuario = Depends(verificar_token)):
+    if not es_staff(usuario): raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
+    conn = conectar_bd("public")
+    cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("SELECT foto_base64 FROM usuarios WHERE id = %s", (usuario['id'],))
+        row = cur.fetchone()
+        return {"foto_base64": (row["foto_base64"] or "") if row else ""}
+    finally: cur.close(); conn.close()
+
 @app.get("/superadmin/perfil")
 async def obtener_perfil_superadmin(usuario = Depends(verificar_token)):
     if not es_staff(usuario): raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
     conn = conectar_bd("public")
     cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        cur.execute("SELECT id, nombre, email FROM usuarios WHERE id = %s", (usuario['id'],))
+        cur.execute("""
+            SELECT id, nombre, apellido, email, ci, celular, pais, ciudad, correo_contacto,
+                   CASE WHEN foto_base64 IS NOT NULL AND foto_base64 <> '' THEN TRUE ELSE FALSE END AS tiene_foto
+            FROM usuarios WHERE id = %s
+        """, (usuario['id'],))
         row = cur.fetchone()
         return dict(row) if row else {}
     finally: cur.close(); conn.close()
@@ -5398,11 +5414,34 @@ async def actualizar_perfil_superadmin(request: Request, usuario = Depends(verif
     body = await request.json()
     nombre = (body.get("nombre") or "").strip()
     if not nombre: raise HTTPException(status_code=400, detail="El nombre no puede estar vacío.")
+    foto = body.get("foto_base64")  # None = no cambiar, "" = borrar, str = nueva
+    if foto and len(foto) > 700_000:
+        raise HTTPException(status_code=400, detail="La foto supera el tamaño máximo permitido.")
     conn = conectar_bd("public")
     cur  = conn.cursor()
     try:
-        cur.execute("UPDATE usuarios SET nombre=%s WHERE id=%s", (nombre, usuario['id']))
-        registrar_auditoria(cur, request, usuario.get("email"), "INFO", "Superadmin actualizó su perfil")
+        campos_comunes = (
+            nombre,
+            (body.get("apellido") or "").strip() or None,
+            (body.get("ci") or "").strip() or None,
+            (body.get("celular") or "").strip() or None,
+            (body.get("pais") or "Bolivia").strip(),
+            (body.get("ciudad") or "").strip() or None,
+            (body.get("correo_contacto") or "").strip() or None,
+        )
+        if foto is None:
+            cur.execute("""
+                UPDATE usuarios SET nombre=%s, apellido=%s, ci=%s, celular=%s,
+                    pais=%s, ciudad=%s, correo_contacto=%s
+                WHERE id=%s
+            """, campos_comunes + (usuario['id'],))
+        else:
+            cur.execute("""
+                UPDATE usuarios SET nombre=%s, apellido=%s, ci=%s, celular=%s,
+                    pais=%s, ciudad=%s, correo_contacto=%s, foto_base64=%s
+                WHERE id=%s
+            """, campos_comunes + (foto or None, usuario['id']))
+        registrar_auditoria(cur, request, usuario.get("email"), "INFO", "Staff actualizó su perfil")
         conn.commit()
         return {"ok": True}
     except Exception as e:

@@ -101,9 +101,10 @@
                 localStorage.setItem('token', data.token);
                 localStorage.setItem('userData', JSON.stringify({
                     nombre: data.nombre,
+                    apellido: data.apellido || '',
                     rol: data.rol,
                     empresa: data.empresa_nombre,
-                    modulos: data.modulos // <--- ⚡ NUEVO: GUARDAMOS LOS PERMISOS
+                    modulos: data.modulos
                 }));
 
                 // 5. REDIRECCIÓN INTELIGENTE
