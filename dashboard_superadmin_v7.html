@@ -426,6 +426,23 @@ html.dark #kbResults li.kb-active { background: rgba(12,80,120,0.15); }
     </div>
 
     <div class="flex items-center gap-2">
+
+      <!-- S6: Búsqueda global -->
+      <div class="relative hidden sm:block">
+        <div class="flex items-center gap-2 w-52 bg-slate-50 dark:bg-dark-800 border border-light-border dark:border-dark-border rounded-lg px-3 py-1.5 focus-within:border-brand-blue transition-colors">
+          <i class="fas fa-magnifying-glass text-slate-400 text-xs shrink-0"></i>
+          <input id="global-search" type="text" placeholder="Buscar…"
+                 autocomplete="off"
+                 oninput="_globalSearch(this.value)"
+                 onkeydown="if(event.key==='Escape'){this.value='';_globalSearchClose();}"
+                 class="flex-1 bg-transparent text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none min-w-0">
+        </div>
+        <div id="global-search-results"
+             class="hidden absolute right-0 mt-1 w-80 bg-white dark:bg-dark-800 rounded-xl shadow-2xl border border-light-border dark:border-dark-border z-50 overflow-hidden">
+          <div id="global-search-body" class="max-h-80 overflow-y-auto"></div>
+        </div>
+      </div>
+
       <!-- Notificaciones -->
       <div class="relative">
         <button onclick="toggleNotifications()"
@@ -617,6 +634,74 @@ function toggleTheme() {
 function toggleNotifications() {
   document.getElementById('notifDropdown').classList.toggle('hidden');
 }
+
+/* ═══════════════════════════════════════════════════
+   S6 — BÚSQUEDA GLOBAL
+═══════════════════════════════════════════════════ */
+function _globalSearch(q) {
+  const drop = document.getElementById('global-search-results');
+  const body = document.getElementById('global-search-body');
+  q = (q || '').toLowerCase().trim();
+  if (!q) { drop.classList.add('hidden'); return; }
+
+  const results = [];
+
+  // Empresas
+  (State.empresas || []).forEach(e => {
+    if ((e.nombre || '').toLowerCase().includes(q) ||
+        (e.ciudad || '').toLowerCase().includes(q) ||
+        (e.nit    || '').toLowerCase().includes(q)) {
+      results.push({ tipo: 'Empresa', label: e.nombre, sub: e.ciudad || '—',
+                     icon: 'fa-building', fn: `abrirGestorEmpresa(${e.id})` });
+    }
+  });
+
+  // Administradores
+  (State._admins || []).forEach(a => {
+    const full = `${a.nombre || ''} ${a.apellido || ''}`.toLowerCase();
+    if (full.includes(q) || (a.email || '').toLowerCase().includes(q)) {
+      results.push({ tipo: 'Admin', label: `${a.nombre} ${a.apellido || ''}`.trim(),
+                     sub: a.email, icon: 'fa-user-shield',
+                     fn: `cambiarVista('administradores')` });
+    }
+  });
+
+  // Auditoría
+  (State._auditData || []).slice(0, 50).forEach(l => {
+    if ((l.accion  || '').toLowerCase().includes(q) ||
+        (l.usuario || '').toLowerCase().includes(q)) {
+      results.push({ tipo: 'Auditoría', label: (l.accion || '').slice(0, 55),
+                     sub: l.usuario || '—', icon: 'fa-shield-halved',
+                     fn: `cambiarVista('auditoria')` });
+    }
+  });
+
+  if (!results.length) {
+    body.innerHTML = `<p class="p-4 text-sm text-slate-400 text-center">Sin resultados para "<em>${esc(q)}</em>"</p>`;
+  } else {
+    body.innerHTML = results.slice(0, 12).map(r => `
+      <button onclick="${r.fn};_globalSearchClose()"
+              class="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-dark-700 transition-colors text-left">
+        <i class="fas ${r.icon} text-brand-blue text-xs w-4 text-center shrink-0"></i>
+        <div class="min-w-0">
+          <p class="text-sm font-medium text-slate-900 dark:text-white truncate">${esc(r.label)}</p>
+          <p class="text-[10px] text-slate-400 truncate">${esc(r.tipo)} · ${esc(r.sub)}</p>
+        </div>
+      </button>`).join('');
+  }
+  drop.classList.remove('hidden');
+}
+
+function _globalSearchClose() {
+  document.getElementById('global-search-results')?.classList.add('hidden');
+  document.getElementById('global-search')?.blur();
+}
+
+// Cerrar al hacer clic fuera
+document.addEventListener('click', e => {
+  if (!e.target.closest('#global-search') &&
+      !e.target.closest('#global-search-results')) _globalSearchClose();
+});
 
 document.addEventListener('click', (e) => {
   const drop = document.getElementById('notifDropdown');
@@ -1338,6 +1423,19 @@ function aplicarFiltrosEmp() {
     else if (vencida) badge = `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">Vencida</span>`;
     else badge = `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400">Activa</span>`;
 
+    // S4: Badge de estado de dispositivos
+    const devEstado = emp.dispositivo_estado;
+    let devBadge;
+    if (devEstado === 'online')
+      devBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block"></span>En línea</span>`;
+    else if (devEstado === 'offline')
+      devBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400">
+        <span class="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block"></span>Sin señal</span>`;
+    else
+      devBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 dark:bg-dark-700 text-slate-400">
+        <span class="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600 inline-block"></span>Sin disp.</span>`;
+
     return `
       <tr class="hover:bg-slate-50 dark:hover:bg-dark-700 cursor-pointer transition-colors group"
           onclick="abrirGestorEmpresa(${emp.id})">
@@ -1366,7 +1464,9 @@ function aplicarFiltrosEmp() {
               : fmtVencimiento(emp)}
           </p>
         </td>
-        <td class="px-5 py-3.5" data-label="Estado">${badge}</td>
+        <td class="px-5 py-3.5" data-label="Estado">
+          <div class="flex flex-col gap-1">${badge}${devBadge}</div>
+        </td>
         <td class="px-5 py-3.5 text-right" data-label="Acciones">
           <div class="flex gap-1.5 justify-end items-center">
             <button title="Impersonar empresa"
@@ -3634,6 +3734,7 @@ async function cargarAdministradores() {
   showLoader();
   try {
     const rows = await apiFetch('/superadmin/administradores');
+    State._admins = rows || [];
     renderAdministradores(rows);
   } catch (e) {
     document.getElementById('content').innerHTML =

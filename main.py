@@ -10,6 +10,7 @@ from fastapi.security import OAuth2PasswordBearer
 
 # -- Manejo de Tiempo y Fechas (Nativas y Externas) --
 from datetime import datetime, date, timedelta, time
+import time as _time
 from dateutil.relativedelta import relativedelta  # Instalado vía pip
 
 # -- Seguridad y Base de Datos --
@@ -68,7 +69,28 @@ app.add_middleware(
 )
 
 # Obtenemos la llave maestra para firmar tokens. Si no existe en el .env, usa una por defecto.
-SECRET_KEY = os.getenv("SECRET_KEY", "clave_secreta_cambiar_en_produccion")
+SECRET_KEY  = os.getenv("SECRET_KEY", "clave_secreta_cambiar_en_produccion")
+APP_STARTUP = _time.time()
+
+# S1: Rate limiter en memoria para /auth/login — sin dependencias externas
+_login_intentos: dict = {}   # { ip: [timestamp, ...] }
+_LOGIN_VENTANA  = 300        # 5 minutos
+_LOGIN_MAX      = 5          # intentos fallidos antes de bloquear
+
+def _rl_check(ip: str):
+    ahora    = _time.time()
+    recientes = [t for t in _login_intentos.get(ip, []) if ahora - t < _LOGIN_VENTANA]
+    if len(recientes) >= _LOGIN_MAX:
+        espera = int(_LOGIN_VENTANA - (ahora - min(recientes))) // 60 + 1
+        raise HTTPException(status_code=429,
+            detail=f"Demasiados intentos fallidos. Intente nuevamente en {espera} minuto(s).")
+    _login_intentos[ip] = recientes
+
+def _rl_fallo(ip: str):
+    _login_intentos.setdefault(ip, []).append(_time.time())
+
+def _rl_ok(ip: str):
+    _login_intentos.pop(ip, None)
 
 
 # ==============================================================================
@@ -169,70 +191,76 @@ def obtener_hora_servidor():
 # @app.post significa que esta ruta espera recibir datos (en este caso, email y password)
 @app.post("/auth/login")
 async def login(request: Request):
-    # 'async' permite que el servidor no se congele mientras espera datos.
+    ip = request.client.host if request.client else "desconocido"
     try:
-        data     = await request.json() # Leemos los datos que mandó el navegador
+        data     = await request.json()
         email    = data.get("email", "").strip().lower()
         password = data.get("password", "")
 
-        # 1. Buscamos al usuario y traemos los MÓDULOS de su empresa
+        # S1: Rate limiting — bloquear si hay demasiados intentos fallidos
+        _rl_check(ip)
+
         conn = conectar_bd("public")
         cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        
-        # Selección explícita de columnas para evitar cargar foto_base64 en cada login
-        cur.execute("""
-            SELECT u.id, u.nombre, u.apellido, u.email, u.password_hash,
-                   u.rol, u.empresa_id, u.activo,
-                   e.nombre AS empresa_nombre, e.schema_name, e.modulos,
-                   e.estado_suscripcion
-            FROM usuarios u
-            JOIN empresas e ON e.id = u.empresa_id
-            WHERE u.email = %s AND u.activo = TRUE
-        """, (email,))
-        usuario = cur.fetchone()
-        cur.close()
-        conn.close()
+        try:
+            cur.execute("""
+                SELECT u.id, u.nombre, u.apellido, u.email, u.password_hash,
+                       u.rol, u.empresa_id, u.activo,
+                       e.nombre AS empresa_nombre, e.schema_name, e.modulos,
+                       e.estado_suscripcion
+                FROM usuarios u
+                JOIN empresas e ON e.id = u.empresa_id
+                WHERE u.email = %s AND u.activo = TRUE
+            """, (email,))
+            usuario = cur.fetchone()
 
-        # 2. Validaciones de seguridad
-        if not usuario:
-            raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+            # S3: Auditar credenciales incorrectas
+            if not usuario:
+                _rl_fallo(ip)
+                registrar_auditoria(cur, request, email, "WARNING",
+                    f"Login fallido — usuario no encontrado: {email}")
+                conn.commit()
+                raise HTTPException(status_code=401, detail="Credenciales incorrectas")
 
-        # bcrypt.checkpw() compara la contraseña que escribió el usuario con el hash raro de la BD.
-        if not bcrypt.checkpw(password.encode(), usuario["password_hash"].encode()):
-            raise HTTPException(status_code=401, detail="Credenciales incorrectas")
+            if not bcrypt.checkpw(password.encode(), usuario["password_hash"].encode()):
+                _rl_fallo(ip)
+                registrar_auditoria(cur, request, email, "WARNING",
+                    f"Login fallido — contraseña incorrecta para: {email}")
+                conn.commit()
+                raise HTTPException(status_code=401, detail="Credenciales incorrectas")
 
-        # ⚡ KILL-SWITCH: Escudo Anti-Morosos
-        if usuario.get("estado_suscripcion") == "suspendido":
-            # ⚡ Registro Forense del intento bloqueado
-            registrar_auditoria(cur, request, email, "WARNING", f"Intento de acceso bloqueado (Empresa Suspendida): {usuario['empresa_nombre']}")
-            conn.commit()
-            raise HTTPException(status_code=403, detail="Suscripción Suspendida. Contacte a Soporte.")
+            if usuario.get("estado_suscripcion") == "suspendido":
+                registrar_auditoria(cur, request, email, "WARNING",
+                    f"Acceso bloqueado — empresa suspendida: {usuario['empresa_nombre']}")
+                conn.commit()
+                raise HTTPException(status_code=403, detail="Suscripción Suspendida. Contacte a Soporte.")
 
-        # 3. Creación del "Pasaporte" (Token JWT)
-        # ⚡ INYECCIÓN: Agregamos "modulos" al token
-        modulos_empresa = usuario.get("modulos", {})
+            # Login exitoso — limpiar contador de fallos
+            _rl_ok(ip)
 
-        token = jwt.encode({
-            "id":             usuario["id"],
-            "email":          usuario["email"],
-            "rol":            usuario["rol"],
-            "empresa_id":     usuario["empresa_id"],
-            "schema_name":    usuario["schema_name"], 
-            "empresa_nombre": usuario["empresa_nombre"],
-            "modulos":        modulos_empresa, # <--- ⚡ EL PASAPORTE VIP
-            "exp":            datetime.utcnow() + timedelta(hours=8)
-        }, SECRET_KEY, algorithm="HS256")
+            modulos_empresa = usuario.get("modulos", {})
+            token = jwt.encode({
+                "id":             usuario["id"],
+                "email":          usuario["email"],
+                "rol":            usuario["rol"],
+                "empresa_id":     usuario["empresa_id"],
+                "schema_name":    usuario["schema_name"],
+                "empresa_nombre": usuario["empresa_nombre"],
+                "modulos":        modulos_empresa,
+                "exp":            datetime.utcnow() + timedelta(hours=8)
+            }, SECRET_KEY, algorithm="HS256")
 
-        # Devolvemos el token y los datos básicos para que el frontend arme la interfaz
-        return {
-            "token":          token,
-            "nombre":         usuario["nombre"],
-            "apellido":       usuario.get("apellido") or "",
-            "rol":            usuario["rol"],
-            "empresa_nombre": usuario["empresa_nombre"],
-            "schema_name":    usuario["schema_name"],
-            "modulos":        modulos_empresa
-        }
+            return {
+                "token":          token,
+                "nombre":         usuario["nombre"],
+                "apellido":       usuario.get("apellido") or "",
+                "rol":            usuario["rol"],
+                "empresa_nombre": usuario["empresa_nombre"],
+                "schema_name":    usuario["schema_name"],
+                "modulos":        modulos_empresa
+            }
+        finally:
+            cur.close(); conn.close()
 
     except HTTPException:
         raise
@@ -633,13 +661,35 @@ def ver_empresas(usuario = Depends(verificar_token)):
     """)
     empresas = cur.fetchall()
     
+    ahora = datetime.utcnow()
     for emp in empresas:
         schema = emp["schema_name"]
         try:
             cur.execute(f"SELECT COUNT(id) as total FROM {schema}.empleados WHERE eliminado = FALSE AND activo = TRUE")
             emp["total_empleados"] = cur.fetchone()["total"]
         except: emp["total_empleados"] = 0
-            
+
+        # S4: Estado de dispositivos por empresa
+        try:
+            cur.execute("""
+                SELECT COUNT(*) AS n,
+                       MAX(ultimo_heartbeat) AS ultimo
+                FROM dispositivos WHERE empresa_id = %s
+            """, (emp["id"],))
+            d = cur.fetchone()
+            emp["dispositivos_n"] = d["n"] or 0
+            if d["ultimo"]:
+                diff = (ahora - d["ultimo"].replace(tzinfo=None)).total_seconds()
+                if diff < 600:
+                    emp["dispositivo_estado"] = "online"
+                else:
+                    emp["dispositivo_estado"] = "offline"
+            else:
+                emp["dispositivo_estado"] = "sin_dispositivos"
+        except:
+            emp["dispositivos_n"] = 0
+            emp["dispositivo_estado"] = "sin_dispositivos"
+
         if emp.get("fecha_vencimiento"): emp["fecha_vencimiento"] = str(emp["fecha_vencimiento"])
         if emp.get("creado_en"): emp["creado_en"] = str(emp["creado_en"])
 
@@ -5145,6 +5195,13 @@ async def actualizar_permisos_modulos(empresa_id: int, request: Request, usuario
 # ── Startup: inicia el loop de verificación de vencimientos ──
 @app.on_event("startup")
 async def iniciar_tareas_periodicas():
+    # S10: Verificación explícita de BD al arrancar
+    try:
+        _c = conectar_bd("public"); _x = _c.cursor()
+        _x.execute("SELECT 1"); _x.close(); _c.close()
+        print("[STARTUP] Base de datos: OK")
+    except Exception as _e:
+        print(f"[STARTUP] ⚠️  ERROR de BD al arrancar: {_e}")
     asyncio.create_task(_loop_verificar_vencimientos())
 
 # ── Loop asíncrono: corre cada 24h dentro del mismo proceso ──
@@ -5728,8 +5785,45 @@ async def eliminar_administrador(admin_id: int, request: Request, usuario = Depe
         conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
     finally: cur.close(); conn.close()
 
-# ── RUTA DE ESTADO (Para saber si la API está viva) ──
+# ── RUTA DE ESTADO BÁSICO ──
 @app.head("/")
 @app.get("/")
 def inicio():
     return {"estado": "API funcionando", "version": "2.1 (SaaS Global)"}
+
+# ── S9: HEALTH CHECK MEJORADO ──
+@app.get("/health")
+def health_check():
+    db_ok = False
+    ultima_verificacion = None
+    total_empresas = 0
+    try:
+        conn = conectar_bd("public")
+        cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT 1")
+        db_ok = True
+        try:
+            cur.execute("SELECT ultima_verificacion FROM saas_configuracion WHERE id = 1")
+            row = cur.fetchone()
+            if row and row["ultima_verificacion"]:
+                ultima_verificacion = row["ultima_verificacion"].isoformat()
+        except: pass
+        try:
+            cur.execute("SELECT COUNT(*) AS n FROM empresas WHERE id != 1")
+            total_empresas = cur.fetchone()["n"]
+        except: pass
+        cur.close(); conn.close()
+    except: pass
+
+    uptime_s = int(_time.time() - APP_STARTUP)
+    horas, resto = divmod(uptime_s, 3600)
+    minutos      = resto // 60
+
+    return {
+        "status":             "ok" if db_ok else "degraded",
+        "version":            "2.1",
+        "db":                 "ok" if db_ok else "error",
+        "uptime":             f"{horas}h {minutos}m",
+        "ultimo_cron":        ultima_verificacion,
+        "total_empresas":     total_empresas,
+    }
