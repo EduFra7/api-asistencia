@@ -1665,6 +1665,8 @@ async function impersonarEmpresa(empId, nombre) {
   try {
     const data = await apiFetch(`/superadmin/impersonate/${empId}`, { method:'POST' });
     localStorage.setItem('token_superadmin_backup', State.token);
+    localStorage.setItem('userData_superadmin_backup', localStorage.getItem('userData') || '');
+    localStorage.setItem('impersonating_empresa', nombre);
     localStorage.setItem('token', data.access_token);
     localStorage.setItem('userData', JSON.stringify(data.userData || data));
     window.location.href = 'dashboard_cliente.html';

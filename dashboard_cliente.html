@@ -260,7 +260,64 @@
         renderizarMenu('dashboard');
         verificarEstadoFeriados();
         cargarDashboardTonto();
+        _mostrarBannerImpersonacion();
 
+    </script>
+
+    <!-- ── Banner de modo soporte (impersonación) ── -->
+    <script>
+    function _mostrarBannerImpersonacion() {
+      const backup = localStorage.getItem('token_superadmin_backup');
+      if (!backup) return;
+
+      const empresa = localStorage.getItem('impersonating_empresa') || 'empresa cliente';
+
+      const banner = document.createElement('div');
+      banner.id = 'banner-impersonacion';
+      banner.style.cssText = [
+        'position:fixed','top:0','left:0','right:0','z-index:9999',
+        'background:#c12425','color:#fff',
+        'display:flex','align-items:center','justify-content:space-between',
+        'padding:0 16px','height:44px','font-family:inherit',
+        'box-shadow:0 2px 8px rgba(0,0,0,0.25)',
+      ].join(';');
+
+      banner.innerHTML = `
+        <span style="font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2.5"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+          </svg>
+          Modo soporte — viendo como <strong style="margin-left:4px;">${empresa}</strong>
+        </span>
+        <button onclick="_volverAlPanel()"
+                style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);
+                       color:#fff;font-size:12px;font-weight:600;padding:5px 12px;border-radius:6px;
+                       cursor:pointer;white-space:nowrap;transition:background 0.15s;"
+                onmouseover="this.style.background='rgba(255,255,255,0.35)'"
+                onmouseout="this.style.background='rgba(255,255,255,0.2)'">
+          ← Volver al panel
+        </button>`;
+
+      document.body.prepend(banner);
+      document.body.style.paddingTop = '44px';
+    }
+
+    function _volverAlPanel() {
+      const backup = localStorage.getItem('token_superadmin_backup');
+      if (!backup) { window.location.href = 'dashboard_superadmin_v7.html'; return; }
+
+      const userData = localStorage.getItem('userData_superadmin_backup');
+      localStorage.setItem('token', backup);
+      if (userData) localStorage.setItem('userData', userData);
+
+      localStorage.removeItem('token_superadmin_backup');
+      localStorage.removeItem('userData_superadmin_backup');
+      localStorage.removeItem('impersonating_empresa');
+
+      window.location.href = 'dashboard_superadmin_v7.html';
+    }
     </script>
 </body>
 </html>
