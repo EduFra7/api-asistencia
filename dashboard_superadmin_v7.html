@@ -1667,8 +1667,15 @@ async function impersonarEmpresa(empId, nombre) {
     localStorage.setItem('token_superadmin_backup', State.token);
     localStorage.setItem('userData_superadmin_backup', localStorage.getItem('userData') || '');
     localStorage.setItem('impersonating_empresa', nombre);
-    localStorage.setItem('token', data.access_token);
-    localStorage.setItem('userData', JSON.stringify(data.userData || data));
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('userData', JSON.stringify({
+      nombre:         data.nombre        || 'Soporte',
+      apellido:       data.apellido      || '',
+      rol:            data.rol           || 'superadmin',
+      empresa:        data.empresa_nombre,
+      empresa_nombre: data.empresa_nombre,
+      modulos:        data.modulos       || {},
+    }));
     window.location.href = 'dashboard_cliente.html';
   } catch (err) { mostrarError(err.message); }
 }
