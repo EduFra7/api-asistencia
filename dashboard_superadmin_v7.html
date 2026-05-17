@@ -3488,11 +3488,8 @@ function renderAdministradores(rows) {
                   <td class="px-4 py-3 text-slate-600 dark:text-slate-300">${esc(a.ci || '—')}</td>
                   <td class="px-4 py-3 text-slate-600 dark:text-slate-300 text-xs">${esc(a.correo_contacto || '—')}</td>
                   <td class="px-4 py-3 text-slate-600 dark:text-slate-300">${esc(a.ciudad || '—')}${a.pais && a.pais !== 'Bolivia' ? ', ' + esc(a.pais) : ''}</td>
-                  <td class="px-4 py-3 text-slate-600 dark:text-slate-300 text-xs space-y-0.5">
-                    ${a.telefono ? `<p><i class="fas fa-phone w-3.5 text-slate-400 mr-1"></i>${esc(a.telefono)}</p>` : ''}
-                    ${a.celular  ? `<p><i class="fas fa-mobile-alt w-3.5 text-slate-400 mr-1"></i>${esc(a.celular)}</p>` : ''}
-                    ${a.whatsapp ? `<p><i class="fab fa-whatsapp w-3.5 text-green-500 mr-1"></i>${esc(a.whatsapp)}</p>` : ''}
-                    ${!a.telefono && !a.celular && !a.whatsapp ? '—' : ''}
+                  <td class="px-4 py-3 text-slate-600 dark:text-slate-300 text-xs">
+                    ${a.celular ? `<span><i class="fas fa-mobile-alt text-slate-400 mr-1"></i>${esc(a.celular)}</span>` : '—'}
                   </td>
                   <td class="px-4 py-3">
                     <div class="flex items-center justify-end gap-1.5">
@@ -3576,17 +3573,14 @@ function abrirModalAdmin(admin) {
         </div>
         <!-- Campos -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          ${_campoAdmin('adm-nombre',          'Nombre',                    admin?.nombre          || '', true)}
-          ${_campoAdmin('adm-apellido',         'Apellido',                  admin?.apellido         || '')}
-          ${_campoAdmin('adm-ci',               'CI (Carnet de Identidad)',  admin?.ci               || '')}
-          ${_campoAdmin('adm-direccion',         'Dirección',                 admin?.direccion        || '')}
-          ${_campoAdmin('adm-telefono',          'Teléfono fijo',             admin?.telefono         || '')}
-          ${_campoAdmin('adm-celular',           'Celular',                   admin?.celular          || '')}
-          ${_campoAdmin('adm-whatsapp',          'WhatsApp',                  admin?.whatsapp         || '')}
-          ${_campoAdmin('adm-pais',              'País',                      admin?.pais             || 'Bolivia')}
-          ${_campoAdmin('adm-ciudad',            'Ciudad',                    admin?.ciudad           || '')}
-          ${_campoAdmin('adm-correo-contacto',   'Correo de contacto',        admin?.correo_contacto  || '', false, 'email')}
-          ${_campoAdmin('adm-email',             'Correo de inicio de sesión',admin?.email            || '', true,  'email')}
+          ${_campoAdmin('adm-nombre',          'Nombre',                     admin?.nombre          || '', true)}
+          ${_campoAdmin('adm-apellido',         'Apellido',                   admin?.apellido         || '', true)}
+          ${_campoAdmin('adm-ci',               'Carnet de Identidad',        admin?.ci               || '', true)}
+          ${_campoAdmin('adm-celular',           'Celular',                    admin?.celular          || '', true)}
+          ${_campoAdmin('adm-pais',              'País',                       admin?.pais             || 'Bolivia', true)}
+          ${_campoAdmin('adm-ciudad',            'Ciudad',                     admin?.ciudad           || '', true)}
+          ${_campoAdmin('adm-correo-contacto',   'Correo de contacto',         admin?.correo_contacto  || '', true, 'email')}
+          ${_campoAdmin('adm-email',             'Correo de inicio de sesión', admin?.email            || '', true,  'email')}
           ${esNuevo ? `
           <div>
             <label class="text-xs font-medium text-slate-600 dark:text-slate-300 mb-1 block">Contraseña <span class="text-red-500">*</span></label>
@@ -3674,23 +3668,22 @@ function _redimensionarImagen(b64, max, q) {
 }
 
 async function guardarAdmin() {
-  const nombre = document.getElementById('adm-nombre')?.value.trim();
-  const email  = document.getElementById('adm-email')?.value.trim().toLowerCase();
-  const esNuevo = !_adminEditId;
-  if (!nombre || !email) { mostrarError('Nombre y correo de inicio de sesión son obligatorios.'); return; }
+  const nombre          = document.getElementById('adm-nombre')?.value.trim();
+  const apellido        = document.getElementById('adm-apellido')?.value.trim();
+  const ci              = document.getElementById('adm-ci')?.value.trim();
+  const celular         = document.getElementById('adm-celular')?.value.trim();
+  const pais            = document.getElementById('adm-pais')?.value.trim();
+  const ciudad          = document.getElementById('adm-ciudad')?.value.trim();
+  const correo_contacto = document.getElementById('adm-correo-contacto')?.value.trim();
+  const email           = document.getElementById('adm-email')?.value.trim().toLowerCase();
+  const esNuevo         = !_adminEditId;
+
+  if (!nombre || !apellido || !ci || !celular || !pais || !ciudad || !correo_contacto || !email) {
+    mostrarError('Todos los campos marcados con * son obligatorios.'); return;
+  }
 
   const payload = {
-    nombre,
-    apellido:        document.getElementById('adm-apellido')?.value.trim()        || null,
-    ci:              document.getElementById('adm-ci')?.value.trim()               || null,
-    direccion:       document.getElementById('adm-direccion')?.value.trim()        || null,
-    telefono:        document.getElementById('adm-telefono')?.value.trim()         || null,
-    celular:         document.getElementById('adm-celular')?.value.trim()          || null,
-    whatsapp:        document.getElementById('adm-whatsapp')?.value.trim()         || null,
-    pais:            document.getElementById('adm-pais')?.value.trim()             || 'Bolivia',
-    ciudad:          document.getElementById('adm-ciudad')?.value.trim()           || null,
-    correo_contacto: document.getElementById('adm-correo-contacto')?.value.trim()  || null,
-    email,
+    nombre, apellido, ci, celular, pais, ciudad, correo_contacto, email,
   };
 
   if (esNuevo) {
