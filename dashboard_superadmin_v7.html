@@ -63,8 +63,45 @@ tailwind.config = {
 <style>
 /* ── Base ─────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; }
-html { font-size: 14px; }
-@media (min-width: 1024px) { html { font-size: 15px; } }
+
+/*
+  Tipografía fluida y responsiva.
+  Escala el root rem automáticamente según el ancho del viewport:
+
+    Móvil  375px → 14px   (sin cambio)
+    Tablet 768px → 14.8px
+    Laptop 1024px → 15.6px
+    HD    1280px → 16.3px
+    1440p 1440px → 16.8px  ← objetivo principal
+    4K+   ≥1600px → 18px   (tope)
+
+  Al escalar el root, todas las clases Tailwind basadas en rem
+  (text-xs, text-sm, text-base, text-lg…) escalan en proporción.
+*/
+html {
+  font-size: clamp(14px, 0.3vw + 12.5px, 18px);
+}
+
+/*
+  Tamaños arbitrarios en px (text-[10px] etc.) no reaccionan al root rem.
+  Se escalan manualmente por breakpoint.
+  !important necesario porque Tailwind CDN inyecta sus estilos después de este bloque.
+*/
+@media (min-width: 1280px) {
+  .text-\[9px\]  { font-size: 10px  !important; }
+  .text-\[10px\] { font-size: 11px  !important; }
+  .text-\[11px\] { font-size: 12px  !important; }
+  .text-\[12px\] { font-size: 13px  !important; }
+  .text-\[13px\] { font-size: 14px  !important; }
+}
+@media (min-width: 1440px) {
+  .text-\[9px\]  { font-size: 11px  !important; }
+  .text-\[10px\] { font-size: 12px  !important; }
+  .text-\[11px\] { font-size: 13px  !important; }
+  .text-\[12px\] { font-size: 14px  !important; }
+  .text-\[13px\] { font-size: 15px  !important; }
+}
+
 body { font-family: 'Geist', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
 
 /* Scrollbars */
