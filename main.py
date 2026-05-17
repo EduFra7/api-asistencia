@@ -180,9 +180,13 @@ async def login(request: Request):
         cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
         cur.execute("""
-            SELECT u.*, e.nombre as empresa_nombre, e.schema_name, e.modulos
+            SELECT u.*,
+                   COALESCE(e.nombre, 'Sistema')   AS empresa_nombre,
+                   COALESCE(e.schema_name, 'public') AS schema_name,
+                   COALESCE(e.modulos, '{}'::jsonb)  AS modulos,
+                   e.estado_suscripcion
             FROM usuarios u
-            JOIN empresas e ON e.id = u.empresa_id
+            LEFT JOIN empresas e ON e.id = u.empresa_id
             WHERE u.email = %s AND u.activo = TRUE
         """, (email,))
         usuario = cur.fetchone()
