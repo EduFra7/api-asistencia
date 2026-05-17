@@ -179,8 +179,11 @@ async def login(request: Request):
         conn = conectar_bd("public")
         cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
+        # Selección explícita de columnas para evitar cargar foto_base64 en cada login
         cur.execute("""
-            SELECT u.*, e.nombre as empresa_nombre, e.schema_name, e.modulos,
+            SELECT u.id, u.nombre, u.apellido, u.email, u.password_hash,
+                   u.rol, u.empresa_id, u.activo,
+                   e.nombre AS empresa_nombre, e.schema_name, e.modulos,
                    e.estado_suscripcion
             FROM usuarios u
             JOIN empresas e ON e.id = u.empresa_id
@@ -647,6 +650,8 @@ def ver_empresas(usuario = Depends(verificar_token)):
 @app.get("/setup/superadmin")
 def crear_superadmin():
     """Esta ruta se usa solo una vez para crear al dueño del sistema."""
+    if not os.getenv("ALLOW_SETUP"):
+        raise HTTPException(status_code=404, detail="Not found")
     try:
         password_hash = bcrypt.hashpw("admin123".encode(), bcrypt.gensalt()).decode()
         conn = conectar_bd("public")
@@ -4815,20 +4820,28 @@ async def propagar_feriado_global(request: Request, usuario = Depends(verificar_
 # 22. CAJA NEGRA (LOG DE AUDITORÍA GLOBAL)
 # ==============================================================================
 @app.get("/superadmin/auditoria")
-async def obtener_auditoria(empresa_id: Optional[int] = None, usuario = Depends(verificar_token)):
-    """ Lee los últimos eventos de seguridad. Si se pasa empresa_id filtra por esa empresa. """
+async def obtener_auditoria(
+    empresa_id: Optional[int] = None,
+    operador: Optional[str] = None,
+    usuario = Depends(verificar_token)
+):
+    """ Lee los últimos eventos de seguridad. Filtra por empresa_id y/o operador (email). """
     if not es_staff(usuario): raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
 
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
+        conditions = []
+        params = []
         if empresa_id is not None:
-            cur.execute(
-                "SELECT * FROM saas_auditoria WHERE (accion ILIKE %s OR accion ILIKE %s) ORDER BY fecha DESC LIMIT 200",
-                (f"%Empresa ID: {empresa_id}%", f"%Empresa ID {empresa_id}%")
-            )
-        else:
-            cur.execute("SELECT * FROM saas_auditoria ORDER BY fecha DESC LIMIT 100")
+            conditions.append("(accion ILIKE %s OR accion ILIKE %s)")
+            params += [f"%Empresa ID: {empresa_id}%", f"%Empresa ID {empresa_id}%"]
+        if operador:
+            conditions.append("usuario ILIKE %s")
+            params.append(f"%{operador}%")
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        limit = 200 if empresa_id else 200
+        cur.execute(f"SELECT * FROM saas_auditoria {where} ORDER BY fecha DESC LIMIT {limit}", params)
         logs = cur.fetchall()
         for log in logs:
             log["fecha"] = log["fecha"].strftime("%Y-%m-%d %H:%M:%S")
@@ -5285,6 +5298,15 @@ def _verificar_vencimientos_sync() -> dict:
         stats["errores"].append(str(ex))
     finally:
         cur.close(); conn.close()
+    # Guardar timestamp de última ejecución
+    try:
+        conn2 = conectar_bd("public")
+        cur2  = conn2.cursor()
+        cur2.execute("UPDATE saas_configuracion SET ultima_verificacion = NOW() WHERE id = 1")
+        conn2.commit()
+        cur2.close(); conn2.close()
+    except Exception:
+        pass
     return stats
 
 # ── Endpoint: disparar verificación manualmente (cron externo o botón UI) ──

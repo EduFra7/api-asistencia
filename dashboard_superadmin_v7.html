@@ -546,7 +546,19 @@ function initAuth() {
     _actualizarSidebarPerfil(State.userData.nombre, State.userData.apellido, State.userData.rol);
     if (State.userData.rol === 'superadmin') {
       document.getElementById('nav-administradores').classList.remove('hidden');
+      KB_MENU.push({ label:'Administradores', icon:'fa-user-shield',
+        action:() => cambiarVista('administradores', document.querySelector('[data-vista=administradores]')) });
     }
+    // Sync de perfil entre pestañas del mismo navegador
+    window.addEventListener('storage', e => {
+      if (e.key === 'userData' && e.newValue) {
+        try {
+          const d = JSON.parse(e.newValue);
+          State.userData = d;
+          _actualizarSidebarPerfil(d.nombre, d.apellido, d.rol);
+        } catch {}
+      }
+    });
     actualizarBadgeSesion();
     setInterval(actualizarBadgeSesion, 60_000);
   } catch { window.location.href = 'index.html'; }
@@ -2736,6 +2748,10 @@ function renderAuditoria(logs) {
         </select>
         <input type="date" id="filtro-fecha-audit" onchange="filtrarAuditoria()"
                class="bg-slate-50 dark:bg-dark-900 border border-light-border dark:border-dark-border rounded-lg px-3 py-2 text-sm text-slate-600 dark:text-slate-300 focus:outline-none focus:border-brand-blue">
+        <select id="filtro-operador" onchange="filtrarAuditoria()"
+                class="bg-slate-50 dark:bg-dark-900 border border-light-border dark:border-dark-border rounded-lg px-3 py-2 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-brand-blue cursor-pointer">
+          <option value="">Todos los operadores</option>
+        </select>
       </div>
 
       <!-- Tabla card — reacciona a modo claro/oscuro -->
@@ -2762,6 +2778,7 @@ function renderAuditoria(logs) {
       </div>
 
     </div>`;
+  _poblarFiltroOperadores(State._auditData);
 }
 
 function filasAuditoria(lista) {
@@ -2792,13 +2809,24 @@ function filasAuditoria(lista) {
     </tr>`).join('');
 }
 
+function _poblarFiltroOperadores(logs) {
+  const sel = document.getElementById('filtro-operador');
+  if (!sel) return;
+  const prev = sel.value;
+  const ops = [...new Set(logs.map(l => l.usuario).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">Todos los operadores</option>' +
+    ops.map(op => `<option value="${esc(op)}"${op === prev ? ' selected' : ''}>${esc(op)}</option>`).join('');
+}
+
 function filtrarAuditoria() {
   if (!State._auditData) return;
-  const q      = (document.getElementById('buscar-audit')?.value || '').toLowerCase().trim();
-  const nivel  = document.getElementById('filtro-nivel')?.value || 'TODOS';
-  const fechaF = document.getElementById('filtro-fecha-audit')?.value || '';
+  const q        = (document.getElementById('buscar-audit')?.value || '').toLowerCase().trim();
+  const nivel    = document.getElementById('filtro-nivel')?.value || 'TODOS';
+  const fechaF   = document.getElementById('filtro-fecha-audit')?.value || '';
+  const operador = document.getElementById('filtro-operador')?.value || '';
   let lista = State._auditData;
-  if (nivel !== 'TODOS') lista = lista.filter(l => l.nivel === nivel);
+  if (nivel !== 'TODOS')  lista = lista.filter(l => l.nivel === nivel);
+  if (operador)           lista = lista.filter(l => l.usuario === operador);
   if (q) lista = lista.filter(l =>
     (l.usuario || '').toLowerCase().includes(q) ||
     (l.accion  || '').toLowerCase().includes(q));
@@ -3054,13 +3082,14 @@ function verPendientesPago() {
 /* ═══════════════════════════════════════════════════
    MEJORA 1 — Buscador ⌘K Command Palette
 ═══════════════════════════════════════════════════ */
-const KB_MENU = [
-  { label:'Resumen',          icon:'fa-chart-pie',      action:() => cambiarVista('resumen',   document.querySelector('[data-vista=resumen]'))   },
-  { label:'Empresas',         icon:'fa-building',       action:() => cambiarVista('empresas',  document.querySelector('[data-vista=empresas]'))  },
-  { label:'Hardware',         icon:'fa-microchip',      action:() => cambiarVista('hardware',  document.querySelector('[data-vista=hardware]'))  },
-  { label:'Finanzas',         icon:'fa-coins',          action:() => cambiarVista('finanzas',  document.querySelector('[data-vista=finanzas]'))  },
-  { label:'Feriados Globales',icon:'fa-calendar-days',  action:() => cambiarVista('feriados',  document.querySelector('[data-vista=feriados]'))  },
-  { label:'Auditoría',        icon:'fa-shield-halved',  action:() => cambiarVista('auditoria', document.querySelector('[data-vista=auditoria]')) },
+let KB_MENU = [
+  { label:'Resumen',          icon:'fa-chart-pie',      action:() => cambiarVista('resumen',         document.querySelector('[data-vista=resumen]'))         },
+  { label:'Empresas',         icon:'fa-building',       action:() => cambiarVista('empresas',         document.querySelector('[data-vista=empresas]'))        },
+  { label:'Hardware',         icon:'fa-microchip',      action:() => cambiarVista('hardware',         document.querySelector('[data-vista=hardware]'))        },
+  { label:'Finanzas',         icon:'fa-coins',          action:() => cambiarVista('finanzas',         document.querySelector('[data-vista=finanzas]'))        },
+  { label:'Feriados Globales',icon:'fa-calendar-days',  action:() => cambiarVista('feriados',         document.querySelector('[data-vista=feriados]'))        },
+  { label:'Auditoría',        icon:'fa-shield-halved',  action:() => cambiarVista('auditoria',        document.querySelector('[data-vista=auditoria]'))       },
+  { label:'Configuraciones',  icon:'fa-gear',           action:() => cambiarVista('configuraciones',  document.querySelector('[data-vista=configuraciones]')) },
 ];
 let _kbIdx = -1;
 
@@ -3217,6 +3246,14 @@ function renderConfiguraciones(perfil, cfg) {
           </div>
           <input type="file" id="cfg-foto-input" accept="image/*" class="hidden" onchange="_procesarFotoPerfil(this.files[0])">
         </div>
+
+        ${(!perfil.apellido && !perfil.ci && !perfil.celular) ? `
+        <div class="mb-4 flex items-start gap-2.5 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700">
+          <i class="fas fa-circle-info text-amber-500 text-sm mt-0.5 shrink-0"></i>
+          <p class="text-xs text-amber-700 dark:text-amber-300">
+            Su perfil está incompleto. Haga clic en <strong>Editar</strong> para completar sus datos.
+          </p>
+        </div>` : ''}
 
         <!-- Campos — readonly por defecto -->
         <div class="space-y-3">
@@ -3403,9 +3440,14 @@ function renderConfiguraciones(perfil, cfg) {
       <h2 class="text-sm font-semibold text-slate-800 dark:text-white mb-1 flex items-center gap-2">
         <i class="fas fa-screwdriver-wrench text-brand-blue text-base"></i> Herramientas de mantenimiento
       </h2>
-      <p class="text-[11px] text-slate-400 mb-4">
+      <p class="text-[11px] text-slate-400 mb-3">
         Estas operaciones también se ejecutan automáticamente cada 24 horas en segundo plano.
       </p>
+      ${cfg.ultima_verificacion ? `
+      <p class="text-[11px] text-slate-400 mb-4 flex items-center gap-1.5">
+        <i class="fas fa-clock-rotate-left text-slate-300 text-[10px]"></i>
+        Última ejecución: <span class="font-medium text-slate-500 dark:text-slate-400">${new Date(cfg.ultima_verificacion).toLocaleString('es-BO', {dateStyle:'short',timeStyle:'short'})}</span>
+      </p>` : `<p class="text-[11px] text-slate-400 italic mb-4">Aún no se ha ejecutado.</p>`}
       <button id="btn-verificar-venc" onclick="verificarVencimientosManual()"
               class="flex items-center gap-2 px-4 py-2 text-sm font-medium
                      text-slate-700 dark:text-slate-200 bg-white dark:bg-dark-700
@@ -3680,7 +3722,8 @@ function renderAdministradores(rows) {
 }
 
 async function _cargarMiniaturas(rows) {
-  for (const a of rows.filter(r => r.tiene_foto)) {
+  const conFoto = rows.filter(r => r.tiene_foto);
+  await Promise.all(conFoto.map(async a => {
     try {
       const res = await apiFetch(`/superadmin/administradores/${a.id}/foto`);
       if (res.foto_base64) {
@@ -3688,7 +3731,7 @@ async function _cargarMiniaturas(rows) {
         if (img) img.src = res.foto_base64;
       }
     } catch {}
-  }
+  }));
 }
 
 function abrirModalAdmin(admin) {
