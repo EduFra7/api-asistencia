@@ -42,6 +42,10 @@ from reportlab.lib.pagesizes import A5, portrait
 from reportlab.pdfgen import canvas
 
 import unicodedata
+import asyncio
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 # ==============================================================================
 # 2. CONFIGURACIÓN INICIAL DE LA APLICACIÓN
@@ -130,8 +134,8 @@ def requiere_modulo(modulo: str):
     token del usuario tiene permiso para entrar al módulo solicitado.
     """
     def validador(usuario: dict = Depends(verificar_token)):
-        # Si es el SuperAdmin original en su Panel Global, lo dejamos pasar a cualquier lado
-        if usuario.get("rol") == "superadmin":
+        # Personal SaaS (superadmin y administrador) pasan sin restricciones de módulo
+        if es_staff(usuario):
             return usuario
             
         # Si es cliente (o el SuperAdmin haciendo impersonate de soporte), validamos el pasaporte
@@ -145,6 +149,11 @@ def requiere_modulo(modulo: str):
             )
         return usuario
     return validador
+
+# ── HELPER: verifica si el usuario es personal SaaS (superadmin o administrador) ──
+def es_staff(usuario: dict) -> bool:
+    """True si puede operar el panel SaaS. Crear/gestionar administradores sigue siendo solo superadmin."""
+    return usuario.get("rol") in ("superadmin", "administrador")
 
 # ── HORA OFICIAL DEL SERVIDOR (Para sincronizar Frontends) ──
 @app.get("/hora-servidor")
@@ -237,7 +246,7 @@ def mi_perfil(usuario = Depends(verificar_token)):
 # ── MOTOR DE APROVISIONAMIENTO (CREAR EMPRESAS NUEVAS SaaS) ──
 @app.post("/empresas")
 async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
-    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403, detail="Solo SuperAdmin.")
+    if not es_staff(usuario): raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
     
     try:
         data = await request.json()
@@ -501,7 +510,7 @@ async def crear_empresa(request: Request, usuario = Depends(verificar_token)):
 
 @app.put("/empresas/{empresa_id}/info")
 async def editar_info_empresa(empresa_id: int, request: Request, usuario = Depends(verificar_token)):
-    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403)
+    if not es_staff(usuario): raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
     data = await request.json()
     conn = conectar_bd("public")
     cur = conn.cursor()
@@ -541,7 +550,7 @@ async def editar_info_empresa(empresa_id: int, request: Request, usuario = Depen
 @app.put("/empresas/{empresa_id}/toggle-estado")
 async def toggle_estado_empresa(empresa_id: int, request: Request, usuario = Depends(verificar_token)):
     """ Congela o Descongela el acceso de una empresa por morosidad """
-    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403, detail="Solo SuperAdmin.")
+    if not es_staff(usuario): raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
     
     conn = conectar_bd("public")
     cur = conn.cursor()
@@ -574,7 +583,7 @@ async def toggle_estado_empresa(empresa_id: int, request: Request, usuario = Dep
 
 @app.put("/empresas/{empresa_id}/credenciales")
 async def editar_credenciales_admin(empresa_id: int, request: Request, usuario = Depends(verificar_token)):
-    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403)
+    if not es_staff(usuario): raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
     data = await request.json()
     conn = conectar_bd("public")
     cur = conn.cursor()
@@ -607,7 +616,7 @@ async def editar_credenciales_admin(empresa_id: int, request: Request, usuario =
 
 @app.get("/empresas")
 def ver_empresas(usuario = Depends(verificar_token)):
-    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403, detail="Sin permisos")
+    if not es_staff(usuario): raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
     
     conn = conectar_bd("public")
     cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -1086,8 +1095,8 @@ async def iclock_devicecmd(request: Request, SN: str = None):
 @app.delete("/empresas/{empresa_id}")
 def eliminar_empresa(empresa_id: int, request: Request, usuario = Depends(verificar_token)):
     # 1. SEGURIDAD: Verificamos usando tu propia función de seguridad
-    if usuario.get("rol") != "superadmin":
-        raise HTTPException(status_code=403, detail="Acceso denegado. Solo SuperAdmin puede eliminar empresas.")
+    if not es_staff(usuario):
+        raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
 
     # 2. Conectamos a la base de datos maestra (public)
     conn = conectar_bd("public")
@@ -1132,7 +1141,7 @@ def eliminar_empresa(empresa_id: int, request: Request, usuario = Depends(verifi
 @app.get("/superadmin/kpis")
 async def obtener_kpis_saas(usuario = Depends(verificar_token)):
     """ Extrae KPIs de Negocio y Motor 360 de Alertas (Finanzas + Hardware) """
-    if usuario.get("rol") != "superadmin": raise HTTPException(status_code=403, detail="Acceso denegado.")
+    if not es_staff(usuario): raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
         
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -1246,8 +1255,8 @@ async def obtener_kpis_saas(usuario = Depends(verificar_token)):
 @app.post("/superadmin/impersonate/{empresa_id}")
 async def impersonate_empresa(empresa_id: int, request: Request, usuario = Depends(verificar_token)):
     """ Genera Token falso para dar soporte y GUARDA EL LOG EN LA CAJA NEGRA """
-    if usuario.get("rol") != "superadmin":
-        raise HTTPException(status_code=403, detail="Acceso denegado.")
+    if not es_staff(usuario):
+        raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
         
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -1259,14 +1268,16 @@ async def impersonate_empresa(empresa_id: int, request: Request, usuario = Depen
         if not empresa: raise HTTPException(status_code=404, detail="La empresa no existe.")
             
         token_falso = jwt.encode({
-            "id": 0, "email": "soporte@bitech.com", "rol": "superadmin",
-            "empresa_id": empresa_id, "schema_name": empresa["schema_name"], 
+            "id": usuario.get("id", 0), "email": usuario.get("email", "staff@sistema"),
+            "rol": "superadmin",
+            "empresa_id": empresa_id, "schema_name": empresa["schema_name"],
             "empresa_nombre": empresa["nombre"],
-            "modulos": empresa.get("modulos", {}), # <--- ⚡ PASAPORTE PARA EL ADMIN
+            "modulos": empresa.get("modulos", {}),
             "exp": datetime.utcnow() + timedelta(hours=1)
         }, SECRET_KEY, algorithm="HS256")
-        
-        registrar_auditoria(cur, request, usuario.get("email", "SuperAdmin"), "WARNING", f"Sesión remota (Impersonate) iniciada en la base de datos de: {empresa['nombre']}")
+
+        registrar_auditoria(cur, request, usuario.get("email"), "WARNING",
+                            f"Impersonate en empresa: {empresa['nombre']} (ID: {empresa_id}) por {usuario.get('rol','staff')}")
         conn.commit()
         
         return {
@@ -4624,9 +4635,9 @@ async def adms_propagar_huella(empleado_id: int, usuario = Depends(requiere_modu
 
 @app.get("/empresas/{empresa_id}/pagos")
 async def obtener_historial_pagos(empresa_id: int, usuario = Depends(verificar_token)):
-    if usuario["rol"] != "superadmin":
-        raise HTTPException(status_code=403, detail="Sin permisos.")
-        
+    if not es_staff(usuario):
+        raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
+
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
@@ -4644,7 +4655,7 @@ async def obtener_historial_pagos(empresa_id: int, usuario = Depends(verificar_t
 
 @app.post("/empresas/{empresa_id}/pagos")
 async def registrar_pago_saas(empresa_id: int, request: Request, usuario = Depends(verificar_token)):
-    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403, detail="Sin permisos.")
+    if not es_staff(usuario): raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
     data = await request.json()
     monto = float(data.get("monto", 0))
     tipo_pago = data.get("tipo_pago", "Mensual")
@@ -4682,7 +4693,7 @@ async def registrar_pago_saas(empresa_id: int, request: Request, usuario = Depen
 
 @app.get("/superadmin/hardware")
 async def obtener_monitor_hardware(usuario = Depends(verificar_token)):
-    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403)
+    if not es_staff(usuario): raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
@@ -4736,7 +4747,7 @@ async def obtener_monitor_hardware(usuario = Depends(verificar_token)):
 @app.post("/superadmin/hardware/{sn}/comando")
 async def enviar_comando_iot_global(sn: str, request: Request, usuario = Depends(verificar_token)):
     """ Permite al SuperAdmin enviar comandos directos a cualquier reloj (Reinicio, Borrado) """
-    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403, detail="Sin permisos.")
+    if not es_staff(usuario): raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
         
     data = await request.json()
     comando_bruto = data.get("comando", "").upper()
@@ -4761,7 +4772,7 @@ async def enviar_comando_iot_global(sn: str, request: Request, usuario = Depends
 @app.post("/superadmin/feriados-globales")
 async def propagar_feriado_global(request: Request, usuario = Depends(verificar_token)):
     """ Inyecta un feriado sorpresa en TODAS las bases de datos de los clientes activos """
-    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403, detail="Solo SuperAdmin.")
+    if not es_staff(usuario): raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
         
     data = await request.json()
     fecha = data.get("fecha")
@@ -4802,14 +4813,20 @@ async def propagar_feriado_global(request: Request, usuario = Depends(verificar_
 # 22. CAJA NEGRA (LOG DE AUDITORÍA GLOBAL)
 # ==============================================================================
 @app.get("/superadmin/auditoria")
-async def obtener_auditoria(usuario = Depends(verificar_token)):
-    """ Lee los últimos 100 eventos de seguridad del sistema """
-    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403, detail="Solo SuperAdmin.")
-        
+async def obtener_auditoria(empresa_id: Optional[int] = None, usuario = Depends(verificar_token)):
+    """ Lee los últimos eventos de seguridad. Si se pasa empresa_id filtra por esa empresa. """
+    if not es_staff(usuario): raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
+
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        cur.execute("SELECT * FROM saas_auditoria ORDER BY fecha DESC LIMIT 100")
+        if empresa_id is not None:
+            cur.execute(
+                "SELECT * FROM saas_auditoria WHERE (accion ILIKE %s OR accion ILIKE %s) ORDER BY fecha DESC LIMIT 200",
+                (f"%Empresa ID: {empresa_id}%", f"%Empresa ID {empresa_id}%")
+            )
+        else:
+            cur.execute("SELECT * FROM saas_auditoria ORDER BY fecha DESC LIMIT 100")
         logs = cur.fetchall()
         for log in logs:
             log["fecha"] = log["fecha"].strftime("%Y-%m-%d %H:%M:%S")
@@ -4825,7 +4842,7 @@ async def exportar_auditoria_excel(nivel: str = "TODOS", q: str = "", fecha_inic
     if not token: raise HTTPException(status_code=401)
     try:
         usuario = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-        if usuario["rol"] != "superadmin": raise HTTPException(status_code=403)
+        if not es_staff(usuario): raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
     except: raise HTTPException(status_code=401)
 
     conn = conectar_bd("public")
@@ -4862,7 +4879,7 @@ async def exportar_auditoria_pdf(nivel: str = "TODOS", q: str = "", fecha_inicio
     if not token: raise HTTPException(status_code=401)
     try:
         usuario = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-        if usuario["rol"] != "superadmin": raise HTTPException(status_code=403)
+        if not es_staff(usuario): raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
     except: raise HTTPException(status_code=401)
 
     conn = conectar_bd("public")
@@ -4898,7 +4915,7 @@ async def exportar_auditoria_pdf(nivel: str = "TODOS", q: str = "", fecha_inicio
 # ---------------------------------------------------------
 @app.get("/superadmin/contabilidad")
 async def obtener_contabilidad_global(usuario = Depends(verificar_token)):
-    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403)
+    if not es_staff(usuario): raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
     conn = conectar_bd("public")
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
@@ -4947,7 +4964,7 @@ async def obtener_contabilidad_global(usuario = Depends(verificar_token)):
 
 @app.post("/superadmin/gastos")
 async def registrar_gasto_saas(request: Request, usuario = Depends(verificar_token)):
-    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403)
+    if not es_staff(usuario): raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
     data = await request.json()
     conn = conectar_bd("public")
     cur = conn.cursor()
@@ -4965,9 +4982,134 @@ async def registrar_gasto_saas(request: Request, usuario = Depends(verificar_tok
 # ---------------------------------------------------------
 # 24. Gestión de Módulos (Feature Flags)
 # ---------------------------------------------------------
+@app.put("/superadmin/empresas/{empresa_id}/notas")
+async def actualizar_notas_empresa(empresa_id: int, request: Request, usuario = Depends(verificar_token)):
+    """Guarda notas internas privadas del superadmin para una empresa."""
+    if not es_staff(usuario):
+        raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
+    body = await request.json()
+    notas = (body.get("notas") or "").strip()
+    if len(notas) > 2000:
+        raise HTTPException(status_code=400, detail="Las notas no pueden superar 2000 caracteres.")
+    conn = conectar_bd("public")
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "UPDATE empresas SET notas_internas = %s WHERE id = %s",
+            (notas or None, empresa_id)
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Empresa no encontrada.")
+        registrar_auditoria(cur, request, usuario.get("email"), "INFO",
+                            f"Notas internas actualizadas para Empresa ID: {empresa_id}")
+        conn.commit()
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close(); conn.close()
+
+@app.put("/superadmin/empresas/{empresa_id}/tags")
+async def actualizar_tags_empresa(empresa_id: int, request: Request, usuario = Depends(verificar_token)):
+    """Guarda etiquetas internas del superadmin para una empresa."""
+    if not es_staff(usuario):
+        raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
+    body = await request.json()
+    tags_raw = body.get("tags", [])
+    if not isinstance(tags_raw, list):
+        raise HTTPException(status_code=400, detail="El campo tags debe ser una lista.")
+    tags = [str(t).strip()[:30] for t in tags_raw if str(t).strip()][:10]
+    conn = conectar_bd("public")
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "UPDATE empresas SET tags = %s WHERE id = %s",
+            (tags, empresa_id)
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Empresa no encontrada.")
+        registrar_auditoria(cur, request, usuario.get("email"), "INFO",
+                            f"Etiquetas actualizadas para Empresa ID {empresa_id}: {tags}")
+        conn.commit()
+        return {"ok": True, "tags": tags}
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close(); conn.close()
+
+@app.get("/superadmin/empresas/exportar/excel")
+async def exportar_empresas_excel(token: str = None):
+    """Exporta el listado completo de empresas a un archivo Excel."""
+    if not token: raise HTTPException(status_code=401)
+    try:
+        usuario = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        if not es_staff(usuario): raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
+    except: raise HTTPException(status_code=401)
+
+    conn = conectar_bd("public")
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT e.*, u.nombre as admin_nombre, u.email as admin_email
+            FROM empresas e
+            LEFT JOIN usuarios u ON e.id = u.empresa_id AND u.rol = 'admin'
+            WHERE e.id != 1 ORDER BY e.creado_en DESC
+        """)
+        empresas = cur.fetchall()
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Empresas"
+        headers = ["Nombre", "Razón Social", "NIT", "Ciudad", "Plan", "Límite empleados",
+                   "Estado", "Vencimiento", "Último pago", "Etiquetas", "Notas internas",
+                   "Admin (nombre)", "Admin (email)", "Creada el"]
+        ws.append(headers)
+        for cell in ws[1]:
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.fill = PatternFill(start_color="0C5078", end_color="0C5078", fill_type="solid")
+
+        for e in empresas:
+            tags_str = ", ".join(e.get("tags") or [])
+            ws.append([
+                e.get("nombre", ""),
+                e.get("razon_social", "") or "",
+                e.get("nit", "") or "",
+                e.get("ciudad", "") or "",
+                e.get("plan_nombre", "") or "",
+                e.get("limite_usuarios", ""),
+                e.get("estado_suscripcion", "") or "",
+                str(e.get("fecha_vencimiento", "") or ""),
+                str(e.get("ultimo_pago", "") or ""),
+                tags_str,
+                e.get("notas_internas", "") or "",
+                e.get("admin_nombre", "") or "",
+                e.get("admin_email", "") or "",
+                str(e.get("creado_en", "") or ""),
+            ])
+
+        col_widths = [25, 25, 15, 15, 14, 10, 14, 16, 16, 25, 40, 25, 30, 20]
+        for i, w in enumerate(col_widths, 1):
+            ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": "attachment; filename=Empresas_LEO.xlsx"}
+        )
+    finally: cur.close(); conn.close()
+
 @app.put("/superadmin/empresas/{empresa_id}/permisos")
 async def actualizar_permisos_modulos(empresa_id: int, request: Request, usuario = Depends(verificar_token)):
-    if usuario["rol"] != "superadmin": raise HTTPException(status_code=403)
+    if not es_staff(usuario): raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
     nuevos_modulos = await request.json()
     conn = conectar_bd("public")
     cur = conn.cursor()
@@ -4979,6 +5121,549 @@ async def actualizar_permisos_modulos(empresa_id: int, request: Request, usuario
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+    finally: cur.close(); conn.close()
+
+# ==============================================================================
+# 25. CONFIGURACIÓN GLOBAL DEL SAAS + SISTEMA DE ALERTAS Y RECORDATORIOS
+# ==============================================================================
+
+# ── Startup: inicia el loop de verificación de vencimientos ──
+@app.on_event("startup")
+async def iniciar_tareas_periodicas():
+    asyncio.create_task(_loop_verificar_vencimientos())
+
+# ── Loop asíncrono: corre cada 24h dentro del mismo proceso ──
+async def _loop_verificar_vencimientos():
+    await asyncio.sleep(60)          # Espera 1 min para que el app arranque completo
+    while True:
+        try:
+            stats = await asyncio.to_thread(_verificar_vencimientos_sync)
+            print(f"[CRON] Verificación de vencimientos: {stats}")
+        except Exception as e:
+            print(f"[CRON] Error en loop: {e}")
+        await asyncio.sleep(24 * 3600)
+
+# ── Helper: lee la config SMTP/contacto del SaaS desde la BD ──
+def _obtener_config_saas() -> dict:
+    conn = conectar_bd("public")
+    cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("SELECT * FROM saas_configuracion WHERE id = 1")
+        row = cur.fetchone()
+        return dict(row) if row else {}
+    except Exception:
+        return {}
+    finally:
+        cur.close(); conn.close()
+
+# ── Helper: envía email de recordatorio de vencimiento ──
+def _enviar_email_recordatorio(config: dict, empresa: dict, dias: int):
+    _e = lambda s: str(s or '').replace('&','&amp;').replace('<','&lt;').replace('>','&gt;')
+    dias_str = f"{dias} día{'s' if dias != 1 else ''}"
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = f"Recordatorio: su suscripción vence en {dias_str}"
+    msg['From']    = f"{config.get('smtp_from_nombre','Proyecto LEO')} <{config['smtp_from_email']}>"
+    msg['To']      = empresa['admin_email']
+
+    txt = (f"Estimado/a {empresa.get('admin_nombre','Administrador')},\n\n"
+           f"Le informamos que la suscripción de {empresa.get('nombre','')} "
+           f"vencerá en {dias_str}.\n\n"
+           f"Comuníquese con el administrador del sistema para renovar su plan "
+           f"y evitar interrupciones en el servicio.\n\n"
+           f"Saludos,\n{config.get('smtp_from_nombre','Proyecto LEO')}")
+
+    html = f"""<html><body style="font-family:sans-serif;color:#1e293b;max-width:520px;margin:auto;">
+  <div style="background:#0c5078;color:#fff;padding:24px 28px;border-radius:12px 12px 0 0;">
+    <h2 style="margin:0;font-size:20px;">Recordatorio de vencimiento</h2>
+  </div>
+  <div style="padding:28px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;">
+    <p>Estimado/a <strong>{_e(empresa.get('admin_nombre','Administrador'))}</strong>,</p>
+    <p>Le informamos que la suscripción de <strong>{_e(empresa.get('nombre',''))}</strong>
+       vencerá en <strong style="color:#dc2626;">{dias_str}</strong>.</p>
+    <p>Comuníquese con el administrador del sistema para renovar su plan
+       y evitar interrupciones en el servicio.</p>
+    <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0;">
+    <p style="color:#94a3b8;font-size:12px;margin:0;">{_e(config.get('smtp_from_nombre','Proyecto LEO'))}</p>
+  </div>
+</body></html>"""
+
+    msg.attach(MIMEText(txt, 'plain', 'utf-8'))
+    msg.attach(MIMEText(html, 'html', 'utf-8'))
+    puerto = int(config.get('smtp_port') or 587)
+    with smtplib.SMTP(config['smtp_host'], puerto, timeout=15) as s:
+        s.ehlo(); s.starttls(); s.ehlo()
+        if config.get('smtp_usuario') and config.get('smtp_password'):
+            s.login(config['smtp_usuario'], config['smtp_password'])
+        s.sendmail(config['smtp_from_email'], [empresa['admin_email']], msg.as_string())
+
+# ── Helper: envía email de prueba ──
+def _enviar_email_prueba_sync(config: dict, destinatario: str):
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = "Email de prueba — Proyecto LEO"
+    msg['From']    = f"{config.get('smtp_from_nombre','Proyecto LEO')} <{config['smtp_from_email']}>"
+    msg['To']      = destinatario
+    txt  = "Este es un email de prueba enviado desde la configuración de Proyecto LEO. Todo funciona correctamente."
+    html = """<html><body style="font-family:sans-serif;color:#1e293b;max-width:480px;margin:auto;">
+  <div style="background:#0c5078;color:#fff;padding:20px 24px;border-radius:10px 10px 0 0;">
+    <h3 style="margin:0;">Email de prueba</h3></div>
+  <div style="padding:24px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 10px 10px;">
+    <p>La configuración SMTP funciona correctamente.</p>
+    <p style="color:#94a3b8;font-size:12px;">Proyecto LEO</p>
+  </div>
+</body></html>"""
+    msg.attach(MIMEText(txt, 'plain', 'utf-8'))
+    msg.attach(MIMEText(html, 'html', 'utf-8'))
+    puerto = int(config.get('smtp_port') or 587)
+    with smtplib.SMTP(config['smtp_host'], puerto, timeout=15) as s:
+        s.ehlo(); s.starttls(); s.ehlo()
+        if config.get('smtp_usuario') and config.get('smtp_password'):
+            s.login(config['smtp_usuario'], config['smtp_password'])
+        s.sendmail(config['smtp_from_email'], [destinatario], msg.as_string())
+
+# ── Core sync worker: detecta vencimientos, crea notificaciones y envía emails ──
+def _verificar_vencimientos_sync() -> dict:
+    hoy   = date.today()
+    tope  = hoy + timedelta(days=7)
+    stats = {"procesadas": 0, "notificaciones_nuevas": 0, "emails_enviados": 0, "errores": []}
+    config = _obtener_config_saas()
+    conn   = conectar_bd("public")
+    cur    = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT e.id, e.nombre, e.fecha_vencimiento,
+                   u.email AS admin_email, u.nombre AS admin_nombre
+            FROM empresas e
+            LEFT JOIN usuarios u ON e.id = u.empresa_id AND u.rol = 'admin'
+            WHERE e.id != 1
+              AND e.estado_suscripcion != 'suspendido'
+              AND e.fecha_vencimiento BETWEEN %s AND %s
+              AND e.fecha_vencimiento != '2099-12-31'
+        """, (hoy, tope))
+        empresas = cur.fetchall()
+        stats["procesadas"] = len(empresas)
+
+        for emp in empresas:
+            dias = (emp['fecha_vencimiento'] - hoy).days
+            # Idempotencia: no duplicar si ya se notificó en los últimos 8 días
+            cur.execute("""
+                SELECT id FROM saas_notificaciones
+                WHERE empresa_id = %s AND tipo = 'vencimiento_proximo'
+                  AND creado_en >= NOW() - INTERVAL '8 days'
+            """, (emp['id'],))
+            if cur.fetchone():
+                continue
+
+            dias_str = f"{dias} día{'s' if dias != 1 else ''}"
+            cur.execute("""
+                INSERT INTO saas_notificaciones (empresa_id, tipo, titulo, mensaje)
+                VALUES (%s, %s, %s, %s) RETURNING id
+            """, (
+                emp['id'], 'vencimiento_proximo',
+                'Suscripción próxima a vencer',
+                f"Su suscripción vence en {dias_str}. Renueve para continuar sin interrupciones."
+            ))
+            notif_id = cur.fetchone()['id']
+
+            email_ok = False
+            if config.get('smtp_host') and config.get('smtp_from_email') and emp.get('admin_email'):
+                try:
+                    _enviar_email_recordatorio(config, emp, dias)
+                    email_ok = True
+                    stats["emails_enviados"] += 1
+                except Exception as ex:
+                    stats["errores"].append(f"{emp.get('admin_email')}: {ex}")
+
+            cur.execute("UPDATE saas_notificaciones SET enviado_email=%s WHERE id=%s", (email_ok, notif_id))
+            conn.commit()
+            stats["notificaciones_nuevas"] += 1
+            print(f"[CRON] Notificado: {emp['nombre']} ({dias_str}) — email: {email_ok}")
+
+    except Exception as ex:
+        conn.rollback()
+        stats["errores"].append(str(ex))
+    finally:
+        cur.close(); conn.close()
+    return stats
+
+# ── Endpoint: disparar verificación manualmente (cron externo o botón UI) ──
+@app.post("/superadmin/cron/check-vencimientos")
+async def trigger_check_vencimientos(request: Request):
+    """Acepta X-Cron-Secret header o JWT de superadmin. Portable: funciona en Render, VPS o cualquier cron externo."""
+    autorizado = False
+    if request.headers.get("X-Cron-Secret") == SECRET_KEY:
+        autorizado = True
+    else:
+        try:
+            tok = request.headers.get("Authorization", "").replace("Bearer ", "")
+            payload = jwt.decode(tok, SECRET_KEY, algorithms=["HS256"])
+            if payload.get("rol") == "superadmin": autorizado = True
+        except Exception:
+            pass
+    if not autorizado:
+        raise HTTPException(status_code=403, detail="No autorizado.")
+    stats = await asyncio.to_thread(_verificar_vencimientos_sync)
+    return {"ok": True, "resultado": stats}
+
+# ── Endpoints: Configuración SMTP y contacto del SaaS ──
+@app.get("/superadmin/configuracion")
+async def obtener_configuracion_saas(usuario = Depends(verificar_token)):
+    if not es_staff(usuario): raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
+    conn = conectar_bd("public")
+    cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("SELECT * FROM saas_configuracion WHERE id = 1")
+        cfg = cur.fetchone()
+        if not cfg: return {}
+        cfg = dict(cfg)
+        cfg['smtp_password_set'] = bool(cfg.get('smtp_password'))
+        cfg['smtp_password'] = ''   # Nunca enviar la contraseña real al frontend
+        return cfg
+    finally: cur.close(); conn.close()
+
+@app.put("/superadmin/configuracion")
+async def actualizar_configuracion_saas(request: Request, usuario = Depends(verificar_token)):
+    if not es_staff(usuario): raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
+    body = await request.json()
+    conn = conectar_bd("public")
+    cur  = conn.cursor()
+    try:
+        if body.get('smtp_password'):
+            cur.execute("""
+                UPDATE saas_configuracion
+                SET smtp_host=%s, smtp_port=%s, smtp_usuario=%s, smtp_password=%s,
+                    smtp_from_email=%s, smtp_from_nombre=%s,
+                    telefono=%s, whatsapp=%s, actualizado_en=NOW()
+                WHERE id=1
+            """, (
+                body.get('smtp_host') or None, int(body.get('smtp_port') or 587),
+                body.get('smtp_usuario') or None, body.get('smtp_password'),
+                body.get('smtp_from_email') or None,
+                body.get('smtp_from_nombre') or 'Proyecto LEO',
+                body.get('telefono') or None, body.get('whatsapp') or None
+            ))
+        else:
+            # No tocar la contraseña existente si no se envió una nueva
+            cur.execute("""
+                UPDATE saas_configuracion
+                SET smtp_host=%s, smtp_port=%s, smtp_usuario=%s,
+                    smtp_from_email=%s, smtp_from_nombre=%s,
+                    telefono=%s, whatsapp=%s, actualizado_en=NOW()
+                WHERE id=1
+            """, (
+                body.get('smtp_host') or None, int(body.get('smtp_port') or 587),
+                body.get('smtp_usuario') or None,
+                body.get('smtp_from_email') or None,
+                body.get('smtp_from_nombre') or 'Proyecto LEO',
+                body.get('telefono') or None, body.get('whatsapp') or None
+            ))
+        registrar_auditoria(cur, request, usuario.get("email"), "INFO", "Configuración del SaaS actualizada")
+        conn.commit()
+        return {"ok": True}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally: cur.close(); conn.close()
+
+@app.post("/superadmin/configuracion/test-email")
+async def enviar_email_de_prueba(request: Request, usuario = Depends(verificar_token)):
+    if not es_staff(usuario): raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
+    body = await request.json()
+    dest = (body.get("destinatario") or usuario.get("email") or "").strip()
+    if not dest: raise HTTPException(status_code=400, detail="Especifique un destinatario.")
+    cfg = _obtener_config_saas()
+    if not cfg.get('smtp_host') or not cfg.get('smtp_from_email'):
+        raise HTTPException(status_code=400, detail="Configure y guarde el host SMTP antes de probar.")
+    try:
+        await asyncio.to_thread(_enviar_email_prueba_sync, cfg, dest)
+        return {"ok": True, "mensaje": f"Email de prueba enviado a {dest}."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error SMTP: {e}")
+
+# ── Endpoints: Perfil del superadmin ──
+@app.get("/superadmin/perfil")
+async def obtener_perfil_superadmin(usuario = Depends(verificar_token)):
+    if not es_staff(usuario): raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
+    conn = conectar_bd("public")
+    cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("SELECT id, nombre, email FROM usuarios WHERE id = %s", (usuario['id'],))
+        row = cur.fetchone()
+        return dict(row) if row else {}
+    finally: cur.close(); conn.close()
+
+@app.put("/superadmin/perfil")
+async def actualizar_perfil_superadmin(request: Request, usuario = Depends(verificar_token)):
+    if not es_staff(usuario): raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
+    body = await request.json()
+    nombre = (body.get("nombre") or "").strip()
+    if not nombre: raise HTTPException(status_code=400, detail="El nombre no puede estar vacío.")
+    conn = conectar_bd("public")
+    cur  = conn.cursor()
+    try:
+        cur.execute("UPDATE usuarios SET nombre=%s WHERE id=%s", (nombre, usuario['id']))
+        registrar_auditoria(cur, request, usuario.get("email"), "INFO", "Superadmin actualizó su perfil")
+        conn.commit()
+        return {"ok": True}
+    except Exception as e:
+        conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
+    finally: cur.close(); conn.close()
+
+@app.put("/superadmin/cambiar-password")
+async def cambiar_password_superadmin(request: Request, usuario = Depends(verificar_token)):
+    if not es_staff(usuario): raise HTTPException(status_code=403, detail="Acceso restringido al personal autorizado.")
+    body = await request.json()
+    actual = body.get("actual", "")
+    nueva  = body.get("nueva", "")
+    if len(nueva) < 8:
+        raise HTTPException(status_code=400, detail="La nueva contraseña debe tener al menos 8 caracteres.")
+    conn = conectar_bd("public")
+    cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("SELECT password_hash FROM usuarios WHERE id=%s", (usuario['id'],))
+        row = cur.fetchone()
+        if not row: raise HTTPException(status_code=404)
+        if not bcrypt.checkpw(actual.encode(), row['password_hash'].encode()):
+            raise HTTPException(status_code=401, detail="La contraseña actual es incorrecta.")
+        nuevo_hash = bcrypt.hashpw(nueva.encode(), bcrypt.gensalt()).decode()
+        cur2 = conn.cursor()
+        cur2.execute("UPDATE usuarios SET password_hash=%s WHERE id=%s", (nuevo_hash, usuario['id']))
+        registrar_auditoria(cur2, request, usuario.get("email"), "WARNING", "Superadmin cambió su contraseña de acceso")
+        conn.commit(); cur2.close()
+        return {"ok": True}
+    except HTTPException: raise
+    except Exception as e:
+        conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
+    finally: cur.close(); conn.close()
+
+# ── Endpoints: Alertas para tenant (cliente) ──
+@app.get("/mis-alertas")
+async def obtener_mis_alertas(usuario = Depends(verificar_token)):
+    """Devuelve alertas activas de la empresa. El dashboard del cliente lo consume."""
+    empresa_id = usuario.get("empresa_id")
+    if not empresa_id: return []
+    conn = conectar_bd("public")
+    cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT id, tipo, titulo, mensaje, leido, creado_en
+            FROM saas_notificaciones
+            WHERE empresa_id=%s ORDER BY creado_en DESC LIMIT 20
+        """, (empresa_id,))
+        rows = cur.fetchall()
+        for r in rows:
+            r['creado_en'] = r['creado_en'].strftime("%Y-%m-%d %H:%M:%S")
+        return list(rows)
+    finally: cur.close(); conn.close()
+
+@app.put("/mis-alertas/{notif_id}/leido")
+async def marcar_alerta_leida(notif_id: int, usuario = Depends(verificar_token)):
+    empresa_id = usuario.get("empresa_id")
+    if not empresa_id: raise HTTPException(status_code=403)
+    conn = conectar_bd("public")
+    cur  = conn.cursor()
+    try:
+        cur.execute("UPDATE saas_notificaciones SET leido=TRUE WHERE id=%s AND empresa_id=%s",
+                   (notif_id, empresa_id))
+        conn.commit()
+        return {"ok": True}
+    finally: cur.close(); conn.close()
+
+# ═══════════════════════════════════════════════════════════════
+# 26. GESTIÓN DE ADMINISTRADORES (solo superadmin)
+# ═══════════════════════════════════════════════════════════════
+
+@app.get("/superadmin/administradores")
+async def listar_administradores(usuario = Depends(verificar_token)):
+    if usuario.get("rol") != "superadmin":
+        raise HTTPException(status_code=403, detail="Solo el SuperAdmin puede gestionar administradores.")
+    conn = conectar_bd("public")
+    cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("""
+            SELECT id, nombre, apellido, email, ci, direccion, telefono, celular,
+                   whatsapp, pais, ciudad, correo_contacto,
+                   CASE WHEN foto_base64 IS NOT NULL AND foto_base64 <> '' THEN TRUE ELSE FALSE END AS tiene_foto,
+                   creado_en
+            FROM usuarios
+            WHERE rol = 'administrador'
+            ORDER BY nombre
+        """)
+        rows = cur.fetchall()
+        for r in rows:
+            if r.get("creado_en"):
+                r["creado_en"] = r["creado_en"].strftime("%Y-%m-%d %H:%M:%S")
+        return list(rows)
+    finally: cur.close(); conn.close()
+
+@app.get("/superadmin/administradores/{admin_id}/foto")
+async def obtener_foto_administrador(admin_id: int, usuario = Depends(verificar_token)):
+    if usuario.get("rol") != "superadmin":
+        raise HTTPException(status_code=403, detail="Solo el SuperAdmin puede gestionar administradores.")
+    conn = conectar_bd("public")
+    cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    try:
+        cur.execute("SELECT foto_base64 FROM usuarios WHERE id = %s AND rol = 'administrador'", (admin_id,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Administrador no encontrado.")
+        return {"foto_base64": row["foto_base64"] or ""}
+    finally: cur.close(); conn.close()
+
+@app.post("/superadmin/administradores")
+async def crear_administrador(request: Request, usuario = Depends(verificar_token)):
+    if usuario.get("rol") != "superadmin":
+        raise HTTPException(status_code=403, detail="Solo el SuperAdmin puede crear administradores.")
+    body = await request.json()
+    nombre   = (body.get("nombre") or "").strip()
+    email    = (body.get("email") or "").strip().lower()
+    password = body.get("password", "")
+    if not nombre or not email or not password:
+        raise HTTPException(status_code=400, detail="Nombre, correo y contraseña son obligatorios.")
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 8 caracteres.")
+    foto = body.get("foto_base64") or None
+    if foto and len(foto) > 700_000:
+        raise HTTPException(status_code=400, detail="La foto supera el tamaño máximo permitido (500 KB).")
+    hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    conn = conectar_bd("public")
+    cur  = conn.cursor()
+    try:
+        cur.execute("SELECT id FROM usuarios WHERE email = %s", (email,))
+        if cur.fetchone():
+            raise HTTPException(status_code=409, detail="Ya existe un usuario con ese correo electrónico.")
+        cur.execute("""
+            INSERT INTO usuarios
+                (nombre, apellido, email, password_hash, rol,
+                 ci, direccion, telefono, celular, whatsapp,
+                 pais, ciudad, correo_contacto, foto_base64)
+            VALUES (%s,%s,%s,%s,'administrador',%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            RETURNING id
+        """, (
+            nombre,
+            (body.get("apellido") or "").strip() or None,
+            email, hashed,
+            (body.get("ci") or "").strip() or None,
+            (body.get("direccion") or "").strip() or None,
+            (body.get("telefono") or "").strip() or None,
+            (body.get("celular") or "").strip() or None,
+            (body.get("whatsapp") or "").strip() or None,
+            (body.get("pais") or "Bolivia").strip(),
+            (body.get("ciudad") or "").strip() or None,
+            (body.get("correo_contacto") or "").strip() or None,
+            foto,
+        ))
+        new_id = cur.fetchone()[0]
+        registrar_auditoria(cur, request, usuario.get("email"), "INFO",
+                            f"Administrador creado: {nombre} <{email}> (ID: {new_id})")
+        conn.commit()
+        return {"ok": True, "id": new_id}
+    except HTTPException: raise
+    except Exception as e:
+        conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
+    finally: cur.close(); conn.close()
+
+@app.put("/superadmin/administradores/{admin_id}")
+async def actualizar_administrador(admin_id: int, request: Request, usuario = Depends(verificar_token)):
+    if usuario.get("rol") != "superadmin":
+        raise HTTPException(status_code=403, detail="Solo el SuperAdmin puede modificar administradores.")
+    body = await request.json()
+    nombre = (body.get("nombre") or "").strip()
+    email  = (body.get("email") or "").strip().lower()
+    if not nombre or not email:
+        raise HTTPException(status_code=400, detail="Nombre y correo son obligatorios.")
+    foto = body.get("foto_base64")  # None = no cambiar; "" = borrar; str = nueva
+    if foto and len(foto) > 700_000:
+        raise HTTPException(status_code=400, detail="La foto supera el tamaño máximo permitido (500 KB).")
+    conn = conectar_bd("public")
+    cur  = conn.cursor()
+    try:
+        cur.execute("SELECT id FROM usuarios WHERE id = %s AND rol = 'administrador'", (admin_id,))
+        if not cur.fetchone():
+            raise HTTPException(status_code=404, detail="Administrador no encontrado.")
+        cur.execute("SELECT id FROM usuarios WHERE email = %s AND id <> %s", (email, admin_id))
+        if cur.fetchone():
+            raise HTTPException(status_code=409, detail="Ya existe otro usuario con ese correo electrónico.")
+        campos_comunes = (
+            nombre,
+            (body.get("apellido") or "").strip() or None,
+            email,
+            (body.get("ci") or "").strip() or None,
+            (body.get("direccion") or "").strip() or None,
+            (body.get("telefono") or "").strip() or None,
+            (body.get("celular") or "").strip() or None,
+            (body.get("whatsapp") or "").strip() or None,
+            (body.get("pais") or "Bolivia").strip(),
+            (body.get("ciudad") or "").strip() or None,
+            (body.get("correo_contacto") or "").strip() or None,
+        )
+        if foto is None:
+            cur.execute("""
+                UPDATE usuarios SET nombre=%s, apellido=%s, email=%s,
+                    ci=%s, direccion=%s, telefono=%s, celular=%s, whatsapp=%s,
+                    pais=%s, ciudad=%s, correo_contacto=%s
+                WHERE id=%s AND rol='administrador'
+            """, campos_comunes + (admin_id,))
+        else:
+            cur.execute("""
+                UPDATE usuarios SET nombre=%s, apellido=%s, email=%s,
+                    ci=%s, direccion=%s, telefono=%s, celular=%s, whatsapp=%s,
+                    pais=%s, ciudad=%s, correo_contacto=%s, foto_base64=%s
+                WHERE id=%s AND rol='administrador'
+            """, campos_comunes + (foto or None, admin_id))
+        registrar_auditoria(cur, request, usuario.get("email"), "INFO",
+                            f"Administrador actualizado: ID {admin_id} ({nombre})")
+        conn.commit()
+        return {"ok": True}
+    except HTTPException: raise
+    except Exception as e:
+        conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
+    finally: cur.close(); conn.close()
+
+@app.put("/superadmin/administradores/{admin_id}/reset-password")
+async def resetear_password_administrador(admin_id: int, request: Request, usuario = Depends(verificar_token)):
+    if usuario.get("rol") != "superadmin":
+        raise HTTPException(status_code=403, detail="Solo el SuperAdmin puede resetear contraseñas.")
+    body = await request.json()
+    nueva = body.get("nueva_password", "")
+    if len(nueva) < 8:
+        raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 8 caracteres.")
+    conn = conectar_bd("public")
+    cur  = conn.cursor()
+    try:
+        cur.execute("SELECT id, nombre FROM usuarios WHERE id = %s AND rol = 'administrador'", (admin_id,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Administrador no encontrado.")
+        hashed = bcrypt.hashpw(nueva.encode(), bcrypt.gensalt()).decode()
+        cur.execute("UPDATE usuarios SET password_hash=%s WHERE id=%s", (hashed, admin_id))
+        registrar_auditoria(cur, request, usuario.get("email"), "WARNING",
+                            f"SuperAdmin reseteó contraseña del administrador: {row[1]} (ID {admin_id})")
+        conn.commit()
+        return {"ok": True}
+    except HTTPException: raise
+    except Exception as e:
+        conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
+    finally: cur.close(); conn.close()
+
+@app.delete("/superadmin/administradores/{admin_id}")
+async def eliminar_administrador(admin_id: int, request: Request, usuario = Depends(verificar_token)):
+    if usuario.get("rol") != "superadmin":
+        raise HTTPException(status_code=403, detail="Solo el SuperAdmin puede eliminar administradores.")
+    conn = conectar_bd("public")
+    cur  = conn.cursor()
+    try:
+        cur.execute("SELECT id, nombre, email FROM usuarios WHERE id = %s AND rol = 'administrador'", (admin_id,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Administrador no encontrado.")
+        cur.execute("DELETE FROM usuarios WHERE id = %s AND rol = 'administrador'", (admin_id,))
+        registrar_auditoria(cur, request, usuario.get("email"), "WARNING",
+                            f"Administrador eliminado: {row[1]} <{row[2]}> (ID: {admin_id})")
+        conn.commit()
+        return {"ok": True}
+    except HTTPException: raise
+    except Exception as e:
+        conn.rollback(); raise HTTPException(status_code=500, detail=str(e))
     finally: cur.close(); conn.close()
 
 # ── RUTA DE ESTADO (Para saber si la API está viva) ──

@@ -108,10 +108,10 @@
 
                 // 5. REDIRECCIÓN INTELIGENTE
                 // Leemos el rol que nos devolvió Python y decidimos a qué pantalla enviarlo.
-                if (data.rol === 'superadmin') {
-                    window.location.href = 'dashboard_superadmin.html'; // Si eres tú, al panel maestro
+                if (data.rol === 'superadmin' || data.rol === 'administrador') {
+                    window.location.href = 'dashboard_superadmin_v7.html'; // Personal SaaS
                 } else {
-                    window.location.href = 'dashboard_cliente.html'; // Si es un cliente, a su panel privado
+                    window.location.href = 'dashboard_cliente.html'; // Tenant: admin, rrhh, usuario
                 }
 
             } catch (error) {
